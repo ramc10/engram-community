@@ -1,0 +1,497 @@
+/**
+ * Integration Tests for Storage + Enrichment
+ * End-to-end tests for the complete enrichment flow
+ */
+
+import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
+import { StorageService } from '../src/lib/storage';
+import { EnrichmentService } from '../src/lib/enrichment-service';
+import { getMigrationService } from '../src/lib/migration-service';
+import type { EnrichmentConfig, MemoryWithMemA } from 'engram-shared';
+import { generateUUID, now, createVectorClock } from 'engram-shared';
+
+// Mock IndexedDB
+import 'fake-indexeddb/auto';
+
+// Mock fetch for LLM calls
+global.fetch = jest.fn() as jest.MockedFunction<typeof fetch>;
+
+// Mock chrome.storage.local
+const mockStorage: Record<string, any> = {};
+global.chrome = {
+  storage: {
+    local: {
+      get: jest.fn(async (keys: string | string[]) => {
+        if (typeof keys === 'string') {
+          return { [keys]: mockStorage[keys] };
+        }
+        const result: Record<string, any> = {};
+        for (const key of keys) {
+          if (mockStorage[key] !== undefined) {
+            result[key] = mockStorage[key];
+          }
+        }
+        return result;
+      }),
+      set: jest.fn(async (items: Record<string, any>) => {
+        Object.assign(mockStorage, items);
+      }),
+      remove: jest.fn(async (keys: string | string[]) => {
+        const keysArray = typeof keys === 'string' ? [keys] : keys;
+        for (const key of keysArray) {
+          delete mockStorage[key];
+        }
+      }),
+    },
+  } as any,
+} as any;
+
+describe('Storage + Enrichment Integration', () => {
+  let storage: StorageService;
+  let enrichmentService: EnrichmentService;
+  let mockConfig: EnrichmentConfig;
+
+  const createTestMemory = (overrides?: Partial<MemoryWithMemA>): MemoryWithMemA => ({
+    id: generateUUID(),
+    content: {
+      role: 'user',
+      text: 'How do I implement OAuth 2.0 authentication in a React application?',
+    },
+    conversationId: 'conv-123',
+    platform: 'chatgpt',
+    timestamp: now(),
+    vectorClock: createVectorClock(),
+    deviceId: 'device-1',
+    syncStatus: 'pending',
+    tags: [],
+    ...overrides,
+  });
+
+  beforeEach(async () => {
+    // Clear mock storage
+    Object.keys(mockStorage).forEach((key) => delete mockStorage[key]);
+
+    // Set up enrichment config
+    mockConfig = {
+      enabled: true,
+      provider: 'openai',
+      model: 'gpt-4o-mini',
+      apiKey: 'sk-test-key',
+      batchSize: 5,
+    };
+    mockStorage.enrichmentConfig = mockConfig;
+
+    // Initialize storage
+    storage = new StorageService();
+    await storage.initialize();
+
+    // Create enrichment service
+    enrichmentService = new EnrichmentService(mockConfig);
+
+    // Mock successful LLM response
+    (global.fetch as jest.MockedFunction<typeof fetch>).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                keywords: ['OAuth', 'React', 'authentication', 'tokens'],
+                tags: ['programming', 'web-dev', 'security'],
+                context: 'Implementing OAuth 2.0 in React apps',
+              }),
+            },
+          },
+        ],
+        usage: {
+          prompt_tokens: 100,
+          completion_tokens: 50,
+          total_tokens: 150,
+        },
+      }),
+    } as Response);
+
+    jest.clearAllMocks();
+  });
+
+  afterEach(async () => {
+    await storage.close();
+    await (storage as any).db.delete();
+  });
+
+  describe('End-to-End Enrichment Flow', () => {
+    it('should save memory and trigger background enrichment', async () => {
+      const memory = createTestMemory();
+
+      // Save memory (should trigger enrichment in background)
+      await storage.saveMemory(memory);
+
+      // Verify memory was saved
+      const saved = await storage.getMemory(memory.id);
+      expect(saved).toBeDefined();
+      expect(saved?.content.text).toBe(memory.content.text);
+
+      // Wait for background enrichment
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
+      // Verify enrichment was attempted
+      expect(global.fetch).toHaveBeenCalled();
+    });
+
+    it('should enrich memory without blocking save operation', async () => {
+      const memory = createTestMemory();
+      const startTime = Date.now();
+
+      // Save should complete quickly
+      await storage.saveMemory(memory);
+      const saveTime = Date.now() - startTime;
+
+      // Save should be fast (< 100ms) even though enrichment takes longer
+      expect(saveTime).toBeLessThan(100);
+
+      // Memory should be retrievable immediately
+      const retrieved = await storage.getMemory(memory.id);
+      expect(retrieved).toBeDefined();
+    });
+
+    it('should persist enriched metadata after enrichment completes', async () => {
+      const memory = createTestMemory();
+
+      await storage.saveMemory(memory);
+
+      // Wait for enrichment to complete
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
+      // Retrieve and verify enrichment
+      const enriched = await storage.getMemory(memory.id) as MemoryWithMemA;
+      expect(enriched.keywords).toBeDefined();
+      expect(enriched.keywords).toContain('OAuth');
+      expect(enriched.tags).toBeDefined();
+      expect(enriched.context).toBeDefined();
+      expect(enriched.memAVersion).toBe(1);
+    });
+  });
+
+  describe('Batch Enrichment', () => {
+    it('should handle multiple memories being saved concurrently', async () => {
+      const memories = Array.from({ length: 10 }, () => createTestMemory());
+
+      // Save all memories
+      await Promise.all(memories.map((m) => storage.saveMemory(m)));
+
+      // All should be retrievable immediately
+      for (const memory of memories) {
+        const retrieved = await storage.getMemory(memory.id);
+        expect(retrieved).toBeDefined();
+      }
+
+      // Wait for enrichment
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+
+      // All should be enriched
+      for (const memory of memories) {
+        const enriched = await storage.getMemory(memory.id) as MemoryWithMemA;
+        expect(enriched.keywords).toBeDefined();
+      }
+    }, 5000);
+
+    it('should respect batch size configuration', async () => {
+      // Set small batch size
+      mockStorage.enrichmentConfig = { ...mockConfig, batchSize: 2 };
+
+      // Reinitialize storage with new config
+      await storage.close();
+      storage = new StorageService();
+      await storage.initialize();
+
+      const memories = Array.from({ length: 6 }, () => createTestMemory());
+
+      await Promise.all(memories.map((m) => storage.saveMemory(m)));
+
+      // Wait for batch processing
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+
+      // Should have made multiple batches
+      expect(global.fetch).toHaveBeenCalled();
+    }, 5000);
+  });
+
+  describe('Configuration Changes', () => {
+    it('should not enrich when enrichment is disabled', async () => {
+      // Disable enrichment
+      mockStorage.enrichmentConfig = { ...mockConfig, enabled: false };
+
+      await storage.close();
+      storage = new StorageService();
+      await storage.initialize();
+
+      const memory = createTestMemory();
+      await storage.saveMemory(memory);
+
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
+      // Should not have called LLM
+      expect(global.fetch).not.toHaveBeenCalled();
+
+      // Memory should not be enriched
+      const retrieved = await storage.getMemory(memory.id) as MemoryWithMemA;
+      expect(retrieved.keywords).toBeUndefined();
+    });
+
+    it('should not enrich when API key is missing', async () => {
+      // Remove API key
+      mockStorage.enrichmentConfig = { ...mockConfig, apiKey: undefined };
+
+      await storage.close();
+      storage = new StorageService();
+      await storage.initialize();
+
+      const memory = createTestMemory();
+      await storage.saveMemory(memory);
+
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
+      expect(global.fetch).not.toHaveBeenCalled();
+    });
+
+    it('should use correct provider API', async () => {
+      // Test with Anthropic
+      mockStorage.enrichmentConfig = {
+        ...mockConfig,
+        provider: 'anthropic',
+        model: 'claude-3-haiku-20240307',
+      };
+
+      (global.fetch as jest.MockedFunction<typeof fetch>).mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          content: [
+            {
+              text: JSON.stringify({
+                keywords: ['test'],
+                tags: ['test'],
+                context: 'test',
+              }),
+            },
+          ],
+          usage: { input_tokens: 100, output_tokens: 50 },
+        }),
+      } as Response);
+
+      await storage.close();
+      storage = new StorageService();
+      await storage.initialize();
+
+      const memory = createTestMemory();
+      await storage.saveMemory(memory);
+
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
+      // Should call Anthropic API
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('anthropic.com'),
+        expect.anything()
+      );
+    });
+  });
+
+  describe('Error Recovery', () => {
+    it('should save memory even if enrichment fails', async () => {
+      // Mock LLM failure
+      (global.fetch as jest.MockedFunction<typeof fetch>).mockRejectedValue(
+        new Error('API Error')
+      );
+
+      const memory = createTestMemory();
+      await storage.saveMemory(memory);
+
+      // Memory should still be saved
+      const retrieved = await storage.getMemory(memory.id);
+      expect(retrieved).toBeDefined();
+      expect(retrieved?.content.text).toBe(memory.content.text);
+
+      // Wait for retry attempts
+      await new Promise((resolve) => setTimeout(resolve, 8000));
+
+      // Should have retried
+      expect(global.fetch).toHaveBeenCalled();
+
+      // Memory should still be retrievable (not enriched)
+      const final = await storage.getMemory(memory.id) as MemoryWithMemA;
+      expect(final.keywords).toBeUndefined();
+    }, 12000);
+
+    it('should handle malformed LLM responses gracefully', async () => {
+      (global.fetch as jest.MockedFunction<typeof fetch>).mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                content: 'Not valid JSON',
+              },
+            },
+          ],
+          usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+        }),
+      } as Response);
+
+      const memory = createTestMemory();
+      await storage.saveMemory(memory);
+
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
+      // Memory should be saved without enrichment
+      const retrieved = await storage.getMemory(memory.id) as MemoryWithMemA;
+      expect(retrieved).toBeDefined();
+      expect(retrieved.keywords).toBeUndefined();
+    });
+  });
+
+  describe('Migration Integration', () => {
+    it('should work with migrated memories', async () => {
+      const migrationService = getMigrationService();
+
+      // Save old-style memories
+      const oldMemories = Array.from({ length: 5 }, () => createTestMemory());
+      await storage.bulkSaveMemories(oldMemories);
+
+      // Run migration
+      const migrationResult = await migrationService.migrate();
+      expect(migrationResult.success).toBe(true);
+
+      // All memories should have memAVersion=0
+      for (const memory of oldMemories) {
+        const migrated = await storage.getMemory(memory.id) as MemoryWithMemA;
+        expect(migrated.memAVersion).toBe(0);
+      }
+
+      // Save new memory (should trigger enrichment)
+      const newMemory = createTestMemory();
+      await storage.saveMemory(newMemory);
+
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
+      // New memory should be enriched
+      const enriched = await storage.getMemory(newMemory.id) as MemoryWithMemA;
+      expect(enriched.keywords).toBeDefined();
+      expect(enriched.memAVersion).toBe(1);
+    }, 5000);
+  });
+
+  describe('Search Integration', () => {
+    it('should be able to search enriched memories by keywords', async () => {
+      const memory = createTestMemory({
+        content: {
+          role: 'user',
+          text: 'OAuth implementation in React',
+        },
+      });
+
+      await storage.saveMemory(memory);
+
+      // Wait for enrichment
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
+      // Search by enriched keyword
+      const results = await storage.searchMemories('OAuth');
+      expect(results.length).toBeGreaterThan(0);
+      expect(results[0].id).toBe(memory.id);
+    });
+
+    it('should be able to search by enriched tags', async () => {
+      const memory = createTestMemory({
+        content: {
+          role: 'user',
+          text: 'Security best practices',
+        },
+      });
+
+      await storage.saveMemory(memory);
+
+      // Wait for enrichment
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
+      // Search by enriched tag
+      const results = await storage.searchMemories('security');
+      expect(results.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe('Conversation Metadata Integration', () => {
+    it('should update conversation metadata with enriched tags', async () => {
+      const conversationId = 'conv-oauth-' + Date.now();
+      const memory = createTestMemory({ conversationId });
+
+      await storage.saveMemory(memory);
+
+      // Wait for enrichment
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
+      // Get conversation
+      const conversation = await storage.getConversation(conversationId);
+      expect(conversation).toBeDefined();
+      expect(conversation?.messageCount).toBe(1);
+    });
+  });
+
+  describe('Stats and Monitoring', () => {
+    it('should track enrichment stats across storage saves', async () => {
+      const memories = Array.from({ length: 3 }, () => createTestMemory());
+
+      for (const memory of memories) {
+        await storage.saveMemory(memory);
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+
+      // Get enrichment stats
+      const stats = await enrichmentService.getStats();
+      expect(stats.enrichedCount).toBeGreaterThan(0);
+      expect(stats.totalTokens).toBeGreaterThan(0);
+      expect(stats.totalCost).toBeGreaterThan(0);
+    }, 5000);
+
+    it('should track storage stats including enriched memories', async () => {
+      const memory = createTestMemory();
+      await storage.saveMemory(memory);
+
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
+      const stats = await storage.getStats();
+      expect(stats.totalMemories).toBe(1);
+      expect(stats.totalConversations).toBeGreaterThan(0);
+    });
+  });
+
+  describe('Performance', () => {
+    it('should handle rapid successive saves', async () => {
+      const memories = Array.from({ length: 20 }, () => createTestMemory());
+      const startTime = Date.now();
+
+      // Save all rapidly
+      await Promise.all(memories.map((m) => storage.saveMemory(m)));
+
+      const saveTime = Date.now() - startTime;
+
+      // All saves should complete quickly (< 500ms)
+      expect(saveTime).toBeLessThan(500);
+
+      // All should be retrievable
+      for (const memory of memories) {
+        const retrieved = await storage.getMemory(memory.id);
+        expect(retrieved).toBeDefined();
+      }
+    });
+
+    it('should not block retrieval during enrichment', async () => {
+      const memory = createTestMemory();
+      await storage.saveMemory(memory);
+
+      // Immediately try to retrieve (while enrichment is queued)
+      const retrieved = await storage.getMemory(memory.id);
+      expect(retrieved).toBeDefined();
+      expect(retrieved?.content.text).toBe(memory.content.text);
+    });
+  });
+});

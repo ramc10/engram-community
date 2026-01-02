@@ -1,0 +1,883 @@
+/**
+ * Message Handler
+ * Processes messages from content scripts
+ */
+
+import {
+  Message,
+  MessageType,
+  InitResponse,
+  SaveMessageResponse,
+  GetMemoriesResponse,
+  SearchMemoriesResponse,
+  GetSyncStatusResponse,
+  AuthRegisterResponse,
+  AuthLoginResponse,
+  AuthLogoutResponse,
+  GetAuthStateResponse,
+  GetPremiumStatusResponse,
+  UpgradeToPremiumResponse,
+  RequestPremiumUpgradeResponse,
+  StartCloudSyncResponse,
+  StopCloudSyncResponse,
+  ReinitializeEnrichmentResponse,
+  RevertEvolutionResponse,
+  AuthState,
+  SyncStatus,
+  createErrorResponse,
+  validateMessage,
+} from '../lib/messages';
+import { BackgroundService } from './index';
+import { Memory } from 'engram-shared/types/memory';
+import { generateUUID, getPlatformFromUrl } from 'engram-shared/utils';
+import { premiumService } from '../lib/premium-service';
+import { CloudSyncService } from '../lib/cloud-sync';
+
+/**
+ * Handle incoming messages
+ */
+export async function handleMessage(
+  message: Message,
+  sender: chrome.runtime.MessageSender,
+  service: BackgroundService
+): Promise<any> {
+  // Validate message structure
+  const validation = validateMessage(message);
+  if (!validation.valid) {
+    return createErrorResponse(validation.error || 'Invalid message');
+  }
+
+  console.log('[Engram] Handling message:', message.type);
+
+  try {
+    switch (message.type) {
+      case MessageType.INIT_REQUEST:
+        return await handleInitRequest(service);
+
+      case MessageType.SAVE_MESSAGE:
+        return await handleSaveMessage(message, service, sender);
+
+      case MessageType.GET_MEMORIES:
+        return await handleGetMemories(message, service);
+
+      case MessageType.SEARCH_MEMORIES:
+        return await handleSearchMemories(message, service);
+
+      case MessageType.GET_SYNC_STATUS:
+        return await handleGetSyncStatus(service);
+
+      case MessageType.AUTH_REGISTER:
+        return await handleAuthRegister(message, service);
+
+      case MessageType.AUTH_LOGIN:
+        return await handleAuthLogin(message, service);
+
+      case MessageType.AUTH_LOGIN_GOOGLE:
+        return await handleAuthLoginGoogle(service);
+
+      case MessageType.AUTH_LOGOUT:
+        return await handleAuthLogout(service);
+
+      case MessageType.GET_AUTH_STATE:
+        return await handleGetAuthState(service);
+
+      case MessageType.GET_PREMIUM_STATUS:
+        return await handleGetPremiumStatus(service);
+
+      case MessageType.UPGRADE_TO_PREMIUM:
+        return await handleUpgradeToPremium(service);
+
+      case MessageType.REQUEST_PREMIUM_UPGRADE:
+        return await handleRequestPremiumUpgrade(service);
+
+      case MessageType.START_CLOUD_SYNC:
+        return await handleStartCloudSync(service);
+
+      case MessageType.STOP_CLOUD_SYNC:
+        return await handleStopCloudSync(service);
+
+      case MessageType.REINITIALIZE_ENRICHMENT:
+        return await handleReinitializeEnrichment(service);
+
+      case MessageType.REVERT_EVOLUTION:
+        return await handleRevertEvolution(message, service);
+
+      default:
+        return createErrorResponse(`Unknown message type: ${message.type}`);
+    }
+  } catch (error) {
+    console.error('[Engram] Error handling message:', error);
+    return createErrorResponse(error as Error, message.type);
+  }
+}
+
+/**
+ * Handle initialization request
+ */
+async function handleInitRequest(service: BackgroundService): Promise<InitResponse> {
+  try {
+    const deviceId = service.getDeviceId();
+
+    return {
+      type: MessageType.INIT_RESPONSE,
+      success: true,
+      deviceId,
+    };
+  } catch (error) {
+    return {
+      type: MessageType.INIT_RESPONSE,
+      success: false,
+      error: (error as Error).message,
+    };
+  }
+}
+
+/**
+ * Handle save message request
+ */
+async function handleSaveMessage(
+  message: any,
+  service: BackgroundService,
+  sender?: chrome.runtime.MessageSender
+): Promise<SaveMessageResponse> {
+  try {
+    const extractedMessage = message.message;
+    if (!extractedMessage) {
+      throw new Error('Missing message data');
+    }
+
+    const storage = service.getStorage();
+    const crypto = service.getCrypto();
+
+    // Detect platform from sender URL
+    const platform = sender?.tab?.url
+      ? getPlatformFromUrl(sender.tab.url) || 'chatgpt'
+      : 'chatgpt'; // fallback
+
+    console.log('[Engram] Detected platform:', platform, 'from URL:', sender?.tab?.url);
+
+    // Check if user is authenticated and has master key
+    if (!service.hasMasterKey()) {
+      console.warn('[Engram] No master key available - user needs to login first');
+      throw new Error('Authentication required. Please login to save memories.');
+    }
+
+    const masterKey = service.getMasterKey();
+    if (!masterKey) {
+      throw new Error('Master key not available');
+    }
+
+    // Encrypt the content using master key
+    const contentJson = JSON.stringify({
+      role: extractedMessage.role,
+      text: extractedMessage.content,
+      metadata: extractedMessage.metadata,
+    });
+
+    const encrypted = await crypto.encrypt(contentJson, masterKey.key);
+
+    console.log('[Engram] Content encrypted with master key');
+
+    // Create memory object with encrypted content
+    const memory: Memory = {
+      id: generateUUID(),
+      conversationId: extractedMessage.conversationId,
+      platform,
+      content: {
+        role: extractedMessage.role,
+        text: extractedMessage.content,
+        metadata: extractedMessage.metadata,
+      },
+      encryptedContent: {
+        ciphertext: encrypted.ciphertext,
+        nonce: encrypted.nonce,
+      },
+      timestamp: extractedMessage.timestamp || Date.now(),
+      vectorClock: {
+        [service.getDeviceId()]: 1,
+      },
+      deviceId: service.getDeviceId(),
+      syncStatus: 'pending',
+      tags: [],
+    };
+
+    // Save to storage
+    await storage.saveMemory(memory);
+
+    console.log('[Engram] Saved memory:', memory.id);
+
+    return {
+      type: MessageType.SAVE_MESSAGE_RESPONSE,
+      success: true,
+      memoryId: memory.id,
+    };
+  } catch (error) {
+    console.error('[Engram] Failed to save message:', error);
+    return {
+      type: MessageType.SAVE_MESSAGE_RESPONSE,
+      success: false,
+      error: (error as Error).message,
+    };
+  }
+}
+
+/**
+ * Handle get memories request
+ */
+async function handleGetMemories(
+  message: any,
+  service: BackgroundService
+): Promise<GetMemoriesResponse> {
+  try {
+    const storage = service.getStorage();
+    const filter = message.filter || {};
+
+    const memories = await storage.getMemories(filter);
+
+    return {
+      type: MessageType.GET_MEMORIES_RESPONSE,
+      success: true,
+      memories,
+    };
+  } catch (error) {
+    console.error('[Engram] Failed to get memories:', error);
+    return {
+      type: MessageType.GET_MEMORIES_RESPONSE,
+      success: false,
+      error: (error as Error).message,
+    };
+  }
+}
+
+/**
+ * Handle search memories request
+ */
+async function handleSearchMemories(
+  message: any,
+  service: BackgroundService
+): Promise<SearchMemoriesResponse> {
+  try {
+    const storage = service.getStorage();
+    const { query, limit } = message;
+
+    if (!query) {
+      throw new Error('Search query is required');
+    }
+
+    const memories = await storage.searchMemories(query);
+
+    return {
+      type: MessageType.SEARCH_MEMORIES_RESPONSE,
+      success: true,
+      memories,
+    };
+  } catch (error) {
+    console.error('[Engram] Failed to search memories:', error);
+    return {
+      type: MessageType.SEARCH_MEMORIES_RESPONSE,
+      success: false,
+      error: (error as Error).message,
+    };
+  }
+}
+
+/**
+ * Handle get sync status request
+ */
+async function handleGetSyncStatus(
+  service: BackgroundService
+): Promise<GetSyncStatusResponse> {
+  try {
+    const storage = service.getStorage();
+    const deviceId = service.getDeviceId();
+
+    // Get pending operations count
+    // TODO: Implement getSyncQueue or get count another way
+    const pendingOperations = 0; // Placeholder
+
+    // Get last sync time from metadata
+    const lastSyncTime = await storage.getMetadata<number>('lastSyncTime');
+
+    const status: SyncStatus = {
+      isConnected: false, // TODO: Check actual sync connection
+      lastSyncTime: lastSyncTime || undefined,
+      pendingOperations,
+      deviceId,
+    };
+
+    return {
+      type: MessageType.GET_SYNC_STATUS_RESPONSE,
+      success: true,
+      status,
+    };
+  } catch (error) {
+    console.error('[Engram] Failed to get sync status:', error);
+    return {
+      type: MessageType.GET_SYNC_STATUS_RESPONSE,
+      success: false,
+      error: (error as Error).message,
+    };
+  }
+}
+
+/**
+ * Handle authentication registration
+ */
+async function handleAuthRegister(
+  message: any,
+  service: BackgroundService
+): Promise<AuthRegisterResponse> {
+  try {
+    const { email, password } = message;
+
+    if (!email || !password) {
+      throw new Error('Email and password are required');
+    }
+
+    const authClient = service.getAuthClient();
+    const crypto = service.getCrypto();
+
+    console.log('[Engram] Registering user:', email);
+
+    // 1. Register with auth server (gets JWT token)
+    const authToken = await authClient.register({ email, password });
+
+    console.log('[Engram] User registered, userId:', authToken.user.id);
+
+    // 2. Derive master key from password (client-side only)
+    const masterKey = await crypto.deriveKey(password);
+    service.setMasterKey(masterKey);
+
+    console.log('[Engram] Master key derived and stored in memory');
+
+    // 3. Persist master key (encrypted with device key) for auto-restore on reload
+    await service.persistMasterKey(masterKey);
+
+    console.log('[Engram] Master key persisted (encrypted)');
+
+    // 4. Register device with authenticated user
+    const deviceId = service.getDeviceId();
+    const deviceName = `Browser Extension - ${new Date().toLocaleDateString()}`;
+
+    // TODO: Generate and store Ed25519 signing key pair for device
+    const publicKey = 'placeholder-public-key'; // Temporary
+
+    try {
+      await authClient.registerDevice(deviceId, deviceName, publicKey, {
+        browser: navigator.userAgent,
+        version: chrome.runtime.getManifest().version,
+      });
+      console.log('[Engram] Device registered with server');
+    } catch (deviceError) {
+      console.warn('[Engram] Device registration failed:', deviceError);
+      // Continue anyway - device registration can be retried later
+    }
+
+    // 5. Initialize cloud sync if user is premium with sync enabled
+    await service.initializeCloudSyncIfNeeded();
+
+    return {
+      type: MessageType.AUTH_REGISTER_RESPONSE,
+      success: true,
+      userId: authToken.user.id,
+      email: authToken.user.email,
+    };
+  } catch (error) {
+    console.error('[Engram] Registration failed:', error);
+    return {
+      type: MessageType.AUTH_REGISTER_RESPONSE,
+      success: false,
+      error: (error as Error).message,
+    };
+  }
+}
+
+/**
+ * Handle authentication login
+ */
+async function handleAuthLogin(
+  message: any,
+  service: BackgroundService
+): Promise<AuthLoginResponse> {
+  try {
+    const { email, password } = message;
+
+    if (!email || !password) {
+      throw new Error('Email and password are required');
+    }
+
+    const authClient = service.getAuthClient();
+    const crypto = service.getCrypto();
+
+    console.log('[Engram] Logging in user:', email);
+
+    // 1. Login with auth server (gets JWT token)
+    const authToken = await authClient.login({ email, password });
+
+    console.log('[Engram] User logged in, userId:', authToken.user.id);
+
+    // 2. Derive master key from password (client-side only)
+    const masterKey = await crypto.deriveKey(password);
+    service.setMasterKey(masterKey);
+
+    console.log('[Engram] Master key derived and stored in memory');
+
+    // 3. Persist master key (encrypted with device key) for auto-restore on reload
+    await service.persistMasterKey(masterKey);
+
+    console.log('[Engram] Master key persisted (encrypted)');
+
+    // 4. Initialize cloud sync if user is premium with sync enabled
+    await service.initializeCloudSyncIfNeeded();
+
+    return {
+      type: MessageType.AUTH_LOGIN_RESPONSE,
+      success: true,
+      userId: authToken.user.id,
+      email: authToken.user.email,
+    };
+  } catch (error) {
+    console.error('[Engram] Login failed:', error);
+    return {
+      type: MessageType.AUTH_LOGIN_RESPONSE,
+      success: false,
+      error: (error as Error).message,
+    };
+  }
+}
+
+/**
+ * Handle Google OAuth login
+ */
+async function handleAuthLoginGoogle(
+  service: BackgroundService
+): Promise<AuthLoginResponse> {
+  try {
+    const authClient = service.getAuthClient();
+
+    console.log('[Engram] Starting Google OAuth login');
+
+    // 1. Login with Google OAuth (launches browser flow)
+    const authToken = await authClient.loginWithGoogle();
+
+    console.log('[Engram] Google login successful, userId:', authToken.user.id);
+
+    // 2. For Google OAuth, we need a separate encryption password
+    // This will be prompted in the UI after successful OAuth
+    // For now, we'll store a flag that encryption setup is needed
+
+    return {
+      type: MessageType.AUTH_LOGIN_GOOGLE_RESPONSE,
+      success: true,
+      userId: authToken.user.id,
+      email: authToken.user.email,
+      needsEncryptionPassword: true, // Signal UI to prompt for encryption password
+    };
+  } catch (error) {
+    console.error('[Engram] Google login failed:', error);
+    return {
+      type: MessageType.AUTH_LOGIN_GOOGLE_RESPONSE,
+      success: false,
+      error: (error as Error).message,
+    };
+  }
+}
+
+/**
+ * Handle authentication logout
+ */
+async function handleAuthLogout(
+  service: BackgroundService
+): Promise<AuthLogoutResponse> {
+  try {
+    const authClient = service.getAuthClient();
+
+    console.log('[Engram] Logging out user');
+
+    // 1. Stop cloud sync if running
+    const cloudSync = service.getCloudSync();
+    if (cloudSync) {
+      await cloudSync.stop();
+      console.log('[Engram] Cloud sync stopped');
+    }
+
+    // 2. Logout from server (clears JWT)
+    await authClient.logout();
+
+    // 3. Clear master key from memory
+    service.clearMasterKey();
+
+    // 4. Clear persisted encrypted master key
+    await service.clearPersistedMasterKey();
+
+    console.log('[Engram] User logged out successfully');
+
+    return {
+      type: MessageType.AUTH_LOGOUT_RESPONSE,
+      success: true,
+    };
+  } catch (error) {
+    console.error('[Engram] Logout failed:', error);
+
+    // Even if server logout fails, clear client-side state
+    service.clearMasterKey();
+    await service.clearPersistedMasterKey().catch(e =>
+      console.error('[Engram] Failed to clear persisted key:', e)
+    );
+
+    return {
+      type: MessageType.AUTH_LOGOUT_RESPONSE,
+      success: false,
+      error: (error as Error).message,
+    };
+  }
+}
+
+/**
+ * Handle get auth state request
+ */
+async function handleGetAuthState(
+  service: BackgroundService
+): Promise<GetAuthStateResponse> {
+  try {
+    const authClient = service.getAuthClient();
+
+    // Get auth state from client
+    const clientAuthState = await authClient.getAuthState();
+
+    // Check if master key is available
+    const hasMasterKey = service.hasMasterKey();
+
+    const authState: AuthState = {
+      isAuthenticated: clientAuthState.isAuthenticated && hasMasterKey,
+      userId: clientAuthState.userId,
+      email: clientAuthState.email,
+    };
+
+    return {
+      type: MessageType.GET_AUTH_STATE_RESPONSE,
+      success: true,
+      authState,
+    };
+  } catch (error) {
+    console.error('[Engram] Failed to get auth state:', error);
+    return {
+      type: MessageType.GET_AUTH_STATE_RESPONSE,
+      success: false,
+      error: (error as Error).message,
+    };
+  }
+}
+
+/**
+ * Handle get premium status request
+ */
+async function handleGetPremiumStatus(
+  service: BackgroundService
+): Promise<GetPremiumStatusResponse> {
+  try {
+    const authClient = service.getAuthClient();
+    const authState = await authClient.getAuthState();
+
+    if (!authState.isAuthenticated || !authState.userId) {
+      throw new Error('Not authenticated');
+    }
+
+    console.log('[Premium] Getting premium status for user:', authState.userId);
+
+    // Get authenticated Supabase client (has user session for RLS)
+    const supabaseClient = authClient.getSupabaseClient();
+
+    const status = await premiumService.getPremiumStatus(authState.userId, supabaseClient);
+
+    return {
+      type: MessageType.GET_PREMIUM_STATUS_RESPONSE,
+      success: true,
+      status,
+    };
+  } catch (error) {
+    console.error('[Premium] Failed to get premium status:', error);
+    return {
+      type: MessageType.GET_PREMIUM_STATUS_RESPONSE,
+      success: false,
+      error: (error as Error).message,
+    };
+  }
+}
+
+/**
+ * Handle upgrade to premium request
+ */
+async function handleUpgradeToPremium(
+  service: BackgroundService
+): Promise<UpgradeToPremiumResponse> {
+  try {
+    const authClient = service.getAuthClient();
+    const authState = await authClient.getAuthState();
+
+    if (!authState.isAuthenticated || !authState.userId) {
+      throw new Error('Not authenticated');
+    }
+
+    console.log('[Premium] Upgrading user to premium:', authState.userId);
+
+    await premiumService.upgradeToPremium(authState.userId);
+
+    console.log('[Premium] User upgraded successfully');
+
+    return {
+      type: MessageType.UPGRADE_TO_PREMIUM_RESPONSE,
+      success: true,
+    };
+  } catch (error) {
+    console.error('[Premium] Failed to upgrade to premium:', error);
+    return {
+      type: MessageType.UPGRADE_TO_PREMIUM_RESPONSE,
+      success: false,
+      error: (error as Error).message,
+    };
+  }
+}
+
+/**
+ * Handle request premium upgrade
+ */
+async function handleRequestPremiumUpgrade(
+  service: BackgroundService
+): Promise<RequestPremiumUpgradeResponse> {
+  try {
+    const authClient = service.getAuthClient();
+    const authState = await authClient.getAuthState();
+
+    if (!authState.isAuthenticated || !authState.userId || !authState.email) {
+      throw new Error('Not authenticated');
+    }
+
+    console.log('[Premium] Submitting upgrade request for user:', authState.userId);
+
+    // Get authenticated Supabase client (has user session for RLS)
+    const supabaseClient = authClient.getSupabaseClient();
+
+    await premiumService.requestPremiumUpgrade(authState.userId, authState.email, supabaseClient);
+
+    console.log('[Premium] Upgrade request submitted successfully');
+
+    return {
+      type: MessageType.REQUEST_PREMIUM_UPGRADE_RESPONSE,
+      success: true,
+    };
+  } catch (error) {
+    console.error('[Premium] Failed to submit upgrade request:', error);
+    return {
+      type: MessageType.REQUEST_PREMIUM_UPGRADE_RESPONSE,
+      success: false,
+      error: (error as Error).message,
+    };
+  }
+}
+
+/**
+ * Handle start cloud sync request
+ */
+async function handleStartCloudSync(
+  service: BackgroundService
+): Promise<StartCloudSyncResponse> {
+  try {
+    const authClient = service.getAuthClient();
+    const authState = await authClient.getAuthState();
+
+    if (!authState.isAuthenticated || !authState.userId) {
+      throw new Error('Not authenticated');
+    }
+
+    // Get authenticated Supabase client (has user session for RLS)
+    const supabaseClient = authClient.getSupabaseClient();
+
+    // Check if user has premium tier
+    const isPremium = await premiumService.isPremium(authState.userId, supabaseClient);
+    if (!isPremium) {
+      throw new Error('Premium subscription required for cloud sync');
+    }
+
+    console.log('[CloudSync] Starting cloud sync for user:', authState.userId);
+
+    // Enable sync in database with authenticated client (for RLS)
+    await premiumService.enableSync(authState.userId, supabaseClient);
+
+    console.log('[CloudSync] Cloud sync enabled in database');
+
+    // Initialize CloudSyncService (now fixed to work in service worker context)
+    await service.initializeCloudSyncIfNeeded();
+
+    console.log('[CloudSync] Cloud sync service initialized and started');
+
+    return {
+      type: MessageType.START_CLOUD_SYNC_RESPONSE,
+      success: true,
+    };
+  } catch (error) {
+    console.error('[CloudSync] Failed to start cloud sync:', error);
+    return {
+      type: MessageType.START_CLOUD_SYNC_RESPONSE,
+      success: false,
+      error: (error as Error).message,
+    };
+  }
+}
+
+/**
+ * Handle stop cloud sync request
+ */
+async function handleStopCloudSync(
+  service: BackgroundService
+): Promise<StopCloudSyncResponse> {
+  try {
+    console.log('[CloudSync] Stopping cloud sync');
+
+    // Get auth state
+    const authClient = service.getAuthClient();
+    const authState = await authClient.getAuthState();
+
+    if (authState.isAuthenticated && authState.userId) {
+      // Get authenticated Supabase client (has user session for RLS)
+      const supabaseClient = authClient.getSupabaseClient();
+
+      // Disable sync in database with authenticated client (for RLS)
+      await premiumService.disableSync(authState.userId, supabaseClient);
+    }
+
+    // Stop cloud sync service if running
+    const cloudSync = service.getCloudSync();
+    if (cloudSync) {
+      await cloudSync.stop();
+      console.log('[CloudSync] Cloud sync service stopped');
+    }
+
+    console.log('[CloudSync] Cloud sync disabled');
+
+    return {
+      type: MessageType.STOP_CLOUD_SYNC_RESPONSE,
+      success: true,
+    };
+  } catch (error) {
+    console.error('[CloudSync] Failed to stop cloud sync:', error);
+    return {
+      type: MessageType.STOP_CLOUD_SYNC_RESPONSE,
+      success: false,
+      error: (error as Error).message,
+    };
+  }
+}
+
+/**
+ * Handle reinitialize enrichment request
+ * Called when enrichment settings are changed in the UI
+ */
+async function handleReinitializeEnrichment(
+  service: BackgroundService
+): Promise<ReinitializeEnrichmentResponse> {
+  try {
+    console.log('[Enrichment] Reinitializing enrichment services');
+
+    const storage = service.getStorage();
+    await storage.reinitializeEnrichment();
+
+    console.log('[Enrichment] Enrichment services reinitialized successfully');
+
+    return {
+      type: MessageType.REINITIALIZE_ENRICHMENT_RESPONSE,
+      success: true,
+    };
+  } catch (error) {
+    console.error('[Enrichment] Failed to reinitialize enrichment:', error);
+    return {
+      type: MessageType.REINITIALIZE_ENRICHMENT_RESPONSE,
+      success: false,
+      error: (error as Error).message,
+    };
+  }
+}
+
+/**
+ * Handle revert evolution request (Phase 3)
+ * Revert a memory to a previous version from its evolution history
+ */
+async function handleRevertEvolution(
+  message: any,
+  service: BackgroundService
+): Promise<RevertEvolutionResponse> {
+  try {
+    const { memoryId, versionIndex } = message;
+
+    if (!memoryId) {
+      throw new Error('Missing memoryId');
+    }
+
+    if (versionIndex === undefined || versionIndex === null) {
+      throw new Error('Missing versionIndex');
+    }
+
+    console.log(`[Evolution] Reverting memory ${memoryId} to version ${versionIndex}`);
+
+    const storage = service.getStorage();
+
+    // Get the memory
+    const memories = await storage.getMemories({ ids: [memoryId] });
+    if (!memories || memories.length === 0) {
+      throw new Error('Memory not found');
+    }
+
+    const memory = memories[0] as any;
+
+    // Check if memory has evolution history
+    if (!memory.evolution || !memory.evolution.history || memory.evolution.history.length === 0) {
+      throw new Error('Memory has no evolution history');
+    }
+
+    // Validate versionIndex
+    if (versionIndex < 0 || versionIndex >= memory.evolution.history.length) {
+      throw new Error(`Invalid versionIndex: ${versionIndex}. Valid range: 0-${memory.evolution.history.length - 1}`);
+    }
+
+    // Get the target version
+    const targetVersion = memory.evolution.history[versionIndex];
+
+    // Save current state to history before reverting (makes revert reversible)
+    const currentState = {
+      keywords: memory.keywords || [],
+      tags: memory.tags || [],
+      context: memory.context || '',
+      timestamp: Date.now(),
+    };
+
+    // Revert to target version
+    memory.keywords = targetVersion.keywords;
+    memory.tags = targetVersion.tags;
+    memory.context = targetVersion.context;
+
+    // Add current state to history (pushed to end, making this revert reversible)
+    memory.evolution.history.push(currentState);
+
+    // Maintain max 10 versions in history
+    if (memory.evolution.history.length > 10) {
+      memory.evolution.history = memory.evolution.history.slice(-10);
+    }
+
+    // Update memory in storage
+    await storage.saveMemory(memory);
+
+    console.log(`[Evolution] Memory ${memoryId} reverted successfully to version ${versionIndex}`);
+
+    return {
+      type: MessageType.REVERT_EVOLUTION_RESPONSE,
+      success: true,
+    };
+  } catch (error) {
+    console.error('[Evolution] Failed to revert evolution:', error);
+    return {
+      type: MessageType.REVERT_EVOLUTION_RESPONSE,
+      success: false,
+      error: (error as Error).message,
+    };
+  }
+}

@@ -1,0 +1,497 @@
+/**
+ * Edge Case Tests
+ * Tests for specific edge cases and boundary conditions not covered in main test suites
+ */
+
+import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
+import { EnrichmentService } from '../src/lib/enrichment-service';
+import { getMigrationService, MigrationService } from '../src/lib/migration-service';
+import { StorageService } from '../src/lib/storage';
+import type { EnrichmentConfig, MemoryWithMemA } from 'engram-shared';
+import { generateUUID, now, createVectorClock } from 'engram-shared';
+
+// Mock IndexedDB for testing
+import 'fake-indexeddb/auto';
+
+// Mock fetch globally
+global.fetch = jest.fn() as jest.MockedFunction<typeof fetch>;
+
+// Mock chrome.storage.local
+const mockStorage: Record<string, any> = {};
+global.chrome = {
+  storage: {
+    local: {
+      get: jest.fn(async (keys: string | string[]) => {
+        if (typeof keys === 'string') {
+          return { [keys]: mockStorage[keys] };
+        }
+        const result: Record<string, any> = {};
+        for (const key of keys) {
+          if (mockStorage[key] !== undefined) {
+            result[key] = mockStorage[key];
+          }
+        }
+        return result;
+      }),
+      set: jest.fn(async (items: Record<string, any>) => {
+        Object.assign(mockStorage, items);
+      }),
+      remove: jest.fn(async (keys: string | string[]) => {
+        const keysArray = typeof keys === 'string' ? [keys] : keys;
+        for (const key of keysArray) {
+          delete mockStorage[key];
+        }
+      }),
+    },
+  } as any,
+} as any;
+
+describe('EnrichmentService Edge Cases', () => {
+  let service: EnrichmentService;
+  let mockConfig: EnrichmentConfig;
+
+  const createTestMemory = (overrides?: Partial<MemoryWithMemA>): MemoryWithMemA => ({
+    id: generateUUID(),
+    content: {
+      role: 'user',
+      text: 'Test message content',
+    },
+    conversationId: 'conv-123',
+    platform: 'chatgpt',
+    timestamp: now(),
+    vectorClock: createVectorClock(),
+    deviceId: 'device-1',
+    syncStatus: 'pending',
+    tags: [],
+    ...overrides,
+  });
+
+  beforeEach(() => {
+    mockConfig = {
+      enabled: true,
+      provider: 'openai',
+      model: 'gpt-4o-mini',
+      apiKey: 'sk-test-key',
+      batchSize: 5,
+    };
+    service = new EnrichmentService(mockConfig);
+    jest.clearAllMocks();
+
+    // Default mock response
+    (global.fetch as jest.MockedFunction<typeof fetch>).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                keywords: ['test'],
+                tags: ['test'],
+                context: 'test',
+              }),
+            },
+          },
+        ],
+        usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+      }),
+    } as Response);
+  });
+
+  afterEach(() => {
+    jest.resetAllMocks();
+  });
+
+  describe('Rate Limiter Boundary Conditions', () => {
+    it('should handle exactly 60 requests in 60 seconds', async () => {
+      const memories = Array.from({ length: 60 }, () => createTestMemory());
+      const startTime = Date.now();
+
+      // Queue all memories
+      for (const memory of memories) {
+        await service.enrichMemory(memory);
+      }
+
+      // Wait for processing
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+
+      const endTime = Date.now();
+      const duration = endTime - startTime;
+
+      // All 60 should complete within reasonable time (< 3s with proper rate limiting)
+      expect(duration).toBeLessThan(3000);
+      expect(global.fetch).toHaveBeenCalled();
+    }, 10000);
+
+    it('should handle 61st request after rate limit reset', async () => {
+      const memories = Array.from({ length: 61 }, () => createTestMemory());
+
+      for (const memory of memories) {
+        await service.enrichMemory(memory);
+      }
+
+      // Wait for processing including rate limit reset
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+
+      // Should have processed all requests
+      const stats = await service.getStats();
+      expect(stats.enrichedCount).toBeGreaterThan(0);
+    }, 10000);
+
+    it('should maintain rate limit across multiple batches', async () => {
+      const batch1 = Array.from({ length: 30 }, () => createTestMemory());
+      const batch2 = Array.from({ length: 30 }, () => createTestMemory());
+      const batch3 = Array.from({ length: 30 }, () => createTestMemory());
+
+      // Queue first batch
+      for (const memory of batch1) {
+        await service.enrichMemory(memory);
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
+      // Queue second batch
+      for (const memory of batch2) {
+        await service.enrichMemory(memory);
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
+      // Queue third batch (should trigger rate limiting)
+      for (const memory of batch3) {
+        await service.enrichMemory(memory);
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+
+      // All should eventually complete
+      const stats = await service.getStats();
+      expect(stats.enrichedCount).toBeGreaterThan(0);
+    }, 10000);
+  });
+
+  describe('Concurrent Queue Modifications', () => {
+    it('should handle concurrent enrichMemory calls safely', async () => {
+      const memories = Array.from({ length: 20 }, () => createTestMemory());
+
+      // Simulate concurrent calls by not awaiting
+      const promises = memories.map((memory) => service.enrichMemory(memory));
+
+      // Wait for all to queue
+      await Promise.all(promises);
+
+      // Wait for processing
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+
+      // All should be processed without errors
+      const stats = await service.getStats();
+      expect(stats.enrichedCount).toBeGreaterThan(0);
+    }, 10000);
+
+    it('should handle rapid sequential enrichment requests', async () => {
+      const memories = Array.from({ length: 50 }, () => createTestMemory());
+
+      // Rapidly add to queue
+      for (const memory of memories) {
+        service.enrichMemory(memory); // Don't await
+      }
+
+      // Wait for processing
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+
+      // Queue should be processed correctly
+      const stats = await service.getStats();
+      expect(stats.enrichedCount).toBeGreaterThan(0);
+    }, 10000);
+
+    it('should handle enrichment while queue is processing', async () => {
+      const batch1 = Array.from({ length: 10 }, () => createTestMemory());
+      const batch2 = Array.from({ length: 10 }, () => createTestMemory());
+
+      // Queue first batch
+      for (const memory of batch1) {
+        await service.enrichMemory(memory);
+      }
+
+      // Wait a bit for processing to start
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      // Queue second batch while first is processing
+      for (const memory of batch2) {
+        await service.enrichMemory(memory);
+      }
+
+      // Wait for all processing
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+
+      const stats = await service.getStats();
+      expect(stats.enrichedCount).toBeGreaterThan(0);
+    }, 10000);
+  });
+
+  describe('Error Recovery in Queue Processing', () => {
+    it('should continue processing queue after individual failure', async () => {
+      let callCount = 0;
+      (global.fetch as jest.MockedFunction<typeof fetch>).mockImplementation(async () => {
+        callCount++;
+        // Fail on 3rd call
+        if (callCount === 3) {
+          throw new Error('Temporary failure');
+        }
+        return {
+          ok: true,
+          json: async () => ({
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({
+                    keywords: ['test'],
+                    tags: ['test'],
+                    context: 'test',
+                  }),
+                },
+              },
+            ],
+            usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+          }),
+        } as Response;
+      });
+
+      const memories = Array.from({ length: 5 }, () => createTestMemory());
+
+      for (const memory of memories) {
+        await service.enrichMemory(memory);
+      }
+
+      // Wait for processing including retries
+      await new Promise((resolve) => setTimeout(resolve, 8000));
+
+      // Should have processed most memories despite one failure
+      const stats = await service.getStats();
+      expect(stats.enrichedCount).toBeGreaterThan(0);
+    }, 15000);
+
+    it('should handle empty response from API', async () => {
+      (global.fetch as jest.MockedFunction<typeof fetch>).mockResolvedValue({
+        ok: true,
+        json: async () => ({}),
+      } as Response);
+
+      const memory = createTestMemory();
+      await service.enrichMemory(memory);
+
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+
+      // Should not crash
+      expect(memory.keywords).toBeUndefined();
+    });
+
+    it('should handle response with missing fields', async () => {
+      (global.fetch as jest.MockedFunction<typeof fetch>).mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  keywords: ['test'],
+                  // Missing tags and context
+                }),
+              },
+            },
+          ],
+          usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+        }),
+      } as Response);
+
+      const memory = createTestMemory();
+      await service.enrichMemory(memory);
+
+      await new Promise((resolve) => setTimeout(resolve, 200));
+
+      // Should handle partial data gracefully
+      expect(memory.keywords).toBeDefined();
+      // tags and context may be undefined or empty arrays/strings
+    });
+  });
+});
+
+describe('MigrationService Edge Cases', () => {
+  let migrationService: MigrationService;
+  let storage: StorageService;
+
+  const createTestMemory = (overrides?: Partial<MemoryWithMemA>): MemoryWithMemA => ({
+    id: generateUUID(),
+    content: {
+      role: 'user',
+      text: 'Test message',
+    },
+    conversationId: 'conv-123',
+    platform: 'chatgpt',
+    timestamp: now(),
+    vectorClock: createVectorClock(),
+    deviceId: 'device-1',
+    syncStatus: 'pending',
+    tags: ['test'],
+    ...overrides,
+  });
+
+  beforeEach(async () => {
+    // Clear mock storage
+    Object.keys(mockStorage).forEach((key) => delete mockStorage[key]);
+
+    storage = new StorageService();
+    await storage.initialize();
+    migrationService = getMigrationService();
+  });
+
+  afterEach(async () => {
+    await storage.close();
+    await (storage as any).db.delete();
+    await migrationService.resetMigration();
+  });
+
+  describe('Partial Migration Failures', () => {
+    it('should handle failure during batch processing', async () => {
+      const memories = Array.from({ length: 120 }, () => createTestMemory());
+      await storage.bulkSaveMemories(memories);
+
+      // Mock failure on second batch (after 50 processed)
+      let saveCount = 0;
+      const originalBulkSave = storage.bulkSaveMemories.bind(storage);
+      storage.bulkSaveMemories = jest.fn().mockImplementation(async (mems) => {
+        saveCount++;
+        if (saveCount === 2) {
+          throw new Error('Database error on batch 2');
+        }
+        return originalBulkSave(mems);
+      });
+
+      const result = await migrationService.migrate();
+
+      // Should report failure
+      expect(result.success).toBe(false);
+      expect(result.error).toBeDefined();
+
+      // Restore
+      storage.bulkSaveMemories = originalBulkSave;
+    }, 10000);
+
+    it('should handle database connection loss during migration', async () => {
+      const memories = Array.from({ length: 50 }, () => createTestMemory());
+      await storage.bulkSaveMemories(memories);
+
+      // Close database mid-migration
+      const originalGetAll = storage.getAllMemories.bind(storage);
+      storage.getAllMemories = jest.fn().mockImplementation(async () => {
+        // Close the database
+        await storage.close();
+        // Try to read anyway (will fail)
+        throw new Error('Database is closed');
+      });
+
+      const result = await migrationService.migrate();
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBeDefined();
+
+      // Restore
+      storage.getAllMemories = originalGetAll;
+    });
+
+    it('should recover from corrupted memory during migration', async () => {
+      const memories = Array.from({ length: 10 }, () => createTestMemory());
+
+      // Add one corrupted memory (missing required fields)
+      const corruptedMemory = {
+        id: generateUUID(),
+        // Missing content, conversationId, etc.
+      } as any;
+
+      await storage.bulkSaveMemories(memories);
+      await (storage as any).db.memories.add(corruptedMemory);
+
+      // Migration should handle the corrupted memory gracefully
+      const result = await migrationService.migrate();
+
+      // Should still succeed (or at least not crash)
+      expect(result).toBeDefined();
+      expect(result.migratedCount).toBeGreaterThanOrEqual(10);
+    }, 10000);
+  });
+
+  describe('Database Corruption Scenarios', () => {
+    it('should handle corrupted IndexedDB data', async () => {
+      const memory = createTestMemory();
+      await storage.saveMemory(memory);
+
+      // Corrupt the memory by directly modifying IndexedDB
+      await (storage as any).db.memories.update(memory.id, {
+        content: null, // Corrupted content
+      });
+
+      // Migration should handle gracefully
+      const result = await migrationService.migrate();
+
+      // Should not crash
+      expect(result).toBeDefined();
+    });
+
+    it('should handle migration with invalid vector clocks', async () => {
+      const memory = createTestMemory();
+      await storage.saveMemory(memory);
+
+      // Corrupt vector clock
+      await (storage as any).db.memories.update(memory.id, {
+        vectorClock: { invalid: 'data' },
+      });
+
+      const result = await migrationService.migrate();
+
+      expect(result).toBeDefined();
+    });
+  });
+
+  describe('Chrome Storage Edge Cases', () => {
+    it('should handle chrome.storage.local.get returning undefined', async () => {
+      const originalGet = chrome.storage.local.get;
+      chrome.storage.local.get = jest.fn().mockResolvedValue(undefined as any);
+
+      const needsMigration = await migrationService.needsMigration();
+
+      // Should default to true when metadata unavailable
+      expect(typeof needsMigration).toBe('boolean');
+
+      chrome.storage.local.get = originalGet;
+    });
+
+    it('should handle chrome.storage.local.get throwing error', async () => {
+      const originalGet = chrome.storage.local.get;
+      chrome.storage.local.get = jest.fn().mockRejectedValue(new Error('Storage unavailable'));
+
+      const needsMigration = await migrationService.needsMigration();
+
+      // Should handle gracefully
+      expect(typeof needsMigration).toBe('boolean');
+
+      chrome.storage.local.get = originalGet;
+    });
+
+    it('should handle quota exceeded during metadata save', async () => {
+      const memories = Array.from({ length: 100 }, () => createTestMemory());
+      await storage.bulkSaveMemories(memories);
+
+      const originalSet = chrome.storage.local.set;
+      chrome.storage.local.set = jest.fn().mockRejectedValue(
+        new Error('QUOTA_BYTES quota exceeded')
+      );
+
+      const result = await migrationService.migrate();
+
+      // Migration should succeed even if metadata save fails
+      expect(result.success).toBe(true);
+      expect(result.migratedCount).toBe(100);
+
+      chrome.storage.local.set = originalSet;
+    }, 10000);
+  });
+});

@@ -1,0 +1,627 @@
+/**
+ * Link-Aware Retrieval Test Suite
+ *
+ * Tests for link expansion, de-duplication, and score computation
+ */
+
+import { PromptInterceptor } from '../src/content/shared/prompt-interceptor';
+import type { Memory, MemoryWithMemA } from '../../shared/src/types/memory';
+import type { SimilarityResult, MemoryWithEmbedding } from '../src/lib/embedding-service';
+
+// Mock dependencies - create singleton mock
+const mockEmbeddingServiceInstance = {
+  initialize: jest.fn(),
+  findSimilar: jest.fn(),
+  setHNSWIndex: jest.fn(), // Phase 4
+};
+
+jest.mock('../src/lib/embedding-service', () => ({
+  getEmbeddingService: jest.fn(() => mockEmbeddingServiceInstance),
+}));
+
+jest.mock('../src/lib/messages', () => ({
+  sendMessage: jest.fn(),
+  MessageType: {
+    GET_MEMORIES: 'GET_MEMORIES',
+  },
+}));
+
+describe('Link-Aware Retrieval', () => {
+  let interceptor: PromptInterceptor;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+
+    // Create interceptor instance
+    interceptor = new PromptInterceptor();
+  });
+
+  describe('Result Expansion', () => {
+    it('should expand top-5 results with linked memories', async () => {
+      const memory1: MemoryWithMemA = {
+        id: 'memory-1',
+        content: { role: 'user', text: 'OAuth authentication guide' },
+        conversationId: 'conv-1',
+        platform: 'chatgpt',
+        timestamp: Date.now(),
+        vectorClock: { 'device-1': 1 },
+        deviceId: 'device-1',
+        syncStatus: 'synced',
+        tags: [],
+        links: [
+          { memoryId: 'memory-3', score: 0.9, createdAt: Date.now(), reason: 'Related auth topic' },
+          { memoryId: 'memory-4', score: 0.85, createdAt: Date.now(), reason: 'Security connection' },
+        ],
+      };
+
+      const memory2: MemoryWithMemA = {
+        id: 'memory-2',
+        content: { role: 'assistant', text: 'JWT token implementation' },
+        conversationId: 'conv-2',
+        platform: 'claude',
+        timestamp: Date.now(),
+        vectorClock: { 'device-1': 2 },
+        deviceId: 'device-1',
+        syncStatus: 'synced',
+        tags: [],
+        links: [],
+      };
+
+      const memory3: Memory = {
+        id: 'memory-3',
+        content: { role: 'user', text: 'API security best practices' },
+        conversationId: 'conv-3',
+        platform: 'chatgpt',
+        timestamp: Date.now(),
+        vectorClock: { 'device-1': 3 },
+        deviceId: 'device-1',
+        syncStatus: 'synced',
+        tags: [],
+      };
+
+      const memory4: Memory = {
+        id: 'memory-4',
+        content: { role: 'assistant', text: 'HTTPS and TLS setup' },
+        conversationId: 'conv-4',
+        platform: 'claude',
+        timestamp: Date.now(),
+        vectorClock: { 'device-1': 4 },
+        deviceId: 'device-1',
+        syncStatus: 'synced',
+        tags: [],
+      };
+
+      // Set up memory list
+      (interceptor as any).memories = [memory1, memory2, memory3, memory4];
+
+      // Mock findSimilar to return top-2
+      mockEmbeddingService.findSimilar.mockResolvedValue([
+        { memory: memory1, score: 0.95 },
+        { memory: memory2, score: 0.85 },
+      ]);
+
+      const results = await (interceptor as any).findSimilarWithLinks('authentication');
+
+      // Should have 4 results: top-2 + 2 linked memories
+      expect(results.length).toBe(4);
+      expect(results.map((r: SimilarityResult) => r.memory.id)).toContain('memory-1');
+      expect(results.map((r: SimilarityResult) => r.memory.id)).toContain('memory-2');
+      expect(results.map((r: SimilarityResult) => r.memory.id)).toContain('memory-3');
+      expect(results.map((r: SimilarityResult) => r.memory.id)).toContain('memory-4');
+    });
+
+    it('should limit results to max 10 memories', async () => {
+      // Create source memory with 8 links
+      const sourceMemory: MemoryWithMemA = {
+        id: 'memory-1',
+        content: { role: 'user', text: 'Main topic' },
+        conversationId: 'conv-1',
+        platform: 'chatgpt',
+        timestamp: Date.now(),
+        vectorClock: { 'device-1': 1 },
+        deviceId: 'device-1',
+        syncStatus: 'synced',
+        tags: [],
+        links: Array.from({ length: 8 }, (_, i) => ({
+          memoryId: `memory-${i + 6}`,
+          score: 0.9 - i * 0.05,
+          createdAt: Date.now(),
+          reason: `Link ${i}`,
+        })),
+      };
+
+      // Create top-5 memories (total would be 13 without limit)
+      const topMemories: Memory[] = Array.from({ length: 5 }, (_, i) => ({
+        id: `memory-${i + 1}`,
+        content: { role: 'user', text: `Related ${i}` },
+        conversationId: `conv-${i}`,
+        platform: 'chatgpt' as const,
+        timestamp: Date.now(),
+        vectorClock: { 'device-1': i + 1 },
+        deviceId: 'device-1',
+        syncStatus: 'synced' as const,
+        tags: [],
+      }));
+
+      // Create linked memories
+      const linkedMemories: Memory[] = Array.from({ length: 8 }, (_, i) => ({
+        id: `memory-${i + 6}`,
+        content: { role: 'user', text: `Linked ${i}` },
+        conversationId: `conv-${i + 5}`,
+        platform: 'chatgpt' as const,
+        timestamp: Date.now(),
+        vectorClock: { 'device-1': i + 6 },
+        deviceId: 'device-1',
+        syncStatus: 'synced' as const,
+        tags: [],
+      }));
+
+      (interceptor as any).memories = [sourceMemory, ...topMemories.slice(1), ...linkedMemories];
+
+      mockEmbeddingService.findSimilar.mockResolvedValue(
+        topMemories.map((m, i) => ({ memory: m, score: 0.9 - i * 0.05 }))
+      );
+
+      const results = await (interceptor as any).findSimilarWithLinks('query');
+
+      // Should be limited to 10
+      expect(results.length).toBe(10);
+    });
+
+    it('should handle memories with no links', async () => {
+      const memory1: Memory = {
+        id: 'memory-1',
+        content: { role: 'user', text: 'Standalone memory' },
+        conversationId: 'conv-1',
+        platform: 'chatgpt',
+        timestamp: Date.now(),
+        vectorClock: { 'device-1': 1 },
+        deviceId: 'device-1',
+        syncStatus: 'synced',
+        tags: [],
+      };
+
+      const memory2: Memory = {
+        id: 'memory-2',
+        content: { role: 'assistant', text: 'Another standalone' },
+        conversationId: 'conv-2',
+        platform: 'claude',
+        timestamp: Date.now(),
+        vectorClock: { 'device-1': 2 },
+        deviceId: 'device-1',
+        syncStatus: 'synced',
+        tags: [],
+      };
+
+      (interceptor as any).memories = [memory1, memory2];
+
+      mockEmbeddingService.findSimilar.mockResolvedValue([
+        { memory: memory1, score: 0.9 },
+        { memory: memory2, score: 0.8 },
+      ]);
+
+      const results = await (interceptor as any).findSimilarWithLinks('query');
+
+      // Should return just the top-5 (or in this case, top-2)
+      expect(results.length).toBe(2);
+      expect(results[0].memory.id).toBe('memory-1');
+      expect(results[1].memory.id).toBe('memory-2');
+    });
+
+    it('should return empty array when no matches found', async () => {
+      (interceptor as any).memories = [];
+
+      mockEmbeddingService.findSimilar.mockResolvedValue([]);
+
+      const results = await (interceptor as any).findSimilarWithLinks('query');
+
+      expect(results).toEqual([]);
+    });
+  });
+
+  describe('De-duplication', () => {
+    it('should not include the same memory twice', async () => {
+      // Memory 1 links to Memory 2
+      // Memory 2 is also in top-5
+      // Should only appear once in results
+      const memory1: MemoryWithMemA = {
+        id: 'memory-1',
+        content: { role: 'user', text: 'First memory' },
+        conversationId: 'conv-1',
+        platform: 'chatgpt',
+        timestamp: Date.now(),
+        vectorClock: { 'device-1': 1 },
+        deviceId: 'device-1',
+        syncStatus: 'synced',
+        tags: [],
+        links: [
+          { memoryId: 'memory-2', score: 0.9, createdAt: Date.now(), reason: 'Related' },
+        ],
+      };
+
+      const memory2: Memory = {
+        id: 'memory-2',
+        content: { role: 'assistant', text: 'Second memory' },
+        conversationId: 'conv-2',
+        platform: 'claude',
+        timestamp: Date.now(),
+        vectorClock: { 'device-1': 2 },
+        deviceId: 'device-1',
+        syncStatus: 'synced',
+        tags: [],
+      };
+
+      (interceptor as any).memories = [memory1, memory2];
+
+      // Both memories in top-5
+      mockEmbeddingService.findSimilar.mockResolvedValue([
+        { memory: memory1, score: 0.95 },
+        { memory: memory2, score: 0.85 },
+      ]);
+
+      const results = await (interceptor as any).findSimilarWithLinks('query');
+
+      // Should have only 2 results (no duplication)
+      expect(results.length).toBe(2);
+      const ids = results.map((r: SimilarityResult) => r.memory.id);
+      expect(ids.filter((id: string) => id === 'memory-2').length).toBe(1);
+    });
+
+    it('should handle circular links without duplication', async () => {
+      const memory1: MemoryWithMemA = {
+        id: 'memory-1',
+        content: { role: 'user', text: 'First memory' },
+        conversationId: 'conv-1',
+        platform: 'chatgpt',
+        timestamp: Date.now(),
+        vectorClock: { 'device-1': 1 },
+        deviceId: 'device-1',
+        syncStatus: 'synced',
+        tags: [],
+        links: [
+          { memoryId: 'memory-2', score: 0.9, createdAt: Date.now(), reason: 'Links to 2' },
+        ],
+      };
+
+      const memory2: MemoryWithMemA = {
+        id: 'memory-2',
+        content: { role: 'assistant', text: 'Second memory' },
+        conversationId: 'conv-2',
+        platform: 'claude',
+        timestamp: Date.now(),
+        vectorClock: { 'device-1': 2 },
+        deviceId: 'device-1',
+        syncStatus: 'synced',
+        tags: [],
+        links: [
+          { memoryId: 'memory-1', score: 0.9, createdAt: Date.now(), reason: 'Links back to 1' },
+        ],
+      };
+
+      (interceptor as any).memories = [memory1, memory2];
+
+      mockEmbeddingService.findSimilar.mockResolvedValue([
+        { memory: memory1, score: 0.95 },
+      ]);
+
+      const results = await (interceptor as any).findSimilarWithLinks('query');
+
+      expect(results.length).toBe(2);
+      const ids = results.map((r: SimilarityResult) => r.memory.id);
+      expect(new Set(ids).size).toBe(2); // All unique
+    });
+  });
+
+  describe('Score Computation', () => {
+    it('should apply decay factor to linked memories', async () => {
+      const memory1: MemoryWithMemA = {
+        id: 'memory-1',
+        content: { role: 'user', text: 'Main memory' },
+        conversationId: 'conv-1',
+        platform: 'chatgpt',
+        timestamp: Date.now(),
+        vectorClock: { 'device-1': 1 },
+        deviceId: 'device-1',
+        syncStatus: 'synced',
+        tags: [],
+        links: [
+          { memoryId: 'memory-2', score: 0.9, createdAt: Date.now(), reason: 'Linked' },
+        ],
+      };
+
+      const memory2: Memory = {
+        id: 'memory-2',
+        content: { role: 'assistant', text: 'Linked memory' },
+        conversationId: 'conv-2',
+        platform: 'claude',
+        timestamp: Date.now(),
+        vectorClock: { 'device-1': 2 },
+        deviceId: 'device-1',
+        syncStatus: 'synced',
+        tags: [],
+      };
+
+      (interceptor as any).memories = [memory1, memory2];
+
+      mockEmbeddingService.findSimilar.mockResolvedValue([
+        { memory: memory1, score: 0.95 },
+      ]);
+
+      const results = await (interceptor as any).findSimilarWithLinks('query');
+
+      expect(results.length).toBe(2);
+
+      // First result (direct match) should have original score
+      const directResult = results.find((r: SimilarityResult) => r.memory.id === 'memory-1');
+      expect(directResult.score).toBe(0.95);
+
+      // Second result (linked) should have decayed score
+      const linkedResult = results.find((r: SimilarityResult) => r.memory.id === 'memory-2');
+      // Score = 0.95 (parent) * 0.9 (link confidence) * 0.8 (decay)
+      expect(linkedResult.score).toBeCloseTo(0.95 * 0.9 * 0.8, 5);
+    });
+
+    it('should sort results by final score', async () => {
+      // Create scenario where linked memory has higher score than some top-5 results
+      const memory1: MemoryWithMemA = {
+        id: 'memory-1',
+        content: { role: 'user', text: 'High score memory' },
+        conversationId: 'conv-1',
+        platform: 'chatgpt',
+        timestamp: Date.now(),
+        vectorClock: { 'device-1': 1 },
+        deviceId: 'device-1',
+        syncStatus: 'synced',
+        tags: [],
+        links: [
+          { memoryId: 'memory-4', score: 0.95, createdAt: Date.now(), reason: 'Very related' },
+        ],
+      };
+
+      const memory2: Memory = {
+        id: 'memory-2',
+        content: { role: 'assistant', text: 'Medium score' },
+        conversationId: 'conv-2',
+        platform: 'claude',
+        timestamp: Date.now(),
+        vectorClock: { 'device-1': 2 },
+        deviceId: 'device-1',
+        syncStatus: 'synced',
+        tags: [],
+      };
+
+      const memory3: Memory = {
+        id: 'memory-3',
+        content: { role: 'user', text: 'Low score' },
+        conversationId: 'conv-3',
+        platform: 'chatgpt',
+        timestamp: Date.now(),
+        vectorClock: { 'device-1': 3 },
+        deviceId: 'device-1',
+        syncStatus: 'synced',
+        tags: [],
+      };
+
+      const memory4: Memory = {
+        id: 'memory-4',
+        content: { role: 'assistant', text: 'Linked memory' },
+        conversationId: 'conv-4',
+        platform: 'claude',
+        timestamp: Date.now(),
+        vectorClock: { 'device-1': 4 },
+        deviceId: 'device-1',
+        syncStatus: 'synced',
+        tags: [],
+      };
+
+      (interceptor as any).memories = [memory1, memory2, memory3, memory4];
+
+      mockEmbeddingService.findSimilar.mockResolvedValue([
+        { memory: memory1, score: 0.9 },
+        { memory: memory2, score: 0.7 },
+        { memory: memory3, score: 0.6 },
+      ]);
+
+      const results = await (interceptor as any).findSimilarWithLinks('query');
+
+      // Results should be sorted by final score
+      expect(results[0].score).toBeGreaterThanOrEqual(results[1].score);
+      expect(results[1].score).toBeGreaterThanOrEqual(results[2].score);
+      expect(results[2].score).toBeGreaterThanOrEqual(results[3].score);
+    });
+  });
+
+  describe('Edge Cases', () => {
+    it('should handle missing linked memories gracefully', async () => {
+      const memory1: MemoryWithMemA = {
+        id: 'memory-1',
+        content: { role: 'user', text: 'Memory with broken link' },
+        conversationId: 'conv-1',
+        platform: 'chatgpt',
+        timestamp: Date.now(),
+        vectorClock: { 'device-1': 1 },
+        deviceId: 'device-1',
+        syncStatus: 'synced',
+        tags: [],
+        links: [
+          { memoryId: 'memory-999', score: 0.9, createdAt: Date.now(), reason: 'Missing' },
+        ],
+      };
+
+      (interceptor as any).memories = [memory1];
+
+      mockEmbeddingService.findSimilar.mockResolvedValue([
+        { memory: memory1, score: 0.9 },
+      ]);
+
+      const results = await (interceptor as any).findSimilarWithLinks('query');
+
+      // Should return just the found memory, ignoring broken link
+      expect(results.length).toBe(1);
+      expect(results[0].memory.id).toBe('memory-1');
+    });
+
+    it('should handle empty links array', async () => {
+      const memory1: MemoryWithMemA = {
+        id: 'memory-1',
+        content: { role: 'user', text: 'Memory with empty links' },
+        conversationId: 'conv-1',
+        platform: 'chatgpt',
+        timestamp: Date.now(),
+        vectorClock: { 'device-1': 1 },
+        deviceId: 'device-1',
+        syncStatus: 'synced',
+        tags: [],
+        links: [],
+      };
+
+      (interceptor as any).memories = [memory1];
+
+      mockEmbeddingService.findSimilar.mockResolvedValue([
+        { memory: memory1, score: 0.9 },
+      ]);
+
+      const results = await (interceptor as any).findSimilarWithLinks('query');
+
+      expect(results.length).toBe(1);
+      expect(results[0].memory.id).toBe('memory-1');
+    });
+
+    it('should stop expansion at 10 total results', async () => {
+      // Create memory with 20 links (should stop at 10 total)
+      const sourceMemory: MemoryWithMemA = {
+        id: 'memory-1',
+        content: { role: 'user', text: 'Source' },
+        conversationId: 'conv-1',
+        platform: 'chatgpt',
+        timestamp: Date.now(),
+        vectorClock: { 'device-1': 1 },
+        deviceId: 'device-1',
+        syncStatus: 'synced',
+        tags: [],
+        links: Array.from({ length: 20 }, (_, i) => ({
+          memoryId: `memory-${i + 2}`,
+          score: 0.9,
+          createdAt: Date.now(),
+          reason: `Link ${i}`,
+        })),
+      };
+
+      const linkedMemories = Array.from({ length: 20 }, (_, i) => ({
+        id: `memory-${i + 2}`,
+        content: { role: 'user' as const, text: `Linked ${i}` },
+        conversationId: `conv-${i + 1}`,
+        platform: 'chatgpt' as const,
+        timestamp: Date.now(),
+        vectorClock: { 'device-1': i + 2 },
+        deviceId: 'device-1',
+        syncStatus: 'synced' as const,
+        tags: [],
+      }));
+
+      (interceptor as any).memories = [sourceMemory, ...linkedMemories];
+
+      mockEmbeddingService.findSimilar.mockResolvedValue([
+        { memory: sourceMemory, score: 0.95 },
+      ]);
+
+      const results = await (interceptor as any).findSimilarWithLinks('query');
+
+      // Should stop at 10 even though there are 20 links
+      expect(results.length).toBe(10);
+    });
+
+    it('should handle deep link chains without infinite loops', async () => {
+      // Create chain: 1 → 2 → 3 → 1 (circular)
+      const memory1: MemoryWithMemA = {
+        id: 'memory-1',
+        content: { role: 'user', text: 'First' },
+        conversationId: 'conv-1',
+        platform: 'chatgpt',
+        timestamp: Date.now(),
+        vectorClock: { 'device-1': 1 },
+        deviceId: 'device-1',
+        syncStatus: 'synced',
+        tags: [],
+        links: [
+          { memoryId: 'memory-2', score: 0.9, createdAt: Date.now(), reason: 'To 2' },
+        ],
+      };
+
+      const memory2: MemoryWithMemA = {
+        id: 'memory-2',
+        content: { role: 'assistant', text: 'Second' },
+        conversationId: 'conv-2',
+        platform: 'claude',
+        timestamp: Date.now(),
+        vectorClock: { 'device-1': 2 },
+        deviceId: 'device-1',
+        syncStatus: 'synced',
+        tags: [],
+        links: [
+          { memoryId: 'memory-3', score: 0.9, createdAt: Date.now(), reason: 'To 3' },
+        ],
+      };
+
+      const memory3: MemoryWithMemA = {
+        id: 'memory-3',
+        content: { role: 'user', text: 'Third' },
+        conversationId: 'conv-3',
+        platform: 'chatgpt',
+        timestamp: Date.now(),
+        vectorClock: { 'device-1': 3 },
+        deviceId: 'device-1',
+        syncStatus: 'synced',
+        tags: [],
+        links: [
+          { memoryId: 'memory-1', score: 0.9, createdAt: Date.now(), reason: 'Back to 1' },
+        ],
+      };
+
+      (interceptor as any).memories = [memory1, memory2, memory3];
+
+      mockEmbeddingService.findSimilar.mockResolvedValue([
+        { memory: memory1, score: 0.95 },
+      ]);
+
+      // Should not hang or error
+      const results = await (interceptor as any).findSimilarWithLinks('query');
+
+      expect(results.length).toBeGreaterThan(0);
+      expect(results.length).toBeLessThanOrEqual(10);
+    });
+  });
+
+  describe('Performance', () => {
+    it('should complete retrieval in reasonable time', async () => {
+      // Create 100 memories with various links
+      const memories: MemoryWithMemA[] = Array.from({ length: 100 }, (_, i) => ({
+        id: `memory-${i}`,
+        content: { role: (i % 2 === 0 ? 'user' : 'assistant') as const, text: `Memory ${i}` },
+        conversationId: `conv-${i}`,
+        platform: 'chatgpt' as const,
+        timestamp: Date.now(),
+        vectorClock: { 'device-1': i },
+        deviceId: 'device-1',
+        syncStatus: 'synced' as const,
+        tags: [],
+        links: i < 50 ? [
+          { memoryId: `memory-${i + 1}`, score: 0.9, createdAt: Date.now(), reason: 'Link' },
+        ] : [],
+      }));
+
+      (interceptor as any).memories = memories;
+
+      mockEmbeddingService.findSimilar.mockResolvedValue(
+        memories.slice(0, 5).map((m, i) => ({ memory: m, score: 0.9 - i * 0.05 }))
+      );
+
+      const start = Date.now();
+      const results = await (interceptor as any).findSimilarWithLinks('query');
+      const duration = Date.now() - start;
+
+      expect(results.length).toBeGreaterThan(0);
+      expect(duration).toBeLessThan(100); // Should complete in <100ms
+    });
+  });
+});

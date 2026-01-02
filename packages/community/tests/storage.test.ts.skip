@@ -1,0 +1,552 @@
+/**
+ * Tests for StorageService
+ */
+
+import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
+import { StorageService } from '../src/lib/storage';
+import {
+  Memory,
+  Conversation,
+  UUID,
+  generateUUID,
+  now,
+  createVectorClock,
+} from 'engram-shared';
+
+// Mock IndexedDB for testing
+import 'fake-indexeddb/auto';
+
+describe('StorageService', () => {
+  let storage: StorageService;
+
+  beforeEach(async () => {
+    storage = new StorageService();
+    await storage.initialize();
+  });
+
+  afterEach(async () => {
+    await storage.close();
+    // Delete the database to ensure clean state for next test
+    await (storage as any).db.delete();
+  });
+
+  describe('Initialization', () => {
+    it('should initialize successfully', async () => {
+      const newStorage = new StorageService();
+      await expect(newStorage.initialize()).resolves.not.toThrow();
+      await newStorage.close();
+    });
+
+    it('should close successfully', async () => {
+      await expect(storage.close()).resolves.not.toThrow();
+    });
+  });
+
+  describe('Memory Operations', () => {
+    const createTestMemory = (overrides?: Partial<Memory>): Memory => ({
+      id: generateUUID(),
+      content: {
+        role: 'user',
+        text: 'Test message',
+      },
+      conversationId: 'conv-123',
+      platform: 'chatgpt',
+      timestamp: now(),
+      vectorClock: createVectorClock(),
+      deviceId: 'device-1',
+      syncStatus: 'pending',
+      tags: ['test'],
+      ...overrides,
+    });
+
+    it('should save a memory', async () => {
+      const memory = createTestMemory();
+      await expect(storage.saveMemory(memory)).resolves.not.toThrow();
+    });
+
+    it('should retrieve a saved memory', async () => {
+      const memory = createTestMemory();
+      await storage.saveMemory(memory);
+
+      const retrieved = await storage.getMemory(memory.id);
+      expect(retrieved).toEqual(memory);
+    });
+
+    it('should return null for non-existent memory', async () => {
+      const result = await storage.getMemory('non-existent-id');
+      expect(result).toBeNull();
+    });
+
+    it('should update a memory', async () => {
+      const memory = createTestMemory();
+      await storage.saveMemory(memory);
+
+      const updates = {
+        syncStatus: 'synced' as const,
+        tags: ['updated', 'test'],
+      };
+      await storage.updateMemory(memory.id, updates);
+
+      const retrieved = await storage.getMemory(memory.id);
+      expect(retrieved?.syncStatus).toBe('synced');
+      expect(retrieved?.tags).toEqual(['updated', 'test']);
+    });
+
+    it('should delete a memory', async () => {
+      const memory = createTestMemory();
+      await storage.saveMemory(memory);
+
+      await storage.deleteMemory(memory.id);
+
+      const retrieved = await storage.getMemory(memory.id);
+      expect(retrieved).toBeNull();
+    });
+
+    it('should bulk save memories', async () => {
+      const memories = [
+        createTestMemory({ id: 'mem-1' }),
+        createTestMemory({ id: 'mem-2' }),
+        createTestMemory({ id: 'mem-3' }),
+      ];
+
+      await storage.bulkSaveMemories(memories);
+
+      const mem1 = await storage.getMemory('mem-1');
+      const mem2 = await storage.getMemory('mem-2');
+      const mem3 = await storage.getMemory('mem-3');
+
+      expect(mem1).toBeTruthy();
+      expect(mem2).toBeTruthy();
+      expect(mem3).toBeTruthy();
+    });
+  });
+
+  describe('Memory Filtering', () => {
+    const createTestMemory = (overrides?: Partial<Memory>): Memory => ({
+      id: generateUUID(),
+      content: {
+        role: 'user',
+        text: 'Test message',
+      },
+      conversationId: 'conv-123',
+      platform: 'chatgpt',
+      timestamp: now(),
+      vectorClock: createVectorClock(),
+      deviceId: 'device-1',
+      syncStatus: 'pending',
+      tags: ['test'],
+      ...overrides,
+    });
+
+    beforeEach(async () => {
+      // Create test data
+      const memories = [
+        createTestMemory({
+          id: 'mem-1',
+          conversationId: 'conv-1',
+          platform: 'chatgpt',
+          timestamp: 1000,
+          tags: ['important'],
+        }),
+        createTestMemory({
+          id: 'mem-2',
+          conversationId: 'conv-1',
+          platform: 'chatgpt',
+          timestamp: 2000,
+          tags: ['work'],
+        }),
+        createTestMemory({
+          id: 'mem-3',
+          conversationId: 'conv-2',
+          platform: 'claude',
+          timestamp: 3000,
+          tags: ['personal'],
+        }),
+      ];
+      await storage.bulkSaveMemories(memories);
+    });
+
+    it('should filter by conversation ID', async () => {
+      const results = await storage.getMemories({ conversationId: 'conv-1' });
+      expect(results.length).toBe(2);
+      expect(results.every((m) => m.conversationId === 'conv-1')).toBe(true);
+    });
+
+    it('should filter by platform', async () => {
+      const results = await storage.getMemories({ platform: 'chatgpt' });
+      expect(results.length).toBe(2);
+      expect(results.every((m) => m.platform === 'chatgpt')).toBe(true);
+    });
+
+    it('should filter by date range', async () => {
+      const results = await storage.getMemories({
+        startDate: 1500,
+        endDate: 2500,
+      });
+      expect(results.length).toBe(1);
+      expect(results[0].id).toBe('mem-2');
+    });
+
+    it('should filter by tags', async () => {
+      const results = await storage.getMemories({ tags: ['important'] });
+      expect(results.length).toBe(1);
+      expect(results[0].tags).toContain('important');
+    });
+
+    it('should apply limit and offset', async () => {
+      const results = await storage.getMemories({ limit: 2, offset: 1 });
+      expect(results.length).toBe(2);
+    });
+
+    it('should return memories sorted by timestamp (newest first)', async () => {
+      const results = await storage.getMemories({});
+      expect(results[0].timestamp).toBeGreaterThanOrEqual(results[1].timestamp);
+      expect(results[1].timestamp).toBeGreaterThanOrEqual(results[2].timestamp);
+    });
+  });
+
+  describe('Conversation Operations', () => {
+    const createTestConversation = (overrides?: Partial<Conversation>): Conversation => ({
+      id: generateUUID(),
+      platform: 'chatgpt',
+      createdAt: now(),
+      lastMessageAt: now(),
+      messageCount: 1,
+      tags: [],
+      ...overrides,
+    });
+
+    it('should save a conversation', async () => {
+      const conversation = createTestConversation();
+      await expect(storage.saveConversation(conversation)).resolves.not.toThrow();
+    });
+
+    it('should retrieve a saved conversation', async () => {
+      const conversation = createTestConversation();
+      await storage.saveConversation(conversation);
+
+      const retrieved = await storage.getConversation(conversation.id);
+      expect(retrieved).toEqual(conversation);
+    });
+
+    it('should auto-create conversation when saving memory', async () => {
+      const memory: Memory = {
+        id: generateUUID(),
+        content: { role: 'user', text: 'Test' },
+        conversationId: 'new-conv',
+        platform: 'claude',
+        timestamp: now(),
+        vectorClock: createVectorClock(),
+        deviceId: 'device-1',
+        syncStatus: 'pending',
+        tags: [],
+      };
+
+      await storage.saveMemory(memory);
+
+      const conversation = await storage.getConversation('new-conv');
+      expect(conversation).toBeTruthy();
+      expect(conversation?.platform).toBe('claude');
+      expect(conversation?.messageCount).toBe(1);
+    });
+
+    it('should update conversation metadata when memories change', async () => {
+      const conversationId = 'test-conv';
+
+      // Add first memory
+      const memory1: Memory = {
+        id: 'mem-1',
+        content: { role: 'user', text: 'First' },
+        conversationId,
+        platform: 'chatgpt',
+        timestamp: 1000,
+        vectorClock: createVectorClock(),
+        deviceId: 'device-1',
+        syncStatus: 'pending',
+        tags: ['tag1'],
+      };
+      await storage.saveMemory(memory1);
+
+      let conversation = await storage.getConversation(conversationId);
+      expect(conversation?.messageCount).toBe(1);
+
+      // Add second memory
+      const memory2: Memory = {
+        id: 'mem-2',
+        content: { role: 'assistant', text: 'Second' },
+        conversationId,
+        platform: 'chatgpt',
+        timestamp: 2000,
+        vectorClock: createVectorClock(),
+        deviceId: 'device-1',
+        syncStatus: 'pending',
+        tags: ['tag2'],
+      };
+      await storage.saveMemory(memory2);
+
+      conversation = await storage.getConversation(conversationId);
+      expect(conversation?.messageCount).toBe(2);
+      expect(conversation?.lastMessageAt).toBe(2000);
+      expect(conversation?.tags).toContain('tag1');
+      expect(conversation?.tags).toContain('tag2');
+    });
+
+    it('should filter conversations by platform', async () => {
+      await storage.saveConversation(
+        createTestConversation({ id: 'conv-1', platform: 'chatgpt' })
+      );
+      await storage.saveConversation(
+        createTestConversation({ id: 'conv-2', platform: 'claude' })
+      );
+      await storage.saveConversation(
+        createTestConversation({ id: 'conv-3', platform: 'chatgpt' })
+      );
+
+      const results = await storage.getConversations({ platform: 'chatgpt' });
+      expect(results.length).toBe(2);
+      expect(results.every((c) => c.platform === 'chatgpt')).toBe(true);
+    });
+  });
+
+  describe('Sync Queue', () => {
+    const createTestOperation = (overrides?: Partial<any>): any => ({
+      id: generateUUID(),
+      type: 'add',
+      memoryId: generateUUID(),
+      vectorClock: createVectorClock(),
+      payload: null,
+      signature: 'test-signature',
+      timestamp: now(),
+      ...overrides,
+    });
+
+    it('should enqueue a sync operation', async () => {
+      const operation = createTestOperation();
+      await expect(storage.enqueueSyncOperation(operation)).resolves.not.toThrow();
+    });
+
+    it('should dequeue operations in FIFO order', async () => {
+      const op1 = createTestOperation({ id: 'op-1', timestamp: 1000 });
+      const op2 = createTestOperation({ id: 'op-2', timestamp: 2000 });
+      const op3 = createTestOperation({ id: 'op-3', timestamp: 3000 });
+
+      await storage.enqueueSyncOperation(op1);
+      await storage.enqueueSyncOperation(op2);
+      await storage.enqueueSyncOperation(op3);
+
+      const dequeued = await storage.dequeueSyncOperations(2);
+      expect(dequeued.length).toBe(2);
+      expect(dequeued[0].id).toBe('op-1');
+      expect(dequeued[1].id).toBe('op-2');
+    });
+
+    it('should remove dequeued operations from queue', async () => {
+      const operation = createTestOperation();
+      await storage.enqueueSyncOperation(operation);
+
+      await storage.dequeueSyncOperations(1);
+      const remaining = await storage.dequeueSyncOperations(10);
+
+      expect(remaining.length).toBe(0);
+    });
+
+    it('should clear the sync queue', async () => {
+      await storage.enqueueSyncOperation(createTestOperation());
+      await storage.enqueueSyncOperation(createTestOperation());
+      await storage.enqueueSyncOperation(createTestOperation());
+
+      await storage.clearSyncQueue();
+
+      const remaining = await storage.dequeueSyncOperations(10);
+      expect(remaining.length).toBe(0);
+    });
+  });
+
+  describe('Search', () => {
+    beforeEach(async () => {
+      const memories: Memory[] = [
+        {
+          id: 'mem-1',
+          content: { role: 'user', text: 'The quick brown fox jumps' },
+          conversationId: 'conv-1',
+          platform: 'chatgpt',
+          timestamp: now(),
+          vectorClock: createVectorClock(),
+          deviceId: 'device-1',
+          syncStatus: 'synced',
+          tags: ['animals', 'test'],
+        },
+        {
+          id: 'mem-2',
+          content: { role: 'user', text: 'A lazy dog sleeps' },
+          conversationId: 'conv-2',
+          platform: 'claude',
+          timestamp: now(),
+          vectorClock: createVectorClock(),
+          deviceId: 'device-1',
+          syncStatus: 'synced',
+          tags: ['animals'],
+        },
+        {
+          id: 'mem-3',
+          content: { role: 'user', text: 'Programming in TypeScript' },
+          conversationId: 'conv-3',
+          platform: 'perplexity',
+          timestamp: now(),
+          vectorClock: createVectorClock(),
+          deviceId: 'device-1',
+          syncStatus: 'synced',
+          tags: ['coding'],
+        },
+      ];
+      await storage.bulkSaveMemories(memories);
+    });
+
+    it('should search memories by content', async () => {
+      const results = await storage.searchMemories('fox');
+      expect(results.length).toBe(1);
+      expect(results[0].content.text).toContain('fox');
+    });
+
+    it('should search memories by tags', async () => {
+      const results = await storage.searchMemories('animals');
+      expect(results.length).toBe(2);
+      expect(results.every((m) => m.tags.includes('animals'))).toBe(true);
+    });
+
+    it('should be case-insensitive', async () => {
+      const results1 = await storage.searchMemories('typescript');
+      const results2 = await storage.searchMemories('TypeScript');
+      const results3 = await storage.searchMemories('TYPESCRIPT');
+
+      expect(results1).toEqual(results2);
+      expect(results2).toEqual(results3);
+    });
+
+    it('should return empty array for no matches', async () => {
+      const results = await storage.searchMemories('nonexistent');
+      expect(results.length).toBe(0);
+    });
+
+    it('should rank by relevance', async () => {
+      const memories: Memory[] = [
+        {
+          id: 'mem-rel-1',
+          content: { role: 'user', text: 'test test test' },
+          conversationId: 'conv-1',
+          platform: 'chatgpt',
+          timestamp: now(),
+          vectorClock: createVectorClock(),
+          deviceId: 'device-1',
+          syncStatus: 'synced',
+          tags: [],
+        },
+        {
+          id: 'mem-rel-2',
+          content: { role: 'user', text: 'test once' },
+          conversationId: 'conv-2',
+          platform: 'chatgpt',
+          timestamp: now(),
+          vectorClock: createVectorClock(),
+          deviceId: 'device-1',
+          syncStatus: 'synced',
+          tags: [],
+        },
+      ];
+      await storage.bulkSaveMemories(memories);
+
+      const results = await storage.searchMemories('test');
+      // More occurrences should rank higher
+      expect(results[0].id).toBe('mem-rel-1');
+    });
+  });
+
+  describe('Search Index', () => {
+    it('should update search index for memory', async () => {
+      const memoryId = 'test-mem-1';
+      const tags = ['tag1', 'tag2', 'tag3'];
+
+      await expect(
+        storage.updateSearchIndex(memoryId, tags)
+      ).resolves.not.toThrow();
+    });
+
+    it('should handle tag updates', async () => {
+      const memoryId = 'test-mem-2';
+
+      // Initial tags
+      await storage.updateSearchIndex(memoryId, ['old1', 'old2']);
+
+      // Update tags
+      await storage.updateSearchIndex(memoryId, ['new1', 'new2']);
+
+      // Should not throw
+      await expect(
+        storage.updateSearchIndex(memoryId, ['new1', 'new2'])
+      ).resolves.not.toThrow();
+    });
+  });
+
+  describe('Metadata', () => {
+    it('should store and retrieve metadata', async () => {
+      await storage.setMetadata('testKey', { value: 'testValue' });
+      const retrieved = await storage.getMetadata<{ value: string }>('testKey');
+
+      expect(retrieved).toEqual({ value: 'testValue' });
+    });
+
+    it('should return null for non-existent metadata', async () => {
+      const result = await storage.getMetadata('nonexistent');
+      expect(result).toBeNull();
+    });
+
+    it('should update existing metadata', async () => {
+      await storage.setMetadata('key', 'value1');
+      await storage.setMetadata('key', 'value2');
+
+      const retrieved = await storage.getMetadata('key');
+      expect(retrieved).toBe('value2');
+    });
+
+    it('should handle different data types', async () => {
+      await storage.setMetadata('string', 'test');
+      await storage.setMetadata('number', 123);
+      await storage.setMetadata('boolean', true);
+      await storage.setMetadata('object', { nested: 'value' });
+      await storage.setMetadata('array', [1, 2, 3]);
+
+      expect(await storage.getMetadata('string')).toBe('test');
+      expect(await storage.getMetadata('number')).toBe(123);
+      expect(await storage.getMetadata('boolean')).toBe(true);
+      expect(await storage.getMetadata('object')).toEqual({ nested: 'value' });
+      expect(await storage.getMetadata('array')).toEqual([1, 2, 3]);
+    });
+  });
+
+  describe('Statistics', () => {
+    it('should return storage statistics', async () => {
+      // Add test data
+      const memory: Memory = {
+        id: generateUUID(),
+        content: { role: 'user', text: 'Test' },
+        conversationId: 'conv-1',
+        platform: 'chatgpt',
+        timestamp: now(),
+        vectorClock: createVectorClock(),
+        deviceId: 'device-1',
+        syncStatus: 'pending',
+        tags: [],
+      };
+      await storage.saveMemory(memory);
+
+      const stats = await storage.getStats();
+
+      expect(stats.totalMemories).toBeGreaterThanOrEqual(1);
+      expect(stats.totalConversations).toBeGreaterThanOrEqual(1);
+      expect(stats.pendingSyncOps).toBeGreaterThanOrEqual(0);
+      expect(stats.storageUsedBytes).toBeGreaterThanOrEqual(0);
+      expect(stats.oldestMemory).toBeGreaterThan(0);
+      expect(stats.newestMemory).toBeGreaterThan(0);
+    });
+  });
+});

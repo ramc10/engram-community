@@ -1,0 +1,461 @@
+/**
+ * Tests for MigrationService
+ * Covers schema migration, version detection, and backward compatibility
+ */
+
+import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
+import { getMigrationService, MigrationService } from '../src/lib/migration-service';
+import { StorageService } from '../src/lib/storage';
+import type { Memory, MemoryWithMemA } from 'engram-shared';
+import { generateUUID, now, createVectorClock } from 'engram-shared';
+
+// Mock IndexedDB for testing
+import 'fake-indexeddb/auto';
+
+// Mock chrome.storage.local
+const mockStorage: Record<string, any> = {};
+global.chrome = {
+  storage: {
+    local: {
+      get: jest.fn(async (keys: string | string[]) => {
+        if (typeof keys === 'string') {
+          return { [keys]: mockStorage[keys] };
+        }
+        const result: Record<string, any> = {};
+        for (const key of keys) {
+          if (mockStorage[key] !== undefined) {
+            result[key] = mockStorage[key];
+          }
+        }
+        return result;
+      }),
+      set: jest.fn(async (items: Record<string, any>) => {
+        Object.assign(mockStorage, items);
+      }),
+      remove: jest.fn(async (keys: string | string[]) => {
+        const keysArray = typeof keys === 'string' ? [keys] : keys;
+        for (const key of keysArray) {
+          delete mockStorage[key];
+        }
+      }),
+    },
+  } as any,
+} as any;
+
+describe('MigrationService', () => {
+  let migrationService: MigrationService;
+  let storage: StorageService;
+
+  const createTestMemory = (overrides?: Partial<Memory>): Memory => ({
+    id: generateUUID(),
+    content: {
+      role: 'user',
+      text: 'Test message',
+    },
+    conversationId: 'conv-123',
+    platform: 'chatgpt',
+    timestamp: now(),
+    vectorClock: createVectorClock(),
+    deviceId: 'device-1',
+    syncStatus: 'pending',
+    tags: ['test'],
+    ...overrides,
+  });
+
+  beforeEach(async () => {
+    // Clear mock storage
+    Object.keys(mockStorage).forEach((key) => delete mockStorage[key]);
+
+    storage = new StorageService();
+    await storage.initialize();
+    migrationService = getMigrationService();
+  });
+
+  afterEach(async () => {
+    await storage.close();
+    await (storage as any).db.delete();
+    await migrationService.resetMigration();
+  });
+
+  describe('Initialization', () => {
+    it('should get singleton instance', () => {
+      const instance1 = getMigrationService();
+      const instance2 = getMigrationService();
+      expect(instance1).toBe(instance2);
+    });
+
+    it('should create new instance directly', () => {
+      const service = new MigrationService();
+      expect(service).toBeDefined();
+      expect(service).toBeInstanceOf(MigrationService);
+    });
+  });
+
+  describe('Migration Detection', () => {
+    it('should detect migration needed when no metadata exists', async () => {
+      const needsMigration = await migrationService.needsMigration();
+      expect(needsMigration).toBe(true);
+    });
+
+    it('should detect migration not needed after migration complete', async () => {
+      // Run migration
+      await migrationService.migrate();
+
+      // Check again
+      const needsMigration = await migrationService.needsMigration();
+      expect(needsMigration).toBe(false);
+    });
+
+    it('should handle corrupted metadata gracefully', async () => {
+      // Set invalid metadata
+      await chrome.storage.local.set({
+        memA_migration_metadata: 'invalid data',
+      });
+
+      // Should still work
+      const needsMigration = await migrationService.needsMigration();
+      expect(typeof needsMigration).toBe('boolean');
+    });
+  });
+
+  describe('Migration Execution', () => {
+    it('should migrate empty database successfully', async () => {
+      const result = await migrationService.migrate();
+
+      expect(result.success).toBe(true);
+      expect(result.migratedCount).toBe(0);
+      expect(result.error).toBeUndefined();
+    });
+
+    it('should migrate single memory successfully', async () => {
+      const memory = createTestMemory();
+      await storage.saveMemory(memory);
+
+      const result = await migrationService.migrate();
+
+      expect(result.success).toBe(true);
+      expect(result.migratedCount).toBe(1);
+
+      const migrated = await storage.getMemory(memory.id) as MemoryWithMemA;
+      expect(migrated.memAVersion).toBe(0);
+    });
+
+    it('should migrate multiple memories successfully', async () => {
+      const memories = Array.from({ length: 10 }, () => createTestMemory());
+      await storage.bulkSaveMemories(memories);
+
+      const result = await migrationService.migrate();
+
+      expect(result.success).toBe(true);
+      expect(result.migratedCount).toBe(10);
+
+      // Verify all memories have memAVersion
+      for (const memory of memories) {
+        const migrated = await storage.getMemory(memory.id) as MemoryWithMemA;
+        expect(migrated.memAVersion).toBe(0);
+      }
+    });
+
+    it('should migrate large batch successfully', async () => {
+      const memories = Array.from({ length: 150 }, () => createTestMemory());
+      await storage.bulkSaveMemories(memories);
+
+      const result = await migrationService.migrate();
+
+      expect(result.success).toBe(true);
+      expect(result.migratedCount).toBe(150);
+    }, 10000);
+
+    it('should process migrations in batches of 50', async () => {
+      const memories = Array.from({ length: 125 }, () => createTestMemory());
+      await storage.bulkSaveMemories(memories);
+
+      const progressCalls: Array<{ current: number; total: number }> = [];
+      const result = await migrationService.migrate((current, total) => {
+        progressCalls.push({ current, total });
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.migratedCount).toBe(125);
+
+      // Should have 3 progress calls (50, 100, 125)
+      expect(progressCalls.length).toBeGreaterThan(0);
+      expect(progressCalls[progressCalls.length - 1].current).toBe(125);
+      expect(progressCalls[progressCalls.length - 1].total).toBe(125);
+    }, 10000);
+  });
+
+  describe('Progress Callbacks', () => {
+    it('should call progress callback with correct values', async () => {
+      const memories = Array.from({ length: 100 }, () => createTestMemory());
+      await storage.bulkSaveMemories(memories);
+
+      const progressCalls: Array<{ current: number; total: number }> = [];
+      await migrationService.migrate((current, total) => {
+        progressCalls.push({ current, total });
+        expect(current).toBeLessThanOrEqual(total);
+        expect(total).toBe(100);
+      });
+
+      expect(progressCalls.length).toBeGreaterThan(0);
+      expect(progressCalls[progressCalls.length - 1].current).toBe(100);
+    }, 10000);
+
+    it('should work without progress callback', async () => {
+      const memories = Array.from({ length: 10 }, () => createTestMemory());
+      await storage.bulkSaveMemories(memories);
+
+      const result = await migrationService.migrate();
+
+      expect(result.success).toBe(true);
+      expect(result.migratedCount).toBe(10);
+    });
+  });
+
+  describe('Backward Compatibility', () => {
+    it('should not modify existing enriched memories', async () => {
+      const enrichedMemory: MemoryWithMemA = {
+        ...createTestMemory(),
+        keywords: ['test', 'keyword'],
+        tags: ['tag1', 'tag2'],
+        context: 'Test context',
+        memAVersion: 1,
+      };
+
+      await storage.saveMemory(enrichedMemory);
+
+      await migrationService.migrate();
+
+      const result = await storage.getMemory(enrichedMemory.id) as MemoryWithMemA;
+      expect(result.keywords).toEqual(['test', 'keyword']);
+      expect(result.tags).toEqual(['tag1', 'tag2']);
+      expect(result.context).toBe('Test context');
+      expect(result.memAVersion).toBe(1); // Should keep version 1
+    });
+
+    it('should preserve all original Memory fields', async () => {
+      const memory = createTestMemory({
+        content: {
+          role: 'assistant',
+          text: 'Original text',
+          metadata: {
+            codeBlocks: [{ language: 'javascript', code: 'console.log("test")' }],
+          },
+        },
+        tags: ['original', 'tags'],
+      });
+
+      await storage.saveMemory(memory);
+      await migrationService.migrate();
+
+      const migrated = await storage.getMemory(memory.id);
+      expect(migrated?.content.text).toBe('Original text');
+      expect(migrated?.content.role).toBe('assistant');
+      expect(migrated?.tags).toEqual(['original', 'tags']);
+      expect(migrated?.content.metadata?.codeBlocks).toHaveLength(1);
+    });
+
+    it('should allow new memories to be enriched after migration', async () => {
+      // Migrate empty database
+      await migrationService.migrate();
+
+      // Add new memory with enrichment
+      const enrichedMemory: MemoryWithMemA = {
+        ...createTestMemory(),
+        keywords: ['new', 'enriched'],
+        tags: ['new-tag'],
+        context: 'New enriched memory',
+        memAVersion: 1,
+      };
+
+      await storage.saveMemory(enrichedMemory);
+
+      const result = await storage.getMemory(enrichedMemory.id) as MemoryWithMemA;
+      expect(result.keywords).toEqual(['new', 'enriched']);
+      expect(result.memAVersion).toBe(1);
+    });
+  });
+
+  describe('Migration Metadata', () => {
+    it('should save migration metadata after successful migration', async () => {
+      const memories = Array.from({ length: 5 }, () => createTestMemory());
+      await storage.bulkSaveMemories(memories);
+
+      await migrationService.migrate();
+
+      const metadata = await migrationService.getMigrationStatus();
+      expect(metadata).toBeDefined();
+      expect(metadata!.version).toBe(1);
+      expect(metadata!.migratedCount).toBe(5);
+      expect(metadata!.timestamp).toBeGreaterThan(0);
+    });
+
+    it('should return null metadata before first migration', async () => {
+      const metadata = await migrationService.getMigrationStatus();
+      expect(metadata).toBeNull();
+    });
+
+    it('should update metadata on subsequent migrations', async () => {
+      // First migration
+      await migrationService.migrate();
+      const firstMetadata = await migrationService.getMigrationStatus();
+
+      // Reset and migrate again
+      await migrationService.resetMigration();
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      // Second migration
+      const memories = Array.from({ length: 3 }, () => createTestMemory());
+      await storage.bulkSaveMemories(memories);
+      await migrationService.migrate();
+
+      const secondMetadata = await migrationService.getMigrationStatus();
+      expect(secondMetadata!.timestamp).toBeGreaterThan(firstMetadata!.timestamp);
+    });
+  });
+
+  describe('Error Handling', () => {
+    it('should handle storage errors gracefully', async () => {
+      // Mock storage failure
+      const originalBulkSave = storage.bulkSaveMemories.bind(storage);
+      storage.bulkSaveMemories = jest.fn().mockRejectedValue(new Error('Storage error'));
+
+      const result = await migrationService.migrate();
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBeDefined();
+
+      // Restore
+      storage.bulkSaveMemories = originalBulkSave;
+    });
+
+    it('should handle chrome.storage.local errors', async () => {
+      // Mock chrome.storage error
+      const originalSet = chrome.storage.local.set;
+      chrome.storage.local.set = jest.fn().mockRejectedValue(
+        new Error('Storage quota exceeded')
+      );
+
+      const result = await migrationService.migrate();
+
+      // Should still complete migration even if metadata save fails
+      expect(result.success).toBe(true);
+
+      // Restore
+      chrome.storage.local.set = originalSet;
+    });
+  });
+
+  describe('Reset Migration', () => {
+    it('should reset migration metadata', async () => {
+      await migrationService.migrate();
+
+      let metadata = await migrationService.getMigrationStatus();
+      expect(metadata).toBeDefined();
+
+      await migrationService.resetMigration();
+
+      metadata = await migrationService.getMigrationStatus();
+      expect(metadata).toBeNull();
+    });
+
+    it('should allow re-migration after reset', async () => {
+      const memories = Array.from({ length: 5 }, () => createTestMemory());
+      await storage.bulkSaveMemories(memories);
+
+      // First migration
+      await migrationService.migrate();
+      let needsMigration = await migrationService.needsMigration();
+      expect(needsMigration).toBe(false);
+
+      // Reset
+      await migrationService.resetMigration();
+      needsMigration = await migrationService.needsMigration();
+      expect(needsMigration).toBe(true);
+
+      // Second migration
+      const result = await migrationService.migrate();
+      expect(result.success).toBe(true);
+    });
+  });
+
+  describe('Idempotency', () => {
+    it('should be safe to run migration multiple times', async () => {
+      const memories = Array.from({ length: 10 }, () => createTestMemory());
+      await storage.bulkSaveMemories(memories);
+
+      // Run migration twice
+      const result1 = await migrationService.migrate();
+      const result2 = await migrationService.migrate();
+
+      expect(result1.success).toBe(true);
+      expect(result2.success).toBe(true);
+
+      // Verify memories are still correct
+      for (const memory of memories) {
+        const migrated = await storage.getMemory(memory.id);
+        expect(migrated).toBeDefined();
+      }
+    });
+
+    it('should not duplicate memAVersion field', async () => {
+      const memory = createTestMemory();
+      await storage.saveMemory(memory);
+
+      // Migrate twice
+      await migrationService.migrate();
+      await migrationService.resetMigration();
+      await migrationService.migrate();
+
+      const result = await storage.getMemory(memory.id) as MemoryWithMemA;
+      expect(result.memAVersion).toBe(0);
+    });
+  });
+
+  describe('Edge Cases', () => {
+    it('should handle memory with no tags', async () => {
+      const memory = createTestMemory({ tags: [] });
+      await storage.saveMemory(memory);
+
+      const result = await migrationService.migrate();
+
+      expect(result.success).toBe(true);
+      expect(result.migratedCount).toBe(1);
+    });
+
+    it('should handle memory with special characters', async () => {
+      const memory = createTestMemory({
+        content: {
+          role: 'user',
+          text: 'Text with unicode: 你好 🚀 émojis',
+        },
+      });
+      await storage.saveMemory(memory);
+
+      const result = await migrationService.migrate();
+
+      expect(result.success).toBe(true);
+
+      const migrated = await storage.getMemory(memory.id);
+      expect(migrated?.content.text).toBe('Text with unicode: 你好 🚀 émojis');
+    });
+
+    it('should handle memory with very long text', async () => {
+      const longText = 'A'.repeat(10000);
+      const memory = createTestMemory({
+        content: {
+          role: 'user',
+          text: longText,
+        },
+      });
+      await storage.saveMemory(memory);
+
+      const result = await migrationService.migrate();
+
+      expect(result.success).toBe(true);
+
+      const migrated = await storage.getMemory(memory.id);
+      expect(migrated?.content.text).toBe(longText);
+    });
+  });
+});

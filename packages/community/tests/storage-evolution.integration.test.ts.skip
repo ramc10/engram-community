@@ -1,0 +1,912 @@
+/**
+ * Integration Tests for Memory Evolution (Phase 3)
+ * Tests end-to-end flow: Save → Enrich → Link Detection → Evolution → Storage
+ */
+
+import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
+import type { Memory, MemoryWithMemA, EnrichmentConfig } from 'engram-shared';
+import { generateUUID, now, createVectorClock } from 'engram-shared';
+import Dexie from 'dexie';
+
+// Mock @xenova/transformers before importing anything
+jest.mock('@xenova/transformers', () => ({
+  pipeline: jest.fn(),
+  env: {
+    allowLocalModels: false,
+    backends: {
+      onnx: {
+        wasm: {
+          numThreads: 1,
+          simd: true,
+        },
+      },
+    },
+  },
+}));
+
+// Mock fetch globally
+global.fetch = jest.fn() as jest.MockedFunction<typeof fetch>;
+
+// Now import StorageService after mocks are set up
+import { StorageService } from '../src/lib/storage';
+
+// Mock chrome.storage.local
+const mockChromeStorage = {
+  get: jest.fn(),
+  set: jest.fn(),
+};
+(global as any).chrome = {
+  storage: {
+    local: mockChromeStorage,
+  },
+};
+
+describe('Storage Evolution Integration', () => {
+  let storage: StorageService;
+
+  const createTestMemory = (overrides?: Partial<MemoryWithMemA>): MemoryWithMemA => ({
+    id: generateUUID(),
+    content: {
+      role: 'user',
+      text: 'How do I implement OAuth 2.0 in React?',
+    },
+    conversationId: 'conv-123',
+    platform: 'chatgpt',
+    timestamp: now(),
+    vectorClock: createVectorClock(),
+    deviceId: 'device-1',
+    syncStatus: 'pending',
+    tags: [],
+    ...overrides,
+  });
+
+  const mockEnrichmentConfig: EnrichmentConfig = {
+    enabled: true,
+    provider: 'openai',
+    model: 'gpt-4o-mini',
+    apiKey: 'sk-test-key',
+    batchSize: 5,
+    enableLinkDetection: true,
+    enableEvolution: true,
+  };
+
+  beforeEach(async () => {
+    // Mock chrome.storage.local to return config
+    mockChromeStorage.get.mockImplementation((keys: string | string[] | null) => {
+      return Promise.resolve({
+        enrichmentConfig: mockEnrichmentConfig,
+      });
+    });
+
+    storage = new StorageService();
+    await storage.initialize();
+    jest.clearAllMocks();
+  });
+
+  afterEach(async () => {
+    await storage.close();
+    jest.resetAllMocks();
+
+    // Delete the test database
+    await Dexie.delete('engram');
+  });
+
+  describe('End-to-End Evolution Flow', () => {
+    beforeEach(() => {
+      // Mock enrichment response
+      (global.fetch as jest.MockedFunction<typeof fetch>).mockImplementation((url: any) => {
+        const urlString = url.toString();
+
+        // Enrichment call
+        if (urlString.includes('chat/completions') || urlString.includes('messages')) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              choices: [
+                {
+                  message: {
+                    content: JSON.stringify({
+                      keywords: ['OAuth', 'React', 'authentication', 'security'],
+                      tags: ['programming', 'web development'],
+                      context: 'Implementing OAuth 2.0 authentication in React',
+                    }),
+                  },
+                },
+              ],
+              usage: {
+                prompt_tokens: 100,
+                completion_tokens: 50,
+                total_tokens: 150,
+              },
+            }),
+          } as Response);
+        }
+
+        return Promise.reject(new Error('Unexpected fetch URL'));
+      });
+    });
+
+    it('should enrich, detect links, and evolve memories', async () => {
+      // Save first memory
+      const memory1 = createTestMemory({
+        content: {
+          role: 'user',
+          text: 'What is OAuth 2.0?',
+        },
+      });
+
+      await storage.saveMemory(memory1);
+
+      // Wait for enrichment
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Mock link detection to return high-confidence link
+      (global.fetch as jest.MockedFunction<typeof fetch>).mockImplementation((url: any) => {
+        const urlString = url.toString();
+
+        // Link detection call
+        if (urlString.includes('chat/completions') || urlString.includes('messages')) {
+          const body = JSON.parse((url as any).body || '{}');
+
+          if (body.messages && body.messages.some((m: any) => m.content.includes('semantic relationship'))) {
+            // Link detection
+            return Promise.resolve({
+              ok: true,
+              json: async () => ({
+                choices: [
+                  {
+                    message: {
+                      content: JSON.stringify({
+                        isRelated: true,
+                        score: 0.9,
+                        reason: 'Both discuss OAuth 2.0 authentication',
+                      }),
+                    },
+                  },
+                ],
+                usage: {
+                  prompt_tokens: 100,
+                  completion_tokens: 50,
+                  total_tokens: 150,
+                },
+              }),
+            } as Response);
+          } else if (body.messages && body.messages.some((m: any) => m.content.includes('should evolve'))) {
+            // Evolution check
+            return Promise.resolve({
+              ok: true,
+              json: async () => ({
+                choices: [
+                  {
+                    message: {
+                      content: JSON.stringify({
+                        shouldEvolve: true,
+                        keywords: ['OAuth', 'authentication', 'React', 'implementation'],
+                        tags: ['programming', 'web development', 'security'],
+                        context: 'OAuth 2.0 authentication implementation in React applications',
+                        reason: 'New memory adds React-specific context',
+                      }),
+                    },
+                  },
+                ],
+                usage: {
+                  prompt_tokens: 200,
+                  completion_tokens: 50,
+                  total_tokens: 250,
+                },
+              }),
+            } as Response);
+          }
+
+          // Enrichment
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              choices: [
+                {
+                  message: {
+                    content: JSON.stringify({
+                      keywords: ['OAuth', 'React', 'authentication'],
+                      tags: ['programming', 'web development'],
+                      context: 'Implementing OAuth 2.0 in React',
+                    }),
+                  },
+                },
+              ],
+              usage: {
+                prompt_tokens: 100,
+                completion_tokens: 50,
+                total_tokens: 150,
+              },
+            }),
+          } as Response);
+        }
+
+        return Promise.reject(new Error('Unexpected fetch URL'));
+      });
+
+      // Save second memory that should link to and evolve first
+      const memory2 = createTestMemory({
+        content: {
+          role: 'assistant',
+          text: 'To implement OAuth 2.0 in React, use the Authorization Code flow with PKCE...',
+        },
+      });
+
+      await storage.saveMemory(memory2);
+
+      // Wait for enrichment + link detection + evolution
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // Retrieve first memory - should be evolved
+      const evolvedMemory = (await storage.getMemories({ ids: [memory1.id] }))[0] as MemoryWithMemA;
+
+      expect(evolvedMemory).toBeDefined();
+      expect(evolvedMemory.keywords).toContain('React');
+      expect(evolvedMemory.evolution).toBeDefined();
+      expect(evolvedMemory.evolution!.updateCount).toBeGreaterThan(0);
+      expect(evolvedMemory.evolution!.triggeredBy).toContain(memory2.id);
+      expect(evolvedMemory.evolution!.history).toHaveLength(1);
+    });
+
+    it('should maintain evolution history across multiple updates', async () => {
+      const memory = createTestMemory({
+        content: {
+          role: 'user',
+          text: 'What is authentication?',
+        },
+      });
+
+      await storage.saveMemory(memory);
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Mock to always trigger evolution
+      (global.fetch as jest.MockedFunction<typeof fetch>).mockImplementation((url: any) => {
+        const urlString = url.toString();
+        const body = JSON.parse((url as any).body || '{}');
+
+        if (body.messages && body.messages.some((m: any) => m.content.includes('should evolve'))) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              choices: [
+                {
+                  message: {
+                    content: JSON.stringify({
+                      shouldEvolve: true,
+                      keywords: ['authentication', 'security', 'new-keyword'],
+                      tags: ['security'],
+                      context: 'Updated context about authentication',
+                      reason: 'Adding more context',
+                    }),
+                  },
+                },
+              ],
+              usage: {
+                prompt_tokens: 200,
+                completion_tokens: 50,
+                total_tokens: 250,
+              },
+            }),
+          } as Response);
+        }
+
+        // Default enrichment/link detection
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({
+                    isRelated: true,
+                    score: 0.9,
+                    reason: 'Related',
+                    keywords: ['test'],
+                    tags: ['test'],
+                    context: 'Test',
+                  }),
+                },
+              },
+            ],
+            usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
+          }),
+        } as Response);
+      });
+
+      // Trigger 3 evolutions
+      for (let i = 0; i < 3; i++) {
+        const newMemory = createTestMemory({
+          content: {
+            role: 'assistant',
+            text: `More info about authentication ${i}`,
+          },
+        });
+        await storage.saveMemory(newMemory);
+        await new Promise(resolve => setTimeout(resolve, 200));
+      }
+
+      const evolvedMemory = (await storage.getMemories({ ids: [memory.id] }))[0] as MemoryWithMemA;
+
+      expect(evolvedMemory.evolution).toBeDefined();
+      expect(evolvedMemory.evolution!.updateCount).toBe(3);
+      expect(evolvedMemory.evolution!.history).toHaveLength(3);
+    });
+
+    it('should not evolve when link score is below threshold', async () => {
+      const memory1 = createTestMemory({
+        content: {
+          role: 'user',
+          text: 'What is OAuth?',
+        },
+      });
+
+      await storage.saveMemory(memory1);
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Mock low-confidence link
+      (global.fetch as jest.MockedFunction<typeof fetch>).mockImplementation((url: any) => {
+        const body = JSON.parse((url as any).body || '{}');
+
+        if (body.messages && body.messages.some((m: any) => m.content.includes('semantic relationship'))) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              choices: [
+                {
+                  message: {
+                    content: JSON.stringify({
+                      isRelated: true,
+                      score: 0.5, // Below 0.8 threshold
+                      reason: 'Weakly related',
+                    }),
+                  },
+                },
+              ],
+              usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
+            }),
+          } as Response);
+        }
+
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({
+                    keywords: ['test'],
+                    tags: ['test'],
+                    context: 'Test',
+                  }),
+                },
+              },
+            ],
+            usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
+          }),
+        } as Response);
+      });
+
+      const memory2 = createTestMemory({
+        content: {
+          role: 'assistant',
+          text: 'Different topic',
+        },
+      });
+
+      await storage.saveMemory(memory2);
+      await new Promise(resolve => setTimeout(resolve, 200));
+
+      const unchangedMemory = (await storage.getMemories({ ids: [memory1.id] }))[0] as MemoryWithMemA;
+
+      // Should not have evolved (no high-confidence links)
+      expect(unchangedMemory.evolution?.updateCount || 0).toBe(0);
+    });
+
+    it('should regenerate embeddings after evolution', async () => {
+      const memory = createTestMemory({
+        content: {
+          role: 'user',
+          text: 'What is OAuth?',
+        },
+      });
+
+      await storage.saveMemory(memory);
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Check initial embedding exists
+      const initialMemory = (await storage.getMemories({ ids: [memory.id] }))[0];
+      const initialEmbedding = (initialMemory as any).embedding;
+      expect(initialEmbedding).toBeDefined();
+
+      // Mock high-confidence link and evolution
+      (global.fetch as jest.MockedFunction<typeof fetch>).mockImplementation((url: any) => {
+        const body = JSON.parse((url as any).body || '{}');
+
+        if (body.messages && body.messages.some((m: any) => m.content.includes('should evolve'))) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              choices: [
+                {
+                  message: {
+                    content: JSON.stringify({
+                      shouldEvolve: true,
+                      keywords: ['OAuth', 'React', 'new-keyword'],
+                      tags: ['programming'],
+                      context: 'Updated OAuth context with React',
+                      reason: 'Adding React context',
+                    }),
+                  },
+                },
+              ],
+              usage: { prompt_tokens: 200, completion_tokens: 50, total_tokens: 250 },
+            }),
+          } as Response);
+        }
+
+        if (body.messages && body.messages.some((m: any) => m.content.includes('semantic relationship'))) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              choices: [
+                {
+                  message: {
+                    content: JSON.stringify({
+                      isRelated: true,
+                      score: 0.95,
+                      reason: 'Highly related',
+                    }),
+                  },
+                },
+              ],
+              usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
+            }),
+          } as Response);
+        }
+
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({
+                    keywords: ['React'],
+                    tags: ['programming'],
+                    context: 'React info',
+                  }),
+                },
+              },
+            ],
+            usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
+          }),
+        } as Response);
+      });
+
+      const memory2 = createTestMemory({
+        content: {
+          role: 'assistant',
+          text: 'OAuth in React uses...',
+        },
+      });
+
+      await storage.saveMemory(memory2);
+      await new Promise(resolve => setTimeout(resolve, 300));
+
+      const evolvedMemory = (await storage.getMemories({ ids: [memory.id] }))[0] as any;
+
+      // Should have new embedding (regenerated after evolution)
+      expect(evolvedMemory.embedding).toBeDefined();
+      expect(evolvedMemory.evolution.updateCount).toBeGreaterThan(0);
+    });
+  });
+
+  describe('Performance', () => {
+    it('should process evolution checks in parallel', async () => {
+      const startTime = Date.now();
+
+      // Create 5 related memories
+      const memories = await Promise.all(
+        Array(5).fill(null).map(async (_, i) => {
+          const memory = createTestMemory({
+            content: {
+              role: 'user',
+              text: `Question about OAuth ${i}`,
+            },
+          });
+          await storage.saveMemory(memory);
+          return memory;
+        })
+      );
+
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Mock all to return high-confidence links
+      (global.fetch as jest.MockedFunction<typeof fetch>).mockImplementation(() => {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({
+                    isRelated: true,
+                    score: 0.9,
+                    reason: 'Related',
+                    shouldEvolve: true,
+                    keywords: ['OAuth'],
+                    tags: ['security'],
+                    context: 'OAuth discussion',
+                  }),
+                },
+              },
+            ],
+            usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
+          }),
+        } as Response);
+      });
+
+      // Save new memory that links to all 5
+      const newMemory = createTestMemory({
+        content: {
+          role: 'assistant',
+          text: 'OAuth comprehensive guide',
+        },
+      });
+
+      await storage.saveMemory(newMemory);
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      const elapsedTime = Date.now() - startTime;
+
+      // With parallel processing, should complete in < 3 seconds even with 5 checks
+      expect(elapsedTime).toBeLessThan(3000);
+    });
+
+    it('should limit evolution checks to top 5 links', async () => {
+      // This test verifies that even if there are 10 high-confidence links,
+      // only the top 5 are checked for evolution (performance optimization)
+
+      const memory = createTestMemory();
+      await storage.saveMemory(memory);
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      let evolutionCheckCount = 0;
+
+      (global.fetch as jest.MockedFunction<typeof fetch>).mockImplementation((url: any) => {
+        const body = JSON.parse((url as any).body || '{}');
+
+        if (body.messages && body.messages.some((m: any) => m.content.includes('should evolve'))) {
+          evolutionCheckCount++;
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              choices: [
+                {
+                  message: {
+                    content: JSON.stringify({
+                      shouldEvolve: false,
+                      keywords: [],
+                      tags: [],
+                      context: '',
+                      reason: 'No evolution needed',
+                    }),
+                  },
+                },
+              ],
+              usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
+            }),
+          } as Response);
+        }
+
+        // Return high-confidence links
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({
+                    isRelated: true,
+                    score: 0.95,
+                    reason: 'Related',
+                    keywords: ['test'],
+                    tags: ['test'],
+                    context: 'Test',
+                  }),
+                },
+              },
+            ],
+            usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
+          }),
+        } as Response);
+      });
+
+      // Create 10 memories that should all link
+      for (let i = 0; i < 10; i++) {
+        const newMemory = createTestMemory({
+          content: {
+            role: 'assistant',
+            text: `Related content ${i}`,
+          },
+        });
+        await storage.saveMemory(newMemory);
+      }
+
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      // Should have checked at most 5 for evolution
+      expect(evolutionCheckCount).toBeLessThanOrEqual(5);
+    });
+  });
+
+  describe('Configuration', () => {
+    it('should not evolve when evolution is disabled', async () => {
+      const disabledConfig = {
+        ...mockEnrichmentConfig,
+        enableEvolution: false,
+      };
+
+      mockChromeStorage.get.mockResolvedValue({
+        enrichmentConfig: disabledConfig,
+      });
+
+      const disabledStorage = new StorageService();
+      await disabledStorage.initialize();
+
+      const memory1 = createTestMemory();
+      const memory2 = createTestMemory();
+
+      await disabledStorage.saveMemory(memory1);
+      await disabledStorage.saveMemory(memory2);
+
+      await new Promise(resolve => setTimeout(resolve, 300));
+
+      const memory1Check = (await disabledStorage.getMemories({ ids: [memory1.id] }))[0] as MemoryWithMemA;
+
+      expect(memory1Check.evolution?.updateCount || 0).toBe(0);
+
+      await disabledStorage.close();
+    });
+
+    it('should not evolve when link detection is disabled', async () => {
+      const noLinksConfig = {
+        ...mockEnrichmentConfig,
+        enableLinkDetection: false,
+        enableEvolution: true,
+      };
+
+      mockChromeStorage.get.mockResolvedValue({
+        enrichmentConfig: noLinksConfig,
+      });
+
+      const noLinksStorage = new StorageService();
+      await noLinksStorage.initialize();
+
+      const memory1 = createTestMemory();
+      const memory2 = createTestMemory();
+
+      await noLinksStorage.saveMemory(memory1);
+      await noLinksStorage.saveMemory(memory2);
+
+      await new Promise(resolve => setTimeout(resolve, 300));
+
+      const memory1Check = (await noLinksStorage.getMemories({ ids: [memory1.id] }))[0] as MemoryWithMemA;
+
+      // No links = no evolution checks
+      expect(memory1Check.evolution?.updateCount || 0).toBe(0);
+
+      await noLinksStorage.close();
+    });
+
+    it('should reinitialize evolution service when config changes', async () => {
+      // Start with evolution disabled
+      mockChromeStorage.get.mockResolvedValue({
+        enrichmentConfig: {
+          ...mockEnrichmentConfig,
+          enableEvolution: false,
+        },
+      });
+
+      await storage.reinitializeEnrichment();
+
+      const memory1 = createTestMemory();
+      await storage.saveMemory(memory1);
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Enable evolution
+      mockChromeStorage.get.mockResolvedValue({
+        enrichmentConfig: {
+          ...mockEnrichmentConfig,
+          enableEvolution: true,
+        },
+      });
+
+      await storage.reinitializeEnrichment();
+
+      (global.fetch as jest.MockedFunction<typeof fetch>).mockImplementation(() => {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({
+                    isRelated: true,
+                    score: 0.9,
+                    reason: 'Related',
+                    shouldEvolve: true,
+                    keywords: ['test'],
+                    tags: ['test'],
+                    context: 'Test',
+                  }),
+                },
+              },
+            ],
+            usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
+          }),
+        } as Response);
+      });
+
+      const memory2 = createTestMemory();
+      await storage.saveMemory(memory2);
+      await new Promise(resolve => setTimeout(resolve, 300));
+
+      const evolvedMemory = (await storage.getMemories({ ids: [memory1.id] }))[0] as MemoryWithMemA;
+
+      // Should now have evolved
+      expect(evolvedMemory.evolution?.updateCount).toBeGreaterThan(0);
+    });
+  });
+
+  describe('Error Recovery', () => {
+    it('should continue enrichment pipeline even if evolution fails', async () => {
+      const memory1 = createTestMemory();
+      await storage.saveMemory(memory1);
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      let evolutionCalled = false;
+
+      (global.fetch as jest.MockedFunction<typeof fetch>).mockImplementation((url: any) => {
+        const body = JSON.parse((url as any).body || '{}');
+
+        if (body.messages && body.messages.some((m: any) => m.content.includes('should evolve'))) {
+          evolutionCalled = true;
+          // Simulate evolution failure
+          return Promise.reject(new Error('Evolution API error'));
+        }
+
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({
+                    isRelated: true,
+                    score: 0.9,
+                    reason: 'Related',
+                    keywords: ['test'],
+                    tags: ['test'],
+                    context: 'Test',
+                  }),
+                },
+              },
+            ],
+            usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
+          }),
+        } as Response);
+      });
+
+      const memory2 = createTestMemory();
+      await storage.saveMemory(memory2);
+      await new Promise(resolve => setTimeout(resolve, 300));
+
+      // Evolution should have been attempted
+      expect(evolutionCalled).toBe(true);
+
+      // But memory2 should still be saved successfully
+      const savedMemory2 = await storage.getMemories({ ids: [memory2.id] });
+      expect(savedMemory2).toHaveLength(1);
+      expect(savedMemory2[0].keywords).toBeDefined();
+    });
+
+    it('should continue with other evolution checks if one fails', async () => {
+      // Create 3 memories
+      const memories = await Promise.all(
+        Array(3).fill(null).map(async (_, i) => {
+          const memory = createTestMemory({
+            content: {
+              role: 'user',
+              text: `Question ${i}`,
+            },
+          });
+          await storage.saveMemory(memory);
+          return memory;
+        })
+      );
+
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      let callCount = 0;
+
+      (global.fetch as jest.MockedFunction<typeof fetch>).mockImplementation((url: any) => {
+        const body = JSON.parse((url as any).body || '{}');
+
+        if (body.messages && body.messages.some((m: any) => m.content.includes('should evolve'))) {
+          callCount++;
+
+          // Fail the second evolution check
+          if (callCount === 2) {
+            return Promise.reject(new Error('Evolution API error'));
+          }
+
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              choices: [
+                {
+                  message: {
+                    content: JSON.stringify({
+                      shouldEvolve: true,
+                      keywords: ['updated'],
+                      tags: ['updated'],
+                      context: 'Updated',
+                      reason: 'Test',
+                    }),
+                  },
+                },
+              ],
+              usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
+            }),
+          } as Response);
+        }
+
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({
+                    isRelated: true,
+                    score: 0.9,
+                    reason: 'Related',
+                    keywords: ['test'],
+                    tags: ['test'],
+                    context: 'Test',
+                  }),
+                },
+              },
+            ],
+            usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
+          }),
+        } as Response);
+      });
+
+      const newMemory = createTestMemory({
+        content: {
+          role: 'assistant',
+          text: 'Comprehensive answer',
+        },
+      });
+
+      await storage.saveMemory(newMemory);
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // Should have attempted all 3 evolution checks
+      expect(callCount).toBe(3);
+
+      // Memories 1 and 3 should have evolved (2 failed)
+      const updatedMemories = await storage.getMemories({
+        ids: memories.map(m => m.id),
+      }) as MemoryWithMemA[];
+
+      const evolvedCount = updatedMemories.filter(m => m.evolution && m.evolution.updateCount > 0).length;
+
+      // At least one should have evolved (the ones that didn't fail)
+      expect(evolvedCount).toBeGreaterThan(0);
+    });
+  });
+});

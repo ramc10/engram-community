@@ -1,0 +1,25 @@
+# Dual Licensing
+
+Engram Community Edition is dual-licensed:
+
+## 1. Core Package (@engram/core)
+Licensed under the **MIT License**
+- Location: packages/core/LICENSE
+- Covers: Type definitions, interfaces, and core utilities
+- Permissive: Can be used in any project
+
+## 2. Community Edition (packages/community)
+Licensed under the **GNU Affero General Public License v3.0 (AGPL-3.0)**
+- Location: packages/community/LICENSE
+- Covers: Browser extension code and application logic
+- Copyleft: Derivative works must also be open source
+- Network use: If you run a modified version on a server, you must make the source available
+
+## Premium Edition
+
+A proprietary premium edition with additional features is available separately.
+For licensing inquiries, contact: artha360.live@gmail.com
+
+---
+
+Choose the license that applies to the component you're using.

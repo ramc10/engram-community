@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Terms of Service - Engram</title>
+    <meta name="description" content="Terms of Service for Engram - Privacy-first AI conversation memory.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        .terms-container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 2rem;
+            color: var(--white);
+        }
+
+        .terms-content {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 16px;
+            padding: 3rem;
+            margin-top: 2rem;
+        }
+
+        .terms-content h1 {
+            font-size: 2.5rem;
+            margin-bottom: 1rem;
+            color: var(--white);
+        }
+
+        .terms-content h2 {
+            font-size: 1.8rem;
+            margin-top: 2.5rem;
+            margin-bottom: 1rem;
+            color: var(--white);
+            border-bottom: 2px solid rgba(255, 255, 255, 0.1);
+            padding-bottom: 0.5rem;
+        }
+
+        .terms-content h3 {
+            font-size: 1.3rem;
+            margin-top: 1.5rem;
+            margin-bottom: 0.75rem;
+            color: rgba(255, 255, 255, 0.9);
+        }
+
+        .terms-content p {
+            margin-bottom: 1rem;
+            line-height: 1.6;
+            color: rgba(255, 255, 255, 0.8);
+        }
+
+        .terms-content strong {
+            font-weight: 600;
+            color: var(--white);
+        }
+
+        .terms-content ul,
+        .terms-content ol {
+            margin-left: 2rem;
+            margin-bottom: 1rem;
+        }
+
+        .terms-content li {
+            margin-bottom: 0.5rem;
+            color: rgba(255, 255, 255, 0.8);
+        }
+
+        .terms-content a {
+            color: var(--coral-accent);
+            text-decoration: none;
+            transition: opacity 0.3s var(--ease-smooth);
+        }
+
+        .terms-content a:hover {
+            opacity: 0.8;
+            text-decoration: underline;
+        }
+
+        .date {
+            color: rgba(255, 255, 255, 0.6);
+            font-size: 0.9rem;
+            margin-bottom: 2rem;
+        }
+
+        .highlight {
+            background: rgba(255, 107, 107, 0.1);
+            border-left: 4px solid var(--coral-accent);
+            padding: 1rem;
+            margin: 1.5rem 0;
+            border-radius: 8px;
+        }
+
+        .contact-footer {
+            margin-top: 3rem;
+            padding-top: 2rem;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            text-align: center;
+            font-size: 0.9rem;
+        }
+
+        .contact-footer p {
+            margin-bottom: 0.5rem;
+        }
+
+        .contact-footer a {
+            color: var(--coral-accent);
+        }
+
+        @media (max-width: 768px) {
+            .terms-container {
+                padding: 1.5rem;
+            }
+
+            .terms-content {
+                padding: 2rem 1.5rem;
+            }
+
+            .terms-content h1 {
+                font-size: 2rem;
+            }
+
+            .terms-content h2 {
+                font-size: 1.5rem;
+            }
+
+            .terms-content h3 {
+                font-size: 1.2rem;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .terms-container {
+                padding: 1rem;
+            }
+
+            .terms-content {
+                padding: 1.5rem 1rem;
+            }
+
+            .terms-content h1 {
+                font-size: 1.75rem;
+            }
+
+            .terms-content h2 {
+                font-size: 1.3rem;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Background Layers -->
+    <div class="background-layer background-state-1">
+        <canvas id="neuralNetwork"></canvas>
+    </div>
+
+    <div class="background-layer background-state-2">
+        <canvas id="dataStreams"></canvas>
+    </div>
+
+    <!-- Main Content -->
+    <div class="content-wrapper">
+        <!-- Header -->
+        <header class="header">
+            <div class="logo">
+                <a href="/">
+                    <img src="assets/horz-logo.png" alt="Engram" class="logo-img">
+                </a>
+            </div>
+
+            <nav class="nav">
+                <a href="/#features" class="nav-link">Features</a>
+                <a href="/" class="nav-link">Home</a>
+            </nav>
+        </header>
+
+        <div class="terms-container">
+            <div class="terms-content">
+                <h1>Terms of Service for Engram</h1>
+                <div class="date">
+                    <strong>Effective Date:</strong> December 20, 2025<br>
+                    <strong>Last Updated:</strong> December 20, 2025
+                </div>
+
+                <h2>1. Acceptance of Terms</h2>
+                <p>By installing, accessing, or using the Engram browser extension ("Service", "Extension", or
+                    "Engram"), you agree to be bound by these Terms of Service ("Terms"). If you do not agree to these
+                    Terms, do not use the Service.</p>
+
+                <h2>2. Description of Service</h2>
+                <p>Engram is a browser extension that:</p>
+                <ul>
+                    <li>Captures and stores AI conversation messages from supported platforms (ChatGPT, Claude,
+                        Perplexity)</li>
+                    <li>Provides search and retrieval functionality for saved conversations</li>
+                    <li>Enables intelligent memory injection into new conversations</li>
+                    <li>Offers optional multi-device synchronization with end-to-end encryption</li>
+                </ul>
+
+                <h2>3. User Accounts</h2>
+                <h3>3.1 Account Creation</h3>
+                <ul>
+                    <li>You must create an account to use cloud sync features</li>
+                    <li>You must provide accurate and complete information</li>
+                    <li>You are responsible for maintaining the confidentiality of your password</li>
+                    <li>You must be at least 13 years old to create an account</li>
+                </ul>
+
+                <h3>3.2 Account Security</h3>
+                <ul>
+                    <li>You are solely responsible for all activities under your account</li>
+                    <li>Notify us immediately of any unauthorized access</li>
+                    <li>We are not liable for losses due to stolen or compromised credentials</li>
+                </ul>
+
+                <h3>3.3 Account Termination</h3>
+                <p>We reserve the right to suspend or terminate your account if:</p>
+                <ul>
+                    <li>You violate these Terms</li>
+                    <li>You engage in fraudulent or illegal activities</li>
+                    <li>Your account is inactive for an extended period</li>
+                </ul>
+
+                <h2>4. Acceptable Use Policy</h2>
+                <h3>4.1 Prohibited Activities</h3>
+                <p>You agree NOT to:</p>
+                <ul>
+                    <li>Use the Service for any illegal purpose</li>
+                    <li>Store or share illegal, harmful, or offensive content</li>
+                    <li>Attempt to reverse engineer, decompile, or hack the Service</li>
+                    <li>Abuse, harass, or harm other users</li>
+                    <li>Circumvent security features or access controls</li>
+                    <li>Use automated scripts to scrape or abuse the Service</li>
+                    <li>Impersonate others or misrepresent your affiliation</li>
+                </ul>
+
+                <h3>4.2 Content Responsibility</h3>
+                <ul>
+                    <li>You are solely responsible for content you store in Engram</li>
+                    <li>You retain ownership of your data</li>
+                    <li>You grant us permission to store and process your encrypted data solely to provide the Service
+                    </li>
+                </ul>
+
+                <h2>5. Intellectual Property</h2>
+                <h3>5.1 Your Data</h3>
+                <ul>
+                    <li>You retain all rights to your conversation data</li>
+                    <li>We do not claim ownership of your content</li>
+                    <li>You can export and delete your data at any time</li>
+                </ul>
+
+                <h3>5.2 Engram Software</h3>
+                <ul>
+                    <li>Engram is proprietary software owned and operated by Engram</li>
+                    <li>All rights to the software, design, and implementation are reserved</li>
+                    <li>Unauthorized copying, modification, or distribution is prohibited</li>
+                </ul>
+
+                <h2>6. Disclaimers</h2>
+                <div class="highlight">
+                    <h3>6.1 "As Is" Service</h3>
+                    <p>THE SERVICE IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT
+                        NOT LIMITED TO WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND
+                        NON-INFRINGEMENT.</p>
+                </div>
+
+                <h3>6.2 Data Preservation</h3>
+                <ul>
+                    <li>While we implement encryption and backups, we do NOT guarantee data preservation</li>
+                    <li>You are responsible for maintaining local backups of important data</li>
+                    <li>We are not liable for data loss due to service outages, bugs, or security breaches</li>
+                </ul>
+
+                <h3>6.3 Beta Software Notice</h3>
+                <p>Engram is in active development (version 0.1.0). Features may change, and bugs may occur. Use at your
+                    own risk.</p>
+
+                <h3>6.4 Third-Party Platforms</h3>
+                <ul>
+                    <li>Engram integrates with third-party platforms (ChatGPT, Claude, Perplexity)</li>
+                    <li>We are not affiliated with or endorsed by these platforms</li>
+                    <li>Changes to these platforms may affect Engram's functionality</li>
+                </ul>
+
+                <h2>7. Limitation of Liability</h2>
+                <p>TO THE MAXIMUM EXTENT PERMITTED BY LAW:</p>
+                <ul>
+                    <li>We are not liable for any indirect, incidental, special, or consequential damages</li>
+                    <li>Our total liability shall not exceed $100 USD or the amount you paid for the Service (whichever
+                        is greater)</li>
+                    <li>We are not liable for service interruptions, data loss, or security breaches</li>
+                </ul>
+
+                <h2>8. Indemnification</h2>
+                <p>You agree to indemnify and hold harmless Engram, its developers, and contributors from any claims,
+                    damages, or expenses arising from:</p>
+                <ul>
+                    <li>Your violation of these Terms</li>
+                    <li>Your use or misuse of the Service</li>
+                    <li>Your violation of any law or rights of third parties</li>
+                </ul>
+
+                <h2>9. Privacy and Data Protection</h2>
+                <p>Your use of Engram is also governed by our <a href="/privacy-policy">Privacy Policy</a>, which
+                    describes how we collect, use, and protect your data.</p>
+                <p><strong>Key Privacy Points:</strong></p>
+                <ul>
+                    <li>End-to-end encryption protects your conversation data</li>
+                    <li>We cannot access your unencrypted conversation content</li>
+                    <li>Encryption keys are derived from your password and never stored</li>
+                </ul>
+
+                <h2>10. Service Modifications</h2>
+                <p>We reserve the right to:</p>
+                <ul>
+                    <li>Modify or discontinue the Service at any time</li>
+                    <li>Change features, functionality, or pricing</li>
+                    <li>Impose usage limits or restrictions</li>
+                </ul>
+                <p>We will provide reasonable notice of material changes where possible.</p>
+
+                <h2>11. Governing Law</h2>
+                <p>These Terms shall be governed by and construed in accordance with the laws of the United States,
+                    without regard to conflict of law principles.</p>
+                <p>Any disputes shall be resolved in the courts of competent jurisdiction.</p>
+
+                <h2>12. Changes to Terms</h2>
+                <p>We may update these Terms from time to time. We will notify you of changes by:</p>
+                <ul>
+                    <li>Posting the updated Terms with a new "Last Updated" date</li>
+                    <li>Displaying a notification in the Extension</li>
+                    <li>Sending an email for material changes</li>
+                </ul>
+                <p>Continued use of the Service after changes constitutes acceptance of the new Terms.</p>
+
+                <h2>13. Severability</h2>
+                <p>If any provision of these Terms is found to be invalid or unenforceable, the remaining provisions
+                    shall remain in full force and effect.</p>
+
+                <h2>14. Entire Agreement</h2>
+                <p>These Terms, together with our Privacy Policy, constitute the entire agreement between you and Engram
+                    regarding the Service.</p>
+
+                <h2>15. Contact Information</h2>
+                <p>For questions about these Terms:</p>
+                <ul>
+                    <li><strong>Email:</strong> <a href="mailto:artha360.live@gmail.com">artha360.live@gmail.com</a>
+                    </li>
+                </ul>
+
+
+                <footer class="contact-footer">
+                    <p>&copy; 2025 Engram. All rights reserved.</p>
+                    <p>For questions: <a href="mailto:artha360.live@gmail.com">artha360.live@gmail.com</a></p>
+                </footer>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <nav class="footer-nav">
+                <a href="/#features" class="footer-link">Features</a>
+                <a href="/" class="footer-link">Home</a>
+                <a href="privacy-policy.html" class="footer-link">Privacy Policy</a>
+            </nav>
+            <div class="social-links">
+                <a href="https://github.com/yourusername/engram" target="_blank" class="social-link"
+                    aria-label="GitHub">
+                    <svg viewBox="0 0 24 24" fill="currentColor">
+                        <path
+                            d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z" />
+                    </svg>
+                </a>
+                <a href="https://x.com/Ramcharans10" target="_blank" class="social-link" aria-label="Twitter">
+                    <svg viewBox="0 0 24 24" fill="currentColor">
+                        <path
+                            d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+                    </svg>
+                </a>
+            </div>
+        </footer>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+
+</html>

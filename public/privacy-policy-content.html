@@ -1,0 +1,343 @@
+<h1>Privacy Policy for Engram</h1>
+<p><strong>Effective Date:</strong> December 20, 2025
+<strong>Last Updated:</strong> December 20, 2025</p>
+<h2>1. Introduction</h2>
+<p>Welcome to Engram, a privacy-first AI conversation memory extension. This Privacy Policy explains how we collect, use, store, and protect your information when you use the Engram browser extension (&quot;Extension&quot;, &quot;Service&quot;, or &quot;Engram&quot;).</p>
+<p><strong>Our Privacy Commitment:</strong> Engram is built with zero-knowledge encryption architecture. Your conversation data is encrypted on your device before it leaves your browser, and we cannot access or read your unencrypted data.</p>
+<p><strong>Operator:</strong> Engram is an open-source project distributed under the MIT License. For questions about this policy, contact: <a href="mailto:support@engram.dev">support@engram.dev</a></p>
+<h2>2. Information We Collect</h2>
+<h3>2.1 Personal Information</h3>
+<p><strong>User Account Information:</strong></p>
+<ul>
+<li>Email address (for authentication and account recovery)</li>
+<li>Password (stored as salted, hashed credentials - we never see your actual password)</li>
+<li>Account creation date</li>
+</ul>
+<p><strong>Device Information:</strong></p>
+<ul>
+<li>Device ID (randomly generated UUID for multi-device sync)</li>
+<li>Browser type and version</li>
+<li>Operating system</li>
+</ul>
+<h3>2.2 Conversation Data</h3>
+<p><strong>Content You Save:</strong></p>
+<ul>
+<li>AI conversation messages (from ChatGPT, Claude, Perplexity)</li>
+<li>User prompts and AI responses</li>
+<li>Timestamps and metadata</li>
+</ul>
+<p><strong>Important:</strong> All conversation content is encrypted end-to-end using XChaCha20-Poly1305 encryption on your device before storage or transmission. We cannot access your conversation data in readable form.</p>
+<h3>2.3 Usage Analytics</h3>
+<p><strong>Anonymized Analytics (Privacy-Preserving):</strong></p>
+<ul>
+<li>Extension usage patterns (without personal identifiers)</li>
+<li>Feature usage statistics</li>
+<li>Error reports (without conversation content)</li>
+<li>Performance metrics</li>
+</ul>
+<p>We do NOT track:</p>
+<ul>
+<li>The content of your conversations</li>
+<li>Your browsing history</li>
+<li>Personally identifiable information in analytics</li>
+</ul>
+<h3>2.4 Technical Data</h3>
+<ul>
+<li>IndexedDB storage size</li>
+<li>Sync operations count</li>
+<li>Encryption key derivation parameters</li>
+<li>Memory count and storage statistics</li>
+</ul>
+<h2>3. How We Store Your Data</h2>
+<h3>3.1 Local Storage</h3>
+<p><strong>On Your Device (IndexedDB):</strong></p>
+<ul>
+<li>Encrypted conversation memories</li>
+<li>Encryption keys (derived from your password, never stored in plaintext)</li>
+<li>User preferences and settings</li>
+<li>Local cache for performance</li>
+</ul>
+<p><strong>Encryption:</strong> XChaCha20-Poly1305 (AEAD) with Argon2id key derivation
+<strong>Access:</strong> Only you can decrypt this data with your password</p>
+<h3>3.2 Remote Storage (Optional Sync)</h3>
+<p><strong>Supabase Cloud Storage (if you enable sync):</strong></p>
+<ul>
+<li>Encrypted conversation data (encrypted blobs only)</li>
+<li>User email and account metadata</li>
+<li>Device synchronization state</li>
+<li>Vector clocks for conflict resolution</li>
+</ul>
+<p><strong>Zero-Knowledge Architecture:</strong></p>
+<ul>
+<li>Your data is encrypted on your device BEFORE syncing</li>
+<li>Server stores only encrypted blobs (cannot decrypt)</li>
+<li>Encryption keys never leave your device</li>
+<li>We cannot access your conversation content</li>
+</ul>
+<p><strong>Third-Party Provider:</strong> Supabase (<a href="https://supabase.com">https://supabase.com</a>)
+<strong>Location:</strong> Data stored in Supabase-managed infrastructure
+<strong>Security:</strong> TLS 1.3 for data in transit, encrypted at rest on server</p>
+<h2>4. How We Use Your Information</h2>
+<p>We use the collected information for the following purposes:</p>
+<h3>4.1 Core Functionality</h3>
+<ul>
+<li>Authenticate your account and manage sessions</li>
+<li>Store and synchronize your conversations across devices</li>
+<li>Provide search and retrieval of saved conversations</li>
+<li>Enable intelligent memory injection features</li>
+<li>Maintain data consistency across devices</li>
+</ul>
+<h3>4.2 Service Improvement</h3>
+<ul>
+<li>Analyze anonymized usage patterns to improve features</li>
+<li>Debug errors and improve performance</li>
+<li>Understand which features are most valuable</li>
+<li>Optimize search and embedding algorithms</li>
+</ul>
+<h3>4.3 Communication</h3>
+<ul>
+<li>Send important service updates (security, features)</li>
+<li>Respond to support requests</li>
+<li>Notify about policy changes</li>
+</ul>
+<p>We will NEVER:</p>
+<ul>
+<li>Sell your data to third parties</li>
+<li>Use your conversation content for advertising</li>
+<li>Share your data with advertisers or data brokers</li>
+<li>Train AI models on your conversations</li>
+</ul>
+<h2>5. How We Share Your Information</h2>
+<h3>5.1 Third-Party Service Providers</h3>
+<p><strong>Supabase</strong> (Cloud Infrastructure):</p>
+<ul>
+<li>Purpose: Optional multi-device sync</li>
+<li>Data Shared: Encrypted conversation blobs, user email, device IDs</li>
+<li>Access: Cannot decrypt conversation content (zero-knowledge)</li>
+<li>Privacy Policy: <a href="https://supabase.com/privacy">https://supabase.com/privacy</a></li>
+</ul>
+<p><strong>Hugging Face CDN</strong> (ML Models):</p>
+<ul>
+<li>Purpose: Download BGE-Small embedding model for semantic search</li>
+<li>Data Shared: Model download requests (no personal data)</li>
+<li>Access: Read-only, public models</li>
+</ul>
+<h3>5.2 Legal Requirements</h3>
+<p>We may disclose information if required by law or in response to:</p>
+<ul>
+<li>Valid legal process (subpoena, court order)</li>
+<li>Protection against fraud or security threats</li>
+<li>Protection of our legal rights</li>
+</ul>
+<p><strong>Note:</strong> Due to end-to-end encryption, we cannot decrypt conversation content even if legally required to produce it.</p>
+<h3>5.3 Business Transfers</h3>
+<p>In the event of a merger, acquisition, or sale of assets, your information may be transferred. We will notify you via email and update this Privacy Policy.</p>
+<h3>5.4 No Sale of Data</h3>
+<p>We do NOT sell, rent, or trade your personal information or conversation data to any third parties for monetary gain.</p>
+<h2>6. Your Rights and Choices</h2>
+<h3>6.1 Access Your Data</h3>
+<p>You have the right to:</p>
+<ul>
+<li>View all your saved conversations (via Extension interface)</li>
+<li>Export your data (planned feature)</li>
+<li>Request a copy of account information</li>
+</ul>
+<h3>6.2 Delete Your Data</h3>
+<p>You can:</p>
+<ul>
+<li>Delete individual memories (via Extension interface)</li>
+<li>Delete all local data (uninstall Extension)</li>
+<li>Delete your account and all server data (contact <a href="mailto:support@engram.dev">support@engram.dev</a>)</li>
+</ul>
+<p><strong>Account Deletion:</strong></p>
+<ul>
+<li>Email <a href="mailto:support@engram.dev">support@engram.dev</a> with subject &quot;Delete My Account&quot;</li>
+<li>We will delete your account and encrypted data within 30 days</li>
+<li>Local data must be deleted separately (uninstall Extension)</li>
+</ul>
+<h3>6.3 Opt-Out of Sync</h3>
+<p>You can:</p>
+<ul>
+<li>Use Engram entirely locally (without creating an account)</li>
+<li>Disable cloud sync in Settings</li>
+<li>Delete synced data from server</li>
+</ul>
+<h3>6.4 Opt-Out of Analytics</h3>
+<p>Currently, analytics are minimal and anonymized. Future versions will include an opt-out option in Settings.</p>
+<h3>6.5 Data Portability</h3>
+<p>You have the right to export your data in a machine-readable format (planned feature).</p>
+<h2>7. Security Measures</h2>
+<p>We implement robust security measures to protect your data:</p>
+<h3>7.1 End-to-End Encryption</h3>
+<p><strong>Encryption:</strong> XChaCha20-Poly1305 (AEAD cipher)</p>
+<ul>
+<li>256-bit encryption keys</li>
+<li>Authenticated encryption (prevents tampering)</li>
+<li>Nonce-based (prevents replay attacks)</li>
+</ul>
+<p><strong>Key Derivation:</strong> Argon2id</p>
+<ul>
+<li>Memory-hard algorithm (resistant to brute-force)</li>
+<li>Parameters: time=4, memory=64MB</li>
+<li>Salted hashing for password protection</li>
+</ul>
+<p><strong>Digital Signatures:</strong> Ed25519</p>
+<ul>
+<li>Verify data integrity</li>
+<li>Prevent unauthorized modifications</li>
+</ul>
+<h3>7.2 Transport Security</h3>
+<ul>
+<li>TLS 1.3 for all network communications</li>
+<li>WebSocket Secure (wss://) for real-time sync</li>
+<li>Certificate validation</li>
+</ul>
+<h3>7.3 Storage Security</h3>
+<ul>
+<li>Client-side encryption before storage</li>
+<li>Secure key management (keys never persisted in plaintext)</li>
+<li>Browser IndexedDB with origin isolation</li>
+</ul>
+<h3>7.4 Code Security</h3>
+<ul>
+<li>Content Security Policy (CSP) enforced</li>
+<li>No inline scripts or eval()</li>
+<li>Regular dependency updates</li>
+<li>Open-source code (MIT License) - auditable</li>
+</ul>
+<h3>7.5 Access Controls</h3>
+<ul>
+<li>Password-based authentication</li>
+<li>Session management</li>
+<li>Device-level access control for sync</li>
+</ul>
+<h2>8. International Compliance</h2>
+<h3>8.1 GDPR (European Union)</h3>
+<p>If you are in the European Economic Area (EEA), you have rights under the General Data Protection Regulation (GDPR):</p>
+<p><strong>Legal Basis for Processing:</strong></p>
+<ul>
+<li>Consent: You consent when creating an account</li>
+<li>Contract: Processing necessary to provide the service</li>
+<li>Legitimate Interests: Service improvement and security</li>
+</ul>
+<p><strong>Your GDPR Rights:</strong></p>
+<ul>
+<li>Right to Access - Request access to your personal data</li>
+<li>Right to Rectification - Correct inaccurate data</li>
+<li>Right to Erasure (&quot;Right to be Forgotten&quot;) - Delete your data</li>
+<li>Right to Restrict Processing - Limit how we use your data</li>
+<li>Right to Data Portability - Receive data in portable format</li>
+<li>Right to Object - Object to processing</li>
+<li>Right to Withdraw Consent - Withdraw consent at any time</li>
+</ul>
+<p><strong>Data Protection Officer:</strong> <a href="mailto:support@engram.dev">support@engram.dev</a></p>
+<p><strong>Supervisory Authority:</strong> You have the right to lodge a complaint with your local data protection authority.</p>
+<h3>8.2 CCPA (California)</h3>
+<p>If you are a California resident, you have rights under the California Consumer Privacy Act (CCPA):</p>
+<p><strong>Your CCPA Rights:</strong></p>
+<ul>
+<li>Right to Know - What personal information we collect and how we use it</li>
+<li>Right to Delete - Request deletion of personal information</li>
+<li>Right to Opt-Out - Opt-out of sale (we don&#39;t sell data)</li>
+<li>Right to Non-Discrimination - Equal service regardless of privacy choices</li>
+</ul>
+<p><strong>Categories of Personal Information:</strong></p>
+<ul>
+<li>Identifiers (email, device ID)</li>
+<li>Internet activity (usage analytics, anonymized)</li>
+<li>Content (conversation data, encrypted)</li>
+</ul>
+<p><strong>Do Not Sell My Personal Information:</strong>
+We do not sell personal information. We have not sold personal information in the past 12 months.</p>
+<h3>8.3 Data Retention</h3>
+<p><strong>Active Accounts:</strong></p>
+<ul>
+<li>Conversation data: Retained until you delete it</li>
+<li>Account data: Retained while account is active</li>
+<li>Analytics: Retained for 12 months</li>
+</ul>
+<p><strong>Deleted Accounts:</strong></p>
+<ul>
+<li>Account data: Deleted within 30 days of request</li>
+<li>Encrypted conversation data: Deleted within 30 days</li>
+<li>Analytics: Anonymized or deleted within 90 days</li>
+</ul>
+<p><strong>Backups:</strong></p>
+<ul>
+<li>Backup data deleted within 90 days of account deletion</li>
+</ul>
+<h2>9. Children&#39;s Privacy</h2>
+<p>Engram is not intended for users under the age of 13 (or 16 in the EEA). We do not knowingly collect personal information from children.</p>
+<p>If we learn that we have collected personal information from a child without parental consent, we will delete that information immediately.</p>
+<p>Parents: If you believe your child has provided us with personal information, contact <a href="mailto:support@engram.dev">support@engram.dev</a>.</p>
+<h2>10. Cookies and Tracking</h2>
+<p><strong>Cookies:</strong> Engram does not use cookies for tracking or advertising.</p>
+<p><strong>Authentication Cookies:</strong> Supabase may use cookies for authentication session management (if you enable sync).</p>
+<p><strong>Local Storage:</strong> We use browser localStorage and IndexedDB for functionality (storing encrypted data locally).</p>
+<p><strong>Third-Party Tracking:</strong> We do not use third-party tracking scripts or analytics services (like Google Analytics).</p>
+<h2>11. Changes to This Privacy Policy</h2>
+<p>We may update this Privacy Policy from time to time to reflect:</p>
+<ul>
+<li>Changes in our practices</li>
+<li>Legal or regulatory requirements</li>
+<li>New features or functionality</li>
+</ul>
+<p><strong>Notification of Changes:</strong></p>
+<ul>
+<li>Updated &quot;Last Updated&quot; date at the top of this policy</li>
+<li>Email notification for material changes (if you have an account)</li>
+<li>In-app notification in Extension</li>
+</ul>
+<p><strong>Your Continued Use:</strong> By continuing to use Engram after changes take effect, you accept the updated Privacy Policy.</p>
+<p><strong>Review Regularly:</strong> We encourage you to review this Privacy Policy periodically.</p>
+<h2>12. International Data Transfers</h2>
+<p>If you are located outside the United States, your information may be transferred to and processed in countries where our service providers operate.</p>
+<p><strong>Data Transfer Safeguards:</strong></p>
+<ul>
+<li>Standard Contractual Clauses (SCCs) for EU data</li>
+<li>Adequate safeguards under GDPR Article 46</li>
+<li>Encryption during transit and at rest</li>
+</ul>
+<p><strong>Your Consent:</strong> By using Engram, you consent to the transfer of your information to countries outside your residence.</p>
+<h2>13. Open Source and Transparency</h2>
+<p>Engram is open-source software:</p>
+<p><strong>Code Repository:</strong> <a href="https://github.com/yourusername/engram">https://github.com/yourusername/engram</a>
+<strong>License:</strong> MIT License
+<strong>Transparency:</strong> You can review our code to verify our privacy claims</p>
+<p><strong>Security Audits:</strong> We welcome security researchers to review our code and report vulnerabilities responsibly.</p>
+<p><strong>Bug Bounty:</strong> Planned for future (details TBD)</p>
+<h2>14. Contact Us</h2>
+<p>If you have questions, concerns, or requests regarding this Privacy Policy or your personal data:</p>
+<p><strong>Email:</strong> <a href="mailto:support@engram.dev">support@engram.dev</a>
+<strong>GitHub Issues:</strong> <a href="https://github.com/yourusername/engram/issues">https://github.com/yourusername/engram/issues</a>
+<strong>Response Time:</strong> We aim to respond within 48 hours</p>
+<p><strong>Data Protection Inquiries:</strong></p>
+<ul>
+<li>GDPR requests: <a href="mailto:support@engram.dev">support@engram.dev</a> (subject: &quot;GDPR Request&quot;)</li>
+<li>CCPA requests: <a href="mailto:support@engram.dev">support@engram.dev</a> (subject: &quot;CCPA Request&quot;)</li>
+<li>Security concerns: <a href="mailto:security@engram.dev">security@engram.dev</a></li>
+</ul>
+<h2>15. Legal Disclaimer</h2>
+<p><strong>Beta Software:</strong> Engram is currently in beta. While we strive for reliability, we cannot guarantee:</p>
+<ul>
+<li>100% uptime or availability</li>
+<li>Data loss prevention (always maintain backups)</li>
+<li>Bug-free operation</li>
+</ul>
+<p><strong>No Warranty:</strong> The Extension is provided &quot;as is&quot; without warranties. See Terms of Service for details.</p>
+<p><strong>Data Loss:</strong> While we use encryption and backups, we recommend you maintain your own backups of important conversation data.</p>
+<h2>16. Summary</h2>
+<p><strong>Key Takeaways:</strong></p>
+<ul>
+<li>✅ End-to-end encryption (zero-knowledge architecture)</li>
+<li>✅ We cannot access your conversation content</li>
+<li>✅ No sale of your data</li>
+<li>✅ Optional cloud sync (encrypted)</li>
+<li>✅ GDPR and CCPA compliant</li>
+<li>✅ Open-source and transparent</li>
+<li>✅ You control your data</li>
+</ul>
+<hr>
+<p><strong>Last Updated:</strong> December 20, 2025
+<strong>Effective Date:</strong> December 20, 2025
+<strong>Version:</strong> 1.0</p>

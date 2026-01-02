@@ -1,0 +1,38 @@
+{
+  "name": "engram-community",
+  "version": "0.1.0",
+  "description": "Privacy-first AI conversation memory - Open Source Edition",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w packages/community",
+    "build": "npm run build -w packages/community",
+    "build:all": "npm run build --workspaces",
+    "test": "npm run test --workspaces",
+    "lint": "npm run lint --workspaces",
+    "format": "prettier --write \"packages/**/*.{ts,tsx,json,md}\"",
+    "typecheck": "npm run typecheck --workspaces",
+    "setup": "npm install && npm run build -w packages/core",
+    "package": "npm run package -w packages/community"
+  },
+  "keywords": [
+    "ai",
+    "memory",
+    "privacy",
+    "encryption",
+    "chatgpt",
+    "claude",
+    "browser-extension"
+  ],
+  "author": "Engram",
+  "license": "SEE LICENSE IN LICENSE",
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
+  },
+  "devDependencies": {
+    "prettier": "^3.1.0"
+  }
+}

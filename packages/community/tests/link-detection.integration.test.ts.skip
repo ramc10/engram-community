@@ -1,0 +1,598 @@
+/**
+ * Link Detection Integration Test Suite
+ *
+ * End-to-end tests for link detection pipeline
+ */
+
+import { StorageService } from '../src/lib/storage';
+import { LinkDetectionService } from '../src/lib/link-detection-service';
+import type { EnrichmentConfig, MemoryWithMemA } from '../../shared/src/types/memory';
+
+// Mock dependencies
+jest.mock('../src/lib/embedding-service', () => ({
+  getEmbeddingService: jest.fn(() => ({
+    initialize: jest.fn(),
+    findSimilar: jest.fn(),
+    regenerateEmbedding: jest.fn(),
+  })),
+}));
+
+// Mock chrome API
+global.chrome = {
+  storage: {
+    local: {
+      get: jest.fn(),
+      set: jest.fn(),
+      remove: jest.fn(),
+    },
+  },
+} as any;
+
+describe('Link Detection Integration', () => {
+  let storage: StorageService;
+  let mockFetch: jest.Mock;
+
+  beforeEach(async () => {
+    jest.clearAllMocks();
+
+    // Mock fetch for LLM calls
+    mockFetch = jest.fn();
+    global.fetch = mockFetch;
+
+    // Mock chrome storage
+    (chrome.storage.local.get as jest.Mock).mockImplementation((keys, callback) => {
+      const result = {
+        enrichmentConfig: {
+          enabled: true,
+          enableLinkDetection: true,
+          provider: 'openai',
+          model: 'gpt-4o-mini',
+          apiKey: 'sk-test-key',
+          batchSize: 5,
+        },
+      };
+      if (callback) {
+        callback(result);
+        return;
+      }
+      return Promise.resolve(result);
+    });
+
+    (chrome.storage.local.set as jest.Mock).mockResolvedValue(undefined);
+
+    storage = new StorageService();
+    await storage.initialize();
+  });
+
+  afterEach(async () => {
+    await storage.close();
+  });
+
+  describe('End-to-End Pipeline', () => {
+    it('should detect links after saving and enriching a memory', async () => {
+      const memory1: MemoryWithMemA = {
+        id: 'memory-1',
+        content: { role: 'user', text: 'How to implement OAuth?' },
+        conversationId: 'conv-1',
+        platform: 'chatgpt',
+        timestamp: Date.now(),
+        vectorClock: { 'device-1': 1 },
+        deviceId: 'device-1',
+        syncStatus: 'synced',
+        tags: [],
+      };
+
+      const memory2: MemoryWithMemA = {
+        id: 'memory-2',
+        content: { role: 'assistant', text: 'JWT is used for auth' },
+        conversationId: 'conv-2',
+        platform: 'claude',
+        timestamp: Date.now() - 1000,
+        vectorClock: { 'device-1': 2 },
+        deviceId: 'device-1',
+        syncStatus: 'synced',
+        tags: [],
+        embedding: new Float32Array(384).fill(0.5),
+      };
+
+      // Save first memory (already exists)
+      await storage.saveMemory(memory2);
+
+      // Mock enrichment LLM response
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [{
+            message: {
+              content: JSON.stringify({
+                keywords: ['OAuth', 'authentication', 'security'],
+                tags: ['web development', 'security'],
+                context: 'Discussion about OAuth implementation',
+              }),
+            },
+          }],
+          usage: { total_tokens: 100 },
+        }),
+      });
+
+      // Mock embedding service
+      const embeddingService = require('../src/lib/embedding-service').getEmbeddingService();
+      embeddingService.findSimilar.mockResolvedValue([
+        { memory: memory2, score: 0.85 },
+      ]);
+
+      embeddingService.regenerateEmbedding.mockResolvedValue({
+        ...memory1,
+        embedding: new Float32Array(384).fill(0.6),
+      });
+
+      // Mock link detection LLM response
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [{
+            message: {
+              content: JSON.stringify({
+                links: [{
+                  memoryId: 'memory-2',
+                  confidence: 0.9,
+                  reason: 'Both discuss authentication methods',
+                }],
+              }),
+            },
+          }],
+          usage: { total_tokens: 150 },
+        }),
+      });
+
+      // Save new memory (triggers enrichment + link detection)
+      await storage.saveMemory(memory1);
+
+      // Wait for background processing
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Verify memory has enrichment
+      const savedMemory = await storage.getMemory('memory-1') as MemoryWithMemA;
+      expect(savedMemory.keywords).toEqual(['OAuth', 'authentication', 'security']);
+
+      // Verify memory has links
+      expect(savedMemory.links).toBeDefined();
+      expect(savedMemory.links!.length).toBeGreaterThan(0);
+      expect(savedMemory.links![0].memoryId).toBe('memory-2');
+      expect(savedMemory.links![0].score).toBe(0.9);
+    }, 10000);
+
+    it('should create bidirectional links', async () => {
+      const memory1: MemoryWithMemA = {
+        id: 'memory-1',
+        content: { role: 'user', text: 'Topic A' },
+        conversationId: 'conv-1',
+        platform: 'chatgpt',
+        timestamp: Date.now(),
+        vectorClock: { 'device-1': 1 },
+        deviceId: 'device-1',
+        syncStatus: 'synced',
+        tags: [],
+      };
+
+      const memory2: MemoryWithMemA = {
+        id: 'memory-2',
+        content: { role: 'assistant', text: 'Related to Topic A' },
+        conversationId: 'conv-2',
+        platform: 'claude',
+        timestamp: Date.now(),
+        vectorClock: { 'device-1': 2 },
+        deviceId: 'device-1',
+        syncStatus: 'synced',
+        tags: [],
+        embedding: new Float32Array(384).fill(0.5),
+      };
+
+      await storage.saveMemory(memory2);
+
+      // Mock enrichment
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [{ message: { content: JSON.stringify({ keywords: [], tags: [], context: '' }) } }],
+          usage: { total_tokens: 50 },
+        }),
+      });
+
+      const embeddingService = require('../src/lib/embedding-service').getEmbeddingService();
+      embeddingService.findSimilar.mockResolvedValue([{ memory: memory2, score: 0.9 }]);
+      embeddingService.regenerateEmbedding.mockResolvedValue({
+        ...memory1,
+        embedding: new Float32Array(384).fill(0.6),
+      });
+
+      // Mock link detection
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [{
+            message: {
+              content: JSON.stringify({
+                links: [{ memoryId: 'memory-2', confidence: 0.85, reason: 'Related topics' }],
+              }),
+            },
+          }],
+          usage: { total_tokens: 100 },
+        }),
+      });
+
+      await storage.saveMemory(memory1);
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Check both memories have links
+      const saved1 = await storage.getMemory('memory-1') as MemoryWithMemA;
+      const saved2 = await storage.getMemory('memory-2') as MemoryWithMemA;
+
+      expect(saved1.links).toBeDefined();
+      expect(saved1.links!.some(l => l.memoryId === 'memory-2')).toBe(true);
+
+      expect(saved2.links).toBeDefined();
+      expect(saved2.links!.some(l => l.memoryId === 'memory-1')).toBe(true);
+    }, 10000);
+  });
+
+  describe('Link-Aware Retrieval', () => {
+    it('should return linked memories in search results', async () => {
+      // This test would require PromptInterceptor integration
+      // For now, we verify that links are stored correctly
+
+      const memory1: MemoryWithMemA = {
+        id: 'memory-1',
+        content: { role: 'user', text: 'Search query' },
+        conversationId: 'conv-1',
+        platform: 'chatgpt',
+        timestamp: Date.now(),
+        vectorClock: { 'device-1': 1 },
+        deviceId: 'device-1',
+        syncStatus: 'synced',
+        tags: [],
+        links: [
+          { memoryId: 'memory-2', score: 0.9, createdAt: Date.now(), reason: 'Related' },
+        ],
+      };
+
+      await storage.saveMemory(memory1);
+
+      const retrieved = await storage.getMemory('memory-1') as MemoryWithMemA;
+
+      expect(retrieved.links).toBeDefined();
+      expect(retrieved.links!.length).toBe(1);
+      expect(retrieved.links![0].memoryId).toBe('memory-2');
+    });
+  });
+
+  describe('Configuration Toggle', () => {
+    it('should not detect links when disabled', async () => {
+      // Update config to disable link detection
+      (chrome.storage.local.get as jest.Mock).mockImplementation((keys, callback) => {
+        const result = {
+          enrichmentConfig: {
+            enabled: true,
+            enableLinkDetection: false, // Disabled
+            provider: 'openai',
+            model: 'gpt-4o-mini',
+            apiKey: 'sk-test-key',
+            batchSize: 5,
+          },
+        };
+        if (callback) {
+          callback(result);
+          return;
+        }
+        return Promise.resolve(result);
+      });
+
+      // Reinitialize storage with new config
+      await storage.close();
+      storage = new StorageService();
+      await storage.initialize();
+
+      const memory: MemoryWithMemA = {
+        id: 'memory-1',
+        content: { role: 'user', text: 'Test memory' },
+        conversationId: 'conv-1',
+        platform: 'chatgpt',
+        timestamp: Date.now(),
+        vectorClock: { 'device-1': 1 },
+        deviceId: 'device-1',
+        syncStatus: 'synced',
+        tags: [],
+      };
+
+      // Mock enrichment
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [{ message: { content: JSON.stringify({ keywords: [], tags: [], context: '' }) } }],
+          usage: { total_tokens: 50 },
+        }),
+      });
+
+      const embeddingService = require('../src/lib/embedding-service').getEmbeddingService();
+      embeddingService.regenerateEmbedding.mockResolvedValue({
+        ...memory,
+        embedding: new Float32Array(384).fill(0.5),
+      });
+
+      await storage.saveMemory(memory);
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      const saved = await storage.getMemory('memory-1') as MemoryWithMemA;
+
+      // Should have enrichment but no links
+      expect(saved.keywords).toBeDefined();
+      expect(saved.links).toBeUndefined();
+    });
+  });
+
+  describe('Performance', () => {
+    it('should complete link detection in <3 seconds per memory', async () => {
+      const memory1: MemoryWithMemA = {
+        id: 'memory-1',
+        content: { role: 'user', text: 'Performance test' },
+        conversationId: 'conv-1',
+        platform: 'chatgpt',
+        timestamp: Date.now(),
+        vectorClock: { 'device-1': 1 },
+        deviceId: 'device-1',
+        syncStatus: 'synced',
+        tags: [],
+      };
+
+      const memory2: MemoryWithMemA = {
+        id: 'memory-2',
+        content: { role: 'assistant', text: 'Related memory' },
+        conversationId: 'conv-2',
+        platform: 'claude',
+        timestamp: Date.now(),
+        vectorClock: { 'device-1': 2 },
+        deviceId: 'device-1',
+        syncStatus: 'synced',
+        tags: [],
+        embedding: new Float32Array(384).fill(0.5),
+      };
+
+      await storage.saveMemory(memory2);
+
+      // Mock fast LLM responses
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          choices: [{ message: { content: JSON.stringify({ keywords: [], tags: [], context: '', links: [] }) } }],
+          usage: { total_tokens: 50 },
+        }),
+      });
+
+      const embeddingService = require('../src/lib/embedding-service').getEmbeddingService();
+      embeddingService.findSimilar.mockResolvedValue([]);
+      embeddingService.regenerateEmbedding.mockResolvedValue({
+        ...memory1,
+        embedding: new Float32Array(384).fill(0.6),
+      });
+
+      const start = Date.now();
+      await storage.saveMemory(memory1);
+      await new Promise(resolve => setTimeout(resolve, 500)); // Wait for background processing
+      const duration = Date.now() - start;
+
+      expect(duration).toBeLessThan(3000); // <3 seconds
+    });
+
+    it('should handle multiple concurrent saves', async () => {
+      const memories: MemoryWithMemA[] = Array.from({ length: 5 }, (_, i) => ({
+        id: `memory-${i}`,
+        content: { role: 'user', text: `Memory ${i}` },
+        conversationId: `conv-${i}`,
+        platform: 'chatgpt' as const,
+        timestamp: Date.now() + i,
+        vectorClock: { 'device-1': i },
+        deviceId: 'device-1',
+        syncStatus: 'synced' as const,
+        tags: [],
+      }));
+
+      // Mock LLM responses
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          choices: [{ message: { content: JSON.stringify({ keywords: [], tags: [], context: '', links: [] }) } }],
+          usage: { total_tokens: 50 },
+        }),
+      });
+
+      const embeddingService = require('../src/lib/embedding-service').getEmbeddingService();
+      embeddingService.findSimilar.mockResolvedValue([]);
+      embeddingService.regenerateEmbedding.mockImplementation(async (m: any) => ({
+        ...m,
+        embedding: new Float32Array(384).fill(0.5),
+      }));
+
+      // Save all memories concurrently
+      const start = Date.now();
+      await Promise.all(memories.map(m => storage.saveMemory(m)));
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      const duration = Date.now() - start;
+
+      // All memories should be saved
+      for (const memory of memories) {
+        const saved = await storage.getMemory(memory.id);
+        expect(saved).toBeDefined();
+      }
+
+      expect(duration).toBeLessThan(10000); // Should complete in reasonable time
+    }, 15000);
+  });
+
+  describe('Error Handling', () => {
+    it('should gracefully handle LLM API failures', async () => {
+      const memory: MemoryWithMemA = {
+        id: 'memory-1',
+        content: { role: 'user', text: 'Test memory' },
+        conversationId: 'conv-1',
+        platform: 'chatgpt',
+        timestamp: Date.now(),
+        vectorClock: { 'device-1': 1 },
+        deviceId: 'device-1',
+        syncStatus: 'synced',
+        tags: [],
+      };
+
+      // Mock enrichment success
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [{ message: { content: JSON.stringify({ keywords: [], tags: [], context: '' }) } }],
+          usage: { total_tokens: 50 },
+        }),
+      });
+
+      const embeddingService = require('../src/lib/embedding-service').getEmbeddingService();
+      embeddingService.findSimilar.mockResolvedValue([]);
+      embeddingService.regenerateEmbedding.mockResolvedValue({
+        ...memory,
+        embedding: new Float32Array(384).fill(0.5),
+      });
+
+      // Mock link detection failure
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        text: async () => 'Internal Server Error',
+      });
+
+      await storage.saveMemory(memory);
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Memory should still be saved (graceful degradation)
+      const saved = await storage.getMemory('memory-1');
+      expect(saved).toBeDefined();
+
+      // Links may be undefined (failed)
+      // But memory itself should be saved
+      expect(saved!.id).toBe('memory-1');
+    });
+
+    it('should handle missing API key', async () => {
+      // Update config to remove API key
+      (chrome.storage.local.get as jest.Mock).mockImplementation((keys, callback) => {
+        const result = {
+          enrichmentConfig: {
+            enabled: true,
+            enableLinkDetection: true,
+            provider: 'openai',
+            model: 'gpt-4o-mini',
+            apiKey: undefined, // No API key
+            batchSize: 5,
+          },
+        };
+        if (callback) {
+          callback(result);
+          return;
+        }
+        return Promise.resolve(result);
+      });
+
+      await storage.close();
+      storage = new StorageService();
+      await storage.initialize();
+
+      const memory: MemoryWithMemA = {
+        id: 'memory-1',
+        content: { role: 'user', text: 'Test' },
+        conversationId: 'conv-1',
+        platform: 'chatgpt',
+        timestamp: Date.now(),
+        vectorClock: { 'device-1': 1 },
+        deviceId: 'device-1',
+        syncStatus: 'synced',
+        tags: [],
+      };
+
+      // Should not throw, just skip enrichment/links
+      await expect(storage.saveMemory(memory)).resolves.not.toThrow();
+
+      const saved = await storage.getMemory('memory-1');
+      expect(saved).toBeDefined();
+    });
+  });
+
+  describe('Link Quality', () => {
+    it('should only create links with confidence >0.7', async () => {
+      const memory1: MemoryWithMemA = {
+        id: 'memory-1',
+        content: { role: 'user', text: 'Source' },
+        conversationId: 'conv-1',
+        platform: 'chatgpt',
+        timestamp: Date.now(),
+        vectorClock: { 'device-1': 1 },
+        deviceId: 'device-1',
+        syncStatus: 'synced',
+        tags: [],
+      };
+
+      const memory2: MemoryWithMemA = {
+        id: 'memory-2',
+        content: { role: 'assistant', text: 'Target' },
+        conversationId: 'conv-2',
+        platform: 'claude',
+        timestamp: Date.now(),
+        vectorClock: { 'device-1': 2 },
+        deviceId: 'device-1',
+        syncStatus: 'synced',
+        tags: [],
+        embedding: new Float32Array(384).fill(0.5),
+      };
+
+      await storage.saveMemory(memory2);
+
+      // Mock enrichment
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [{ message: { content: JSON.stringify({ keywords: [], tags: [], context: '' }) } }],
+          usage: { total_tokens: 50 },
+        }),
+      });
+
+      const embeddingService = require('../src/lib/embedding-service').getEmbeddingService();
+      embeddingService.findSimilar.mockResolvedValue([{ memory: memory2, score: 0.8 }]);
+      embeddingService.regenerateEmbedding.mockResolvedValue({
+        ...memory1,
+        embedding: new Float32Array(384).fill(0.6),
+      });
+
+      // Mock link detection with mixed confidence
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [{
+            message: {
+              content: JSON.stringify({
+                links: [
+                  { memoryId: 'memory-2', confidence: 0.9, reason: 'Strong' },
+                  { memoryId: 'memory-3', confidence: 0.6, reason: 'Weak' }, // Should be filtered
+                ],
+              }),
+            },
+          }],
+          usage: { total_tokens: 100 },
+        }),
+      });
+
+      await storage.saveMemory(memory1);
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      const saved = await storage.getMemory('memory-1') as MemoryWithMemA;
+
+      // Should only have links with confidence >0.7
+      expect(saved.links).toBeDefined();
+      expect(saved.links!.every(l => l.score > 0.7)).toBe(true);
+      expect(saved.links!.length).toBe(1); // Only the 0.9 link
+    });
+  });
+});

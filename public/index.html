@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Engram - Your AI Conversations, Never Forgotten</title>
+    <meta name="description"
+        content="Privacy-first memory layer that syncs conversations across ChatGPT, Claude, and Perplexity.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+    <!-- Background Layers -->
+    <div class="background-layer background-state-1">
+        <canvas id="neuralNetwork"></canvas>
+    </div>
+
+    <div class="background-layer background-state-2">
+        <canvas id="dataStreams"></canvas>
+    </div>
+
+    <!-- Blob Cursor -->
+    <canvas id="blobCursor"></canvas>
+
+    <!-- Main Content -->
+    <div class="content-wrapper">
+        <!-- Header -->
+        <header class="header">
+            <div class="logo">
+                <img src="assets/horz-logo.png" alt="Engram" class="logo-img">
+            </div>
+
+            <nav class="nav">
+                <a href="#features" class="nav-link">Features</a>
+                <a href="terms-of-service.html" class="nav-link">Terms and Conditions</a>
+            </nav>
+        </header>
+
+        <!-- Hero Section -->
+        <main class="hero">
+            <div class="hero-content">
+                <h1 class="hero-title">
+                    <span class="hero-brand">Engram</span>
+                    <span class="hero-tagline">Your AI Conversations,</span>
+                    <span class="hero-tagline">Never Forgotten.</span>
+                </h1>
+
+                <p class="hero-subtitle">
+                    Privacy-first memory layer that syncs conversations<br>
+                    across ChatGPT, Claude, and Perplexity.
+                </p>
+
+                <ul class="hero-features">
+                    <li class="hero-feature">
+                        <svg class="check-icon" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd"
+                                d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                                clip-rule="evenodd" />
+                        </svg>
+                        End-to-end encrypted
+                    </li>
+                    <li class="hero-feature">
+                        <svg class="check-icon" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd"
+                                d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                                clip-rule="evenodd" />
+                        </svg>
+                        Zero-knowledge architecture
+                    </li>
+                    <li class="hero-feature">
+                        <svg class="check-icon" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd"
+                                d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                                clip-rule="evenodd" />
+                        </svg>
+                        Cross-platform injection
+                    </li>
+                    <li class="hero-feature">
+                        <svg class="check-icon" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd"
+                                d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                                clip-rule="evenodd" />
+                        </svg>
+                        Self-hostable & open source
+                    </li>
+                </ul>
+
+                <div class="hero-ctas">
+                    <a href="#install" class="cta-primary">Coming Soon</a>
+                    <a href="https://github.com/yourusername/engram" target="_blank" class="cta-secondary">
+                        <svg class="github-icon" viewBox="0 0 24 24" fill="currentColor">
+                            <path
+                                d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z" />
+                        </svg>
+                        View on GitHub
+                    </a>
+                </div>
+            </div>
+        </main>
+
+        <!-- Features Section -->
+        <section id="features" class="features-section">
+            <div class="section-container">
+                <h2 class="section-title">Minimalist Memory. Maximum Privacy.</h2>
+                <div class="features-grid">
+                    <div class="feature-card reveal">
+                        <div class="feature-icon">🔒</div>
+                        <h3 class="feature-name">Zero-Knowledge Security</h3>
+                        <p class="feature-description">End-to-end encryption using XChaCha20-Poly1305. Your memories are
+                            encrypted on your device—even we can't read them.</p>
+                    </div>
+                    <div class="feature-card reveal">
+                        <div class="feature-icon">🌐</div>
+                        <h3 class="feature-name">Unified Context</h3>
+                        <p class="feature-description">Bridge the gap between ChatGPT, Claude, and Perplexity. One
+                            persistent memory layer for all your AI assistants.</p>
+                    </div>
+
+                    <div class="feature-card reveal">
+                        <div class="feature-icon">🧠</div>
+                        <h3 class="feature-name">Active Intelligence</h3>
+                        <p class="feature-description">Relevant context from past interactions is automatically
+                            suggested, growing smarter with every conversation.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <nav class="footer-nav">
+                <a href="#features" class="footer-link">Features</a>
+                <a href="terms-of-service.html" class="footer-link">Terms and Conditions</a>
+            </nav>
+            <div class="social-links">
+                <a href="https://github.com/yourusername/engram" target="_blank" class="social-link"
+                    aria-label="GitHub">
+                    <svg viewBox="0 0 24 24" fill="currentColor">
+                        <path
+                            d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z" />
+                    </svg>
+                </a>
+                <a href="https://x.com/Ramcharans10" target="_blank" class="social-link" aria-label="Twitter">
+                    <svg viewBox="0 0 24 24" fill="currentColor">
+                        <path
+                            d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+                    </svg>
+                </a>
+            </div>
+        </footer>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+
+</html>
