@@ -23,7 +23,7 @@
  * * --[disconnect]--> DISCONNECTED
  */
 
-import { SyncState } from 'engram-shared/types/sync';
+import { SyncState } from '@engram/core';
 
 export type SyncEvent =
   | 'CONNECT'

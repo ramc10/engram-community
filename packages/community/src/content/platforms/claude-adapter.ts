@@ -10,8 +10,8 @@ import {
   ExtractedCodeBlock,
   PlatformSelectors,
   PlatformFeatures,
-} from 'engram-shared/types/platform-adapter';
-import { Platform, Role } from 'engram-shared/types/memory';
+} from '@engram/core';
+import { Platform, Role } from '@engram/core';
 
 /**
  * Claude DOM selectors (verified Dec 2024)

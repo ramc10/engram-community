@@ -1,0 +1,50 @@
+# Dependencies
+node_modules/
+package-lock.json
+
+# Build outputs
+packages/*/build/
+packages/*/dist/
+packages/*/.plasmo/
+*.js.map
+*.d.ts.map
+
+# Environment variables
+.env
+.env.local
+.env.production
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Test coverage
+coverage/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+
+# Compiled TypeScript
+*.js
+*.d.ts
+!jest.config.js
+!*.test.js
+!*.config.js
+
+# Keep specific files
+!packages/*/src/**/*.js
+!packages/*/tests/**/*.js

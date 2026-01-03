@@ -6,7 +6,7 @@
  */
 
 import { DeviceKeyManager, EncryptedMasterKey } from '../../src/lib/device-key-manager';
-import { MasterKey } from 'engram-shared';
+import { MasterKey } from '@engram/core';
 
 // Mock chrome.storage.local
 const mockStorage = new Map<string, any>();

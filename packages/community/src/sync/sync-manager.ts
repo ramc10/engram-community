@@ -10,12 +10,12 @@
  * - Emit events for UI updates
  */
 
-import { SyncState, ISyncManager, SyncOperation } from 'engram-shared/types/sync';
+import { SyncState, ISyncManager, SyncOperation } from '@engram/core';
 import { StorageService } from '../lib/storage';
 import { SyncStateMachine } from './state-machine';
 import { WebSocketClient, DEFAULT_WEBSOCKET_CONFIG } from './ws-client';
 import { OperationQueue } from './operation-queue';
-import { incrementVectorClock } from 'engram-shared/crdt-utils';
+import { incrementVectorClock } from '@engram/core';
 
 export interface SyncManagerConfig {
   serverUrl: string;

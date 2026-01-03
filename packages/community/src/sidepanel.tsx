@@ -7,7 +7,7 @@ import React, { useState, useEffect } from 'react';
 import { ThemeProvider, ToastProvider, useToast, useTheme, Button, Logo } from './components/ui';
 import { PremiumBadge, UpgradeBanner } from './components';
 import type { MessageType } from './lib/messages';
-import type { Memory, EnrichmentConfig } from 'engram-shared/types/memory';
+import type { Memory, EnrichmentConfig } from '@engram/core';
 import { getEmbeddingService, type MemoryWithEmbedding } from './lib/embedding-service';
 import { formatDate, summarizeText } from './lib/formatters';
 import { encryptApiKey, decryptApiKey, isEncrypted } from './lib/api-key-crypto';

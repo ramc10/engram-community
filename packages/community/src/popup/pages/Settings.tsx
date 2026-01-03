@@ -6,7 +6,7 @@
 import React, { useState, useEffect } from 'react';
 import { useToast, useTheme, Button } from '../../components/ui';
 import type { MessageType, Theme } from '../../lib/messages';
-import type { Memory, EnrichmentConfig } from 'engram-shared/types/memory';
+import type { Memory, EnrichmentConfig } from '@engram/core';
 import { formatDate } from '../../lib/formatters';
 import { encryptApiKey, decryptApiKey, isEncrypted } from '../../lib/api-key-crypto';
 
@@ -33,8 +33,9 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
   // Enrichment config state
   const [enrichmentConfig, setEnrichmentConfig] = useState<EnrichmentConfig>({
     enabled: false,
-    provider: 'openai',
-    model: 'gpt-4o-mini',
+    provider: 'local',
+    model: 'llama-3.2-3b-instruct',
+    localEndpoint: 'http://localhost:1234',
     batchSize: 5,
     enableLinkDetection: false, // Phase 2: Link Generation
   });
@@ -202,9 +203,26 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
   };
 
   const handleToggleEnrichment = () => {
-    if (!enrichmentConfig.apiKey && !enrichmentConfig.enabled) {
-      showError('Please set an API key first');
-      return;
+    if (!enrichmentConfig.enabled) {
+      // Check if credentials are configured
+      let hasCredentials = false;
+      let message = '';
+
+      if (enrichmentConfig.provider === 'local') {
+        hasCredentials = !!enrichmentConfig.localEndpoint;
+        message = 'Please set a local endpoint first';
+      } else if (enrichmentConfig.provider === 'premium') {
+        hasCredentials = !!enrichmentConfig.apiKey;
+        message = 'Please set a license key first';
+      } else {
+        hasCredentials = !!enrichmentConfig.apiKey;
+        message = 'Please set an API key first';
+      }
+
+      if (!hasCredentials) {
+        showError(message);
+        return;
+      }
     }
     updateEnrichmentConfig({ enabled: !enrichmentConfig.enabled });
   };
@@ -769,7 +787,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
           </div>
           <select
             value={enrichmentConfig.provider}
-            onChange={(e) => updateEnrichmentConfig({ provider: e.target.value as 'openai' | 'anthropic' })}
+            onChange={(e) => updateEnrichmentConfig({ provider: e.target.value as 'openai' | 'anthropic' | 'local' | 'premium' })}
             disabled={isUpdatingEnrichment}
             style={{
               width: '100%',
@@ -783,61 +801,73 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
               cursor: 'pointer',
             }}
           >
+            <option value="local">Local (LM Studio / Ollama) - Free!</option>
+            <option value="premium">Premium API ($10/month) - Managed LLM</option>
             <option value="openai">OpenAI (GPT-4o-mini)</option>
             <option value="anthropic">Anthropic (Claude 3 Haiku)</option>
           </select>
         </div>
 
-        {/* Model Selection */}
-        <div style={{ marginBottom: '12px' }}>
-          <div style={{ fontSize: '12px', color: colors.text.secondary, marginBottom: '6px' }}>
-            Model
-          </div>
-          <select
-            value={enrichmentConfig.model}
-            onChange={(e) => updateEnrichmentConfig({ model: e.target.value })}
-            disabled={isUpdatingEnrichment}
-            style={{
-              width: '100%',
-              padding: '8px 12px',
-              fontSize: '13px',
-              backgroundColor: colors.background,
-              border: `1px solid ${colors.border}`,
-              borderRadius: '6px',
-              color: colors.text.primary,
-              outline: 'none',
-              cursor: 'pointer',
-            }}
-          >
-            {enrichmentConfig.provider === 'openai' ? (
-              <>
-                <option value="gpt-4o-mini">GPT-4o-mini (recommended)</option>
-                <option value="gpt-4o">GPT-4o</option>
-                <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
-              </>
-            ) : (
-              <>
-                <option value="claude-3-haiku-20240307">Claude 3 Haiku (recommended)</option>
-                <option value="claude-3-5-sonnet-20241022">Claude 3.5 Sonnet</option>
-              </>
-            )}
-          </select>
-        </div>
-
-        {/* API Key Input */}
-        <div style={{ marginBottom: '12px' }}>
-          <div style={{ fontSize: '12px', color: colors.text.secondary, marginBottom: '6px' }}>
-            API Key
-          </div>
-          <div style={{ display: 'flex', gap: '8px' }}>
-            <input
-              type={showApiKey ? 'text' : 'password'}
-              value={enrichmentConfig.apiKey || ''}
-              onChange={(e) => updateEnrichmentConfig({ apiKey: e.target.value })}
-              placeholder={enrichmentConfig.provider === 'openai' ? 'sk-...' : 'sk-ant-...'}
+        {/* Model Selection (not shown for premium) */}
+        {enrichmentConfig.provider !== 'premium' && (
+          <div style={{ marginBottom: '12px' }}>
+            <div style={{ fontSize: '12px', color: colors.text.secondary, marginBottom: '6px' }}>
+              Model
+            </div>
+            <select
+              value={enrichmentConfig.model}
+              onChange={(e) => updateEnrichmentConfig({ model: e.target.value })}
               disabled={isUpdatingEnrichment}
               style={{
-                flex: 1,
+                width: '100%',
+                padding: '8px 12px',
+                fontSize: '13px',
+                backgroundColor: colors.background,
+                border: `1px solid ${colors.border}`,
+                borderRadius: '6px',
+                color: colors.text.primary,
+                outline: 'none',
+                cursor: 'pointer',
+              }}
+            >
+              {enrichmentConfig.provider === 'local' ? (
+                <>
+                  <option value="llama-3.2-3b-instruct">Llama 3.2 3B Instruct (recommended)</option>
+                  <option value="llama-3.2-1b-instruct">Llama 3.2 1B Instruct (faster)</option>
+                  <option value="phi-3-mini">Phi-3 Mini</option>
+                  <option value="qwen2.5-3b-instruct">Qwen 2.5 3B Instruct</option>
+                  <option value="custom">Custom Model</option>
+                </>
+              ) : enrichmentConfig.provider === 'openai' ? (
+                <>
+                  <option value="gpt-4o-mini">GPT-4o-mini (recommended)</option>
+                  <option value="gpt-4o">GPT-4o</option>
+                  <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
+                </>
+              ) : (
+                <>
+                  <option value="claude-3-haiku-20240307">Claude 3 Haiku (recommended)</option>
+                  <option value="claude-3-5-sonnet-20241022">Claude 3.5 Sonnet</option>
+                </>
+              )}
+            </select>
+          </div>
+        )}
+
+        {/* Local Endpoint, API Key, or License Key Input */}
+        {enrichmentConfig.provider === 'local' ? (
+          <div style={{ marginBottom: '12px' }}>
+            <div style={{ fontSize: '12px', color: colors.text.secondary, marginBottom: '6px' }}>
+              Local Endpoint
+            </div>
+            <input
+              type="text"
+              value={enrichmentConfig.localEndpoint || ''}
+              onChange={(e) => updateEnrichmentConfig({ localEndpoint: e.target.value })}
+              placeholder="http://localhost:1234"
+              disabled={isUpdatingEnrichment}
+              style={{
+                width: '100%',
                 padding: '8px 12px',
                 fontSize: '13px',
                 fontFamily: 'monospace',
@@ -848,27 +878,92 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                 outline: 'none',
               }}
             />
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setShowApiKey(!showApiKey)}
-            >
-              {showApiKey ? '👁️' : '👁️‍🗨️'}
-            </Button>
+            <div style={{ fontSize: '11px', color: colors.text.tertiary, marginTop: '4px' }}>
+              LM Studio default: http://localhost:1234 | Ollama default: http://localhost:11434
+            </div>
           </div>
-          <div style={{ fontSize: '11px', color: colors.text.tertiary, marginTop: '4px' }}>
-            Encrypted before storage. Get your key from{' '}
-            {enrichmentConfig.provider === 'openai' ? (
-              <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer" style={{ color: colors.status.info }}>
-                OpenAI
-              </a>
-            ) : (
-              <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener noreferrer" style={{ color: colors.status.info }}>
-                Anthropic
-              </a>
-            )}
+        ) : enrichmentConfig.provider === 'premium' ? (
+          <div style={{ marginBottom: '12px' }}>
+            <div style={{ fontSize: '12px', color: colors.text.secondary, marginBottom: '6px' }}>
+              License Key
+            </div>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <input
+                type={showApiKey ? 'text' : 'password'}
+                value={enrichmentConfig.apiKey || ''}
+                onChange={(e) => updateEnrichmentConfig({ apiKey: e.target.value })}
+                placeholder="ENGRAM-XXXX-XXXX-XXXX-XXXX"
+                disabled={isUpdatingEnrichment}
+                style={{
+                  flex: 1,
+                  padding: '8px 12px',
+                  fontSize: '13px',
+                  fontFamily: 'monospace',
+                  backgroundColor: colors.background,
+                  border: `1px solid ${colors.border}`,
+                  borderRadius: '6px',
+                  color: colors.text.primary,
+                  outline: 'none',
+                }}
+              />
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowApiKey(!showApiKey)}
+              >
+                {showApiKey ? '👁️' : '👁️‍🗨️'}
+              </Button>
+            </div>
+            <div style={{ fontSize: '11px', color: colors.text.tertiary, marginTop: '4px' }}>
+              Your premium license key. No API keys needed - managed LLM included!
+            </div>
           </div>
-        </div>
+        ) : (
+          <div style={{ marginBottom: '12px' }}>
+            <div style={{ fontSize: '12px', color: colors.text.secondary, marginBottom: '6px' }}>
+              API Key
+            </div>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <input
+                type={showApiKey ? 'text' : 'password'}
+                value={enrichmentConfig.apiKey || ''}
+                onChange={(e) => updateEnrichmentConfig({ apiKey: e.target.value })}
+                placeholder={enrichmentConfig.provider === 'openai' ? 'sk-...' : 'sk-ant-...'}
+                disabled={isUpdatingEnrichment}
+                style={{
+                  flex: 1,
+                  padding: '8px 12px',
+                  fontSize: '13px',
+                  fontFamily: 'monospace',
+                  backgroundColor: colors.background,
+                  border: `1px solid ${colors.border}`,
+                  borderRadius: '6px',
+                  color: colors.text.primary,
+                  outline: 'none',
+                }}
+              />
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowApiKey(!showApiKey)}
+              >
+                {showApiKey ? '👁️' : '👁️‍🗨️'}
+              </Button>
+            </div>
+            <div style={{ fontSize: '11px', color: colors.text.tertiary, marginTop: '4px' }}>
+              Encrypted before storage. Get your key from{' '}
+              {enrichmentConfig.provider === 'openai' ? (
+                <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer" style={{ color: colors.status.info }}>
+                  OpenAI
+                </a>
+              ) : (
+                <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener noreferrer" style={{ color: colors.status.info }}>
+                  Anthropic
+                </a>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Batch Size */}
         <div style={{ marginBottom: '16px' }}>

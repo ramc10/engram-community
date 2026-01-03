@@ -12,7 +12,7 @@
  * - Trade-off: Weaker than password-only but better UX (no re-login on every reload)
  */
 
-import { MasterKey } from 'engram-shared';
+import { MasterKey } from '@engram/core';
 
 const DEVICE_KEY_STORAGE_KEY = 'device_encryption_key';
 const ENCRYPTED_MASTER_KEY_STORAGE_KEY = 'encrypted_master_key';

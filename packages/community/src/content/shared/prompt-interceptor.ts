@@ -5,7 +5,7 @@
 
 import { getEmbeddingService, type SimilarityResult, type MemoryWithEmbedding } from '../../lib/embedding-service';
 import { sendMessage, MessageType } from '../../lib/messages';
-import type { Memory, MemoryWithMemA, UUID } from 'engram-shared/types/memory';
+import type { Memory, MemoryWithMemA, UUID } from '@engram/core';
 
 /**
  * Configuration

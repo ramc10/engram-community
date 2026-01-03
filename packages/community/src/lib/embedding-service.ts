@@ -13,7 +13,7 @@
  */
 
 import { pipeline, type Pipeline, env } from '@xenova/transformers';
-import type { Memory, MemoryWithMemA } from 'engram-shared/types/memory';
+import type { Memory, MemoryWithMemA } from '@engram/core';
 
 // Configure Transformers.js for Chrome service worker compatibility
 // Disable threading to avoid "Atomics.wait cannot be called in this context" error

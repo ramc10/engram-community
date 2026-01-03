@@ -5,8 +5,8 @@
 
 import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
 import { EnrichmentService } from '../src/lib/enrichment-service';
-import type { EnrichmentConfig, MemoryWithMemA } from 'engram-shared';
-import { generateUUID, now, createVectorClock } from 'engram-shared';
+import type { EnrichmentConfig, MemoryWithMemA } from '@engram/core';
+import { generateUUID, now, createVectorClock } from '@engram/core';
 
 // Mock fetch globally
 global.fetch = jest.fn() as jest.MockedFunction<typeof fetch>;

@@ -9,17 +9,21 @@
  * - Manage extension lifecycle
  */
 
-import { CryptoService, MasterKey } from 'engram-shared';
+import { MasterKey, generateUUID } from '@engram/core';
+// Import CryptoService from source file (not exported from @engram/core to avoid bundling issues)
+import { CryptoService } from '../../../core/src/crypto-service';
 import { StorageService } from '../lib/storage';
 import { MessageType, Message, createErrorResponse } from '../lib/messages';
 import { handleMessage } from './message-handler';
-import { generateUUID } from 'engram-shared/utils';
 import { SyncManager } from '../sync/sync-manager';
 import { authClient } from '../lib/auth-client';
 import { getMigrationService } from '../lib/migration-service';
 import { DeviceKeyManager } from '../lib/device-key-manager';
 import { CloudSyncService } from '../lib/cloud-sync';
 import { premiumService } from '../lib/premium-service';
+import { getPremiumClient } from '../lib/premium-api-client';
+import type { EnrichmentConfig } from '@engram/core';
+import { decryptApiKey, isEncrypted } from '../lib/api-key-crypto';
 
 /**
  * Background service state
@@ -100,6 +104,9 @@ class BackgroundService {
       if (keyRestored) {
         await this.initializeCloudSyncIfNeeded();
       }
+
+      // Initialize premium API client if using premium provider
+      await this.initializePremiumClientIfNeeded();
 
       this.isInitialized = true;
       console.log('[Engram] Background service ready');
@@ -323,6 +330,55 @@ class BackgroundService {
     } catch (error) {
       console.error('[CloudSync] Failed to initialize cloud sync:', error);
       // Don't throw - allow extension to continue without sync
+    }
+  }
+
+  /**
+   * Initialize premium API client if enrichment provider is 'premium'
+   * Called on startup and when enrichment settings change
+   */
+  async initializePremiumClientIfNeeded(): Promise<void> {
+    try {
+      // Load enrichment config from storage
+      const result = await chrome.storage.local.get('enrichmentConfig');
+      if (!result.enrichmentConfig) {
+        console.log('[PremiumAPI] No enrichment config found');
+        return;
+      }
+
+      const config: EnrichmentConfig = result.enrichmentConfig;
+
+      // Check if using premium provider
+      if (config.provider !== 'premium') {
+        console.log('[PremiumAPI] Not using premium provider, skipping initialization');
+        return;
+      }
+
+      // Check if license key is set (stored in apiKey field for premium)
+      if (!config.apiKey) {
+        console.log('[PremiumAPI] No license key configured');
+        return;
+      }
+
+      // Decrypt license key if encrypted
+      let licenseKey = config.apiKey;
+      if (isEncrypted(config.apiKey)) {
+        try {
+          licenseKey = await decryptApiKey(config.apiKey);
+        } catch (err) {
+          console.error('[PremiumAPI] Failed to decrypt license key:', err);
+          return;
+        }
+      }
+
+      // Authenticate with premium API
+      console.log('[PremiumAPI] Authenticating with premium API...');
+      const premiumClient = getPremiumClient();
+      await premiumClient.authenticate(licenseKey);
+      console.log('[PremiumAPI] Premium API client authenticated successfully');
+    } catch (error) {
+      console.error('[PremiumAPI] Failed to initialize premium client:', error);
+      // Don't throw - allow extension to continue without premium features
     }
   }
 

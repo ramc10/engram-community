@@ -13,6 +13,7 @@ import type {
   EnrichmentResponse,
   MemoryWithMemA,
 } from '../../../shared/src/types/memory';
+import { getPremiumClient } from './premium-api-client';
 
 /**
  * Rate limiter for API calls
@@ -87,9 +88,15 @@ export class EnrichmentService {
     }
 
     // Check credentials based on provider
-    const hasCredentials = this.config.provider === 'local'
-      ? !!this.config.localEndpoint
-      : !!this.config.apiKey;
+    let hasCredentials = false;
+    if (this.config.provider === 'premium') {
+      const client = getPremiumClient();
+      hasCredentials = client.isAuthenticated();
+    } else if (this.config.provider === 'local') {
+      hasCredentials = !!this.config.localEndpoint;
+    } else {
+      hasCredentials = !!this.config.apiKey;
+    }
 
     if (!hasCredentials) {
       console.warn('[Enrichment] No credentials configured for provider:', this.config.provider);
@@ -224,10 +231,12 @@ Return valid JSON only:
 
   /**
    * Call LLM API for enrichment
-   * Handles OpenAI, Anthropic, and local providers
+   * Handles OpenAI, Anthropic, local, and premium providers
    */
   private async callLLM(prompt: string): Promise<EnrichmentResponse> {
-    if (this.config.provider === 'openai') {
+    if (this.config.provider === 'premium') {
+      return this.callPremium(prompt);
+    } else if (this.config.provider === 'openai') {
       return this.callOpenAI(prompt);
     } else if (this.config.provider === 'anthropic') {
       return this.callAnthropic(prompt);
@@ -235,6 +244,36 @@ Return valid JSON only:
       return this.callLocal(prompt);
     } else {
       throw new Error(`Unknown provider: ${this.config.provider}`);
+    }
+  }
+
+  /**
+   * Call Premium API
+   * Routes enrichment to premium server with LM Studio backend
+   */
+  private async callPremium(prompt: string): Promise<EnrichmentResponse> {
+    const client = getPremiumClient();
+
+    if (!client.isAuthenticated()) {
+      throw new Error('Not authenticated with premium API. Please configure your license key in settings.');
+    }
+
+    // Extract content from prompt
+    // The prompt contains the full conversation text after "Content: "
+    const contentMatch = prompt.match(/Content: (.+)/s);
+    const content = contentMatch ? contentMatch[1] : prompt;
+
+    try {
+      const result = await client.enrich(content);
+
+      return {
+        keywords: result.keywords,
+        tags: result.tags,
+        context: result.context,
+      };
+    } catch (error) {
+      console.error('[Enrichment] Premium API error:', error);
+      throw new Error(`Premium API enrichment failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 

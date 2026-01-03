@@ -4,7 +4,7 @@
  */
 
 import React, { useState } from 'react';
-import { Memory } from 'engram-shared/types/memory';
+import { Memory } from '@engram/core';
 import { formatDate, truncateText } from '../../lib/formatters';
 
 interface MemoryCardProps {

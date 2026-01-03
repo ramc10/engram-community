@@ -6,7 +6,7 @@
 import React from 'react';
 import { createRoot, Root } from 'react-dom/client';
 import { MemoryPanel } from './memory-panel';
-import { Memory } from 'engram-shared/types/memory';
+import { Memory } from '@engram/core';
 
 /**
  * UI Injector Class

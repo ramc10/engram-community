@@ -1,6 +1,6 @@
 import { createClient, SupabaseClient, RealtimeChannel } from '@supabase/supabase-js';
-import { Memory } from 'engram-shared/types/memory';
-import { CryptoService, MasterKey } from 'engram-shared';
+import { Memory } from '@engram/core';
+import { CryptoService, MasterKey } from '@engram/core';
 
 /**
  * CloudSyncService - Handles cloud synchronization for premium users

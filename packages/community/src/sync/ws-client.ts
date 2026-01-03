@@ -19,7 +19,7 @@ import {
   AckMessage,
   ErrorMessage,
   HeartbeatMessage,
-} from 'engram-shared/types/sync';
+} from '@engram/core';
 import { RetryManager } from './retry-manager';
 
 export type WebSocketClientEvent =

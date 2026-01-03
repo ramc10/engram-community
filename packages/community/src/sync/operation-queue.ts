@@ -10,9 +10,9 @@
  * - Deduplication
  */
 
-import { SyncOperation } from 'engram-shared/types/sync';
+import { SyncOperation } from '@engram/core';
 import { StorageService } from '../lib/storage';
-import { generateUUID } from 'engram-shared/utils';
+import { generateUUID } from '@engram/core';
 
 export interface QueueConfig {
   maxBatchSize: number;

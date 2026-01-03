@@ -23,7 +23,8 @@
  * 5. Regenerate embedding for evolved memory
  */
 
-import type { EnrichmentConfig, MemoryWithMemA, EvolutionCheckRequest, EvolutionCheckResponse, EvolutionHistoryEntry, UUID } from 'engram-shared/types/memory';
+import type { EnrichmentConfig, MemoryWithMemA, EvolutionCheckRequest, EvolutionCheckResponse, EvolutionHistoryEntry, UUID } from '@engram/core';
+import { getPremiumClient } from './premium-api-client';
 
 /**
  * Evolution statistics for monitoring
@@ -84,6 +85,8 @@ export class EvolutionService {
   private totalTokens = 0;
   private evolutionsApplied = 0;
   private checksPerformed = 0;
+  private currentTargetMemory: MemoryWithMemA | null = null;
+  private currentNewMemory: MemoryWithMemA | null = null;
 
   constructor(private config: EnrichmentConfig) {
     // 60 calls per minute (same as other services)
@@ -111,9 +114,16 @@ export class EvolutionService {
       return { shouldEvolve: false, reason: 'Evolution disabled' };
     }
 
-    const hasCredentials = this.config.provider === 'local'
-      ? !!this.config.localEndpoint
-      : !!this.config.apiKey;
+    // Check credentials based on provider
+    let hasCredentials = false;
+    if (this.config.provider === 'premium') {
+      const client = getPremiumClient();
+      hasCredentials = client.isAuthenticated();
+    } else if (this.config.provider === 'local') {
+      hasCredentials = !!this.config.localEndpoint;
+    } else {
+      hasCredentials = !!this.config.apiKey;
+    }
 
     if (!hasCredentials) {
       return { shouldEvolve: false, reason: 'No credentials configured' };
@@ -130,6 +140,10 @@ export class EvolutionService {
         currentTags: targetMemory.tags || [],
         currentContext: targetMemory.context || '',
       };
+
+      // Store memories for premium provider to access
+      this.currentTargetMemory = targetMemory;
+      this.currentNewMemory = newMemory;
 
       const prompt = this.buildEvolutionPrompt(targetMemory, newMemory, request);
       const response = await this.callLLM(prompt);
@@ -323,11 +337,13 @@ Return valid JSON only:
   }
 
   /**
-   * Call LLM API (OpenAI/Anthropic/Local)
+   * Call LLM API (OpenAI/Anthropic/Local/Premium)
    * Same pattern as EnrichmentService and LinkDetectionService
    */
   private async callLLM(prompt: string): Promise<EvolutionCheckResponse> {
-    if (this.config.provider === 'openai') {
+    if (this.config.provider === 'premium') {
+      return this.callPremium(prompt);
+    } else if (this.config.provider === 'openai') {
       return this.callOpenAI(prompt);
     } else if (this.config.provider === 'anthropic') {
       return this.callAnthropic(prompt);
@@ -335,6 +351,45 @@ Return valid JSON only:
       return this.callLocal(prompt);
     } else {
       throw new Error(`Unknown provider: ${this.config.provider}`);
+    }
+  }
+
+  /**
+   * Call Premium API
+   * Routes evolution check to premium server with LM Studio backend
+   */
+  private async callPremium(_prompt: string): Promise<EvolutionCheckResponse> {
+    const client = getPremiumClient();
+
+    if (!client.isAuthenticated()) {
+      throw new Error('Not authenticated with premium API. Please configure your license key in settings.');
+    }
+
+    if (!this.currentTargetMemory || !this.currentNewMemory) {
+      throw new Error('No current memories available for premium API call');
+    }
+
+    try {
+      const memory = {
+        id: this.currentTargetMemory.id,
+        content: this.currentTargetMemory.content.text,
+        timestamp: this.currentTargetMemory.timestamp,
+      };
+
+      const newInformation = this.currentNewMemory.content.text;
+
+      const result = await client.checkEvolution(memory, newInformation);
+
+      return {
+        shouldEvolve: result.shouldEvolve,
+        keywords: result.updatedContent ? undefined : result.keywords,
+        tags: result.updatedContent ? undefined : result.tags,
+        context: result.updatedContent || result.context,
+        reason: result.reason,
+      };
+    } catch (error) {
+      console.error('[Evolution] Premium API error:', error);
+      throw new Error(`Premium API evolution check failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 

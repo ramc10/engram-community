@@ -1,11 +1,18 @@
 /**
  * Cloud Sync Persistence Integration Tests
  * Tests the complete flow of master key persistence and cloud sync
+ *
+ * @jest-environment node
  */
 
 import { BackgroundService } from '../../src/background/index';
-import { CryptoService, MasterKey } from 'engram-shared';
-import { Memory } from 'engram-shared/types/memory';
+import { MasterKey, Memory } from '@engram/core';
+// Import CryptoService from source file (not exported from @engram/core to avoid bundling issues)
+import { CryptoService } from '../../../core/src/crypto-service';
+
+// Set up environment variables for Supabase (required by CloudSyncService)
+process.env.PLASMO_PUBLIC_SUPABASE_URL = 'https://test.supabase.co';
+process.env.PLASMO_PUBLIC_SUPABASE_ANON_KEY = 'test-anon-key';
 
 // Mock chrome APIs
 const mockStorage = new Map<string, any>();
@@ -87,13 +94,18 @@ jest.mock('@supabase/supabase-js', () => ({
         eq: jest.fn(() => Promise.resolve({ error: null })),
       })),
     })),
-    channel: jest.fn(() => ({
-      on: jest.fn(function (this: any) {
-        return this;
-      }),
-      subscribe: jest.fn(() => Promise.resolve({ status: 'subscribed' })),
-      unsubscribe: jest.fn(() => Promise.resolve()),
-    })),
+    channel: jest.fn(() => {
+      const channelObj = {
+        on: jest.fn(function (this: any) {
+          return this;
+        }),
+        subscribe: jest.fn(function (this: any) {
+          return this;
+        }),
+        unsubscribe: jest.fn(() => Promise.resolve()),
+      };
+      return channelObj;
+    }),
   })),
 }));
 
@@ -271,6 +283,9 @@ describe('Cloud Sync Persistence Integration', () => {
           timestamp: Date.now(),
           conversationId: 'conv-1',
           deviceId: 'device-1',
+          vectorClock: { 'device-1': 1 },
+          syncStatus: 'synced',
+          tags: [],
         },
       ];
 

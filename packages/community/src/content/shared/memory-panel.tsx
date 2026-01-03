@@ -6,7 +6,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { MemoryCard } from './memory-card';
 import { ScoredMemory, contextMatcher } from './context-matcher';
-import { Memory } from 'engram-shared/types/memory';
+import { Memory } from '@engram/core';
 import { Logo } from '../../components/ui';
 
 interface MemoryPanelProps {

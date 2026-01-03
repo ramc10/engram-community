@@ -4,7 +4,7 @@
  * Uses TF-IDF and keyword matching for relevance scoring
  */
 
-import { Memory } from 'engram-shared/types/memory';
+import { Memory } from '@engram/core';
 import { sendGetMemories, sendSearchMemories } from '../../lib/messages';
 
 /**

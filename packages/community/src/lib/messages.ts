@@ -7,9 +7,9 @@
  * Background Worker → Content Script (responses)
  */
 
-import { ExtractedMessage } from 'engram-shared/types/platform-adapter';
-import { Memory, UUID } from 'engram-shared/types/memory';
-import { MemoryFilter } from 'engram-shared/types/storage';
+import { ExtractedMessage } from '@engram/core';
+import { Memory, UUID } from '@engram/core';
+import { MemoryFilter } from '@engram/core';
 
 /**
  * Message Types

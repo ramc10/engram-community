@@ -12,6 +12,12 @@ global.chrome = {
       addListener: jest.fn(),
       removeListener: jest.fn(),
     },
+    onInstalled: {
+      addListener: jest.fn(),
+    },
+    onStartup: {
+      addListener: jest.fn(),
+    },
     sendMessage: jest.fn(),
   },
   storage: {
@@ -19,6 +25,24 @@ global.chrome = {
       get: jest.fn(),
       set: jest.fn(),
       remove: jest.fn(),
+    },
+  },
+  sidePanel: {
+    setPanelBehavior: jest.fn(),
+    setOptions: jest.fn(),
+    open: jest.fn(),
+  },
+  tabs: {
+    onUpdated: {
+      addListener: jest.fn(),
+    },
+    onActivated: {
+      addListener: jest.fn(),
+    },
+  },
+  action: {
+    onClicked: {
+      addListener: jest.fn(),
     },
   },
 } as any;

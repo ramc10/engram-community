@@ -28,8 +28,8 @@ import {
   validateMessage,
 } from '../lib/messages';
 import { BackgroundService } from './index';
-import { Memory } from 'engram-shared/types/memory';
-import { generateUUID, getPlatformFromUrl } from 'engram-shared/utils';
+import { Memory } from '@engram/core';
+import { generateUUID, getPlatformFromUrl } from '@engram/core';
 import { premiumService } from '../lib/premium-service';
 import { CloudSyncService } from '../lib/cloud-sync';
 

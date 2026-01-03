@@ -1,10 +1,16 @@
 /**
- * @engram/core - Core types and interfaces
- * MIT Licensed
+ * Central export file for @engram/core
+ * Exports types, utilities, and configuration (types only, no implementations)
  */
 
-// Types
-export * from './types/memory';
+// Export all types
+export * from './types';
 
-// Interfaces
-export * from './interfaces/api-client.interface';
+// Export configuration
+export * from './config';
+
+// Export utilities
+export * from './utils';
+
+// Note: Crypto implementation (crypto-service.ts) should be imported directly
+// from the community package, not from @engram/core, to avoid bundling issues

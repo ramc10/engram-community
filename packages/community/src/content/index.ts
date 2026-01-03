@@ -6,7 +6,7 @@
 
 import { chatGPTAdapter } from './platforms/chatgpt-adapter';
 import { claudeAdapter } from './platforms/claude-adapter';
-import { IPlatformAdapter } from 'engram-shared/types/platform-adapter';
+import { IPlatformAdapter } from '@engram/core';
 import { sendInitRequest, sendSaveMessage } from '../lib/messages';
 import { uiInjector } from './shared/ui-injector';
 

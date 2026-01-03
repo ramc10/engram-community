@@ -4,7 +4,7 @@
  */
 
 import { createClient, SupabaseClient, Session, User } from '@supabase/supabase-js';
-import { SUPABASE_CONFIG, SYNC_CONFIG } from 'engram-shared/config';
+import { SUPABASE_CONFIG, SYNC_CONFIG } from '@engram/core';
 
 const API_BASE_URL = SYNC_CONFIG.API_BASE_URL;
 

@@ -20,7 +20,7 @@ import {
   METADATA_KEYS,
   MemoryWithMemA,
   EnrichmentConfig,
-} from 'engram-shared';
+} from '@engram/core';
 import { EnrichmentService } from './enrichment-service';
 import { LinkDetectionService } from './link-detection-service';
 import { EvolutionService } from './evolution-service';

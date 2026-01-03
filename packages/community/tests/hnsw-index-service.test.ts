@@ -4,28 +4,42 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
-import type { MemoryWithMemA, UUID } from 'engram-shared';
-import { generateUUID, now, createVectorClock } from 'engram-shared';
+import type { MemoryWithMemA, UUID } from '@engram/core';
+import { generateUUID, now, createVectorClock } from '@engram/core';
 import { HNSWIndexService } from '../src/lib/hnsw-index-service';
 
 // Mock EdgeVec before importing
-const mockIndex = {
-  add: jest.fn(),
-  remove: jest.fn(),
+var nextVectorId = 0; // Auto-incrementing vector ID (var is hoisted)
+var mockLoadStatic: any; // var is hoisted
+var mockIndex: any; // var is hoisted
+
+// Initialize mock index
+mockIndex = {
+  insert: jest.fn(() => nextVectorId++), // Returns auto-incrementing ID
+  softDelete: jest.fn(),
   search: jest.fn(),
-  serialize: jest.fn(),
-  deserialize: jest.fn(),
+  save: jest.fn(),
 };
 
-jest.mock('edgevec', () => ({
-  Index: jest.fn().mockImplementation(() => mockIndex),
-}));
+jest.mock('edgevec', () => {
+  // Create the static load function inside the factory
+  const loadFn = jest.fn();
+  mockLoadStatic = loadFn; // Export to outer scope
+
+  return {
+    EdgeVec: Object.assign(
+      jest.fn().mockImplementation(() => mockIndex),
+      { load: loadFn }
+    ),
+    EdgeVecConfig: jest.fn().mockImplementation((config: any) => config),
+  };
+});
 
 // Mock Dexie database
 const mockDb = {
   hnswIndex: {
     get: jest.fn(),
-    bulkPut: jest.fn(),
+    put: jest.fn(),
   },
 } as any;
 
@@ -61,18 +75,21 @@ describe('HNSWIndexService', () => {
     service = new HNSWIndexService();
     jest.clearAllMocks();
 
+    // Reset vector ID counter
+    nextVectorId = 0;
+
     // Default mock behaviors
-    mockIndex.add.mockReturnValue(undefined);
-    mockIndex.remove.mockReturnValue(undefined);
+    mockIndex.insert.mockImplementation(() => nextVectorId++);
+    mockIndex.softDelete.mockReturnValue(undefined);
     mockIndex.search.mockReturnValue([
       { id: 0, distance: 0.1 },
       { id: 1, distance: 0.2 },
       { id: 2, distance: 0.3 },
     ]);
-    mockIndex.serialize.mockReturnValue({ graph: 'serialized' });
-    mockIndex.deserialize.mockReturnValue(undefined);
+    mockIndex.save.mockResolvedValue(undefined);
+    mockLoadStatic.mockResolvedValue(mockIndex);
     mockDb.hnswIndex.get.mockResolvedValue(null);
-    mockDb.hnswIndex.bulkPut.mockResolvedValue(undefined);
+    mockDb.hnswIndex.put.mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -96,7 +113,7 @@ describe('HNSWIndexService', () => {
 
       await service.build(memories);
 
-      expect(mockIndex.add).toHaveBeenCalledTimes(3);
+      expect(mockIndex.insert).toHaveBeenCalledTimes(3);
       expect(service.isReady()).toBe(true);
       expect(service.getStats().vectorCount).toBe(3);
     });
@@ -111,7 +128,7 @@ describe('HNSWIndexService', () => {
       await service.build(memories);
 
       // Only 1 valid memory should be indexed
-      expect(mockIndex.add).toHaveBeenCalledTimes(1);
+      expect(mockIndex.insert).toHaveBeenCalledTimes(1);
       expect(service.getStats().vectorCount).toBe(1);
     });
   });
@@ -124,7 +141,7 @@ describe('HNSWIndexService', () => {
 
       await service.build(memories);
 
-      expect(mockIndex.add).toHaveBeenCalledTimes(100);
+      expect(mockIndex.insert).toHaveBeenCalledTimes(100);
       expect(service.isReady()).toBe(true);
       expect(service.getStats().vectorCount).toBe(100);
     });
@@ -147,13 +164,13 @@ describe('HNSWIndexService', () => {
     it('should handle empty input', async () => {
       await service.build([]);
 
-      expect(mockIndex.add).not.toHaveBeenCalled();
+      expect(mockIndex.insert).not.toHaveBeenCalled();
       expect(service.isReady()).toBe(false);
       expect(service.getStats().vectorCount).toBe(0);
     });
 
     it('should handle build errors gracefully', async () => {
-      mockIndex.add.mockImplementation(() => {
+      mockIndex.insert.mockImplementation(() => {
         throw new Error('EdgeVec error');
       });
 
@@ -199,8 +216,8 @@ describe('HNSWIndexService', () => {
 
       await service.add(memory.id, memory.embedding!);
 
-      expect(mockIndex.add).toHaveBeenCalledTimes(1);
-      expect(mockIndex.add).toHaveBeenCalledWith(3, Array.from(memory.embedding!));
+      expect(mockIndex.insert).toHaveBeenCalledTimes(1);
+      expect(mockIndex.insert).toHaveBeenCalledWith(memory.embedding!);
       expect(service.getStats().vectorCount).toBe(4);
     });
 
@@ -212,7 +229,7 @@ describe('HNSWIndexService', () => {
 
       await service.remove(memory.id);
 
-      expect(mockIndex.remove).toHaveBeenCalledTimes(1);
+      expect(mockIndex.softDelete).toHaveBeenCalledTimes(1);
       expect(service.getStats().vectorCount).toBe(3); // Back to 3 (build had 3)
     });
 
@@ -227,9 +244,9 @@ describe('HNSWIndexService', () => {
       // Update with new embedding
       await service.update(memory.id, newEmbedding);
 
-      expect(mockIndex.remove).toHaveBeenCalledTimes(1);
-      expect(mockIndex.add).toHaveBeenCalledTimes(1);
-      expect(mockIndex.add).toHaveBeenCalledWith(4, Array.from(newEmbedding));
+      expect(mockIndex.softDelete).toHaveBeenCalledTimes(1);
+      expect(mockIndex.insert).toHaveBeenCalledTimes(1);
+      expect(mockIndex.insert).toHaveBeenCalledWith(newEmbedding);
     });
 
     it('should handle adding duplicate ID (should update)', async () => {
@@ -240,15 +257,15 @@ describe('HNSWIndexService', () => {
       await service.add(memory.id, memory.embedding!);
 
       // First add, then update (remove + add)
-      expect(mockIndex.add).toHaveBeenCalledTimes(2);
-      expect(mockIndex.remove).toHaveBeenCalledTimes(1);
+      expect(mockIndex.insert).toHaveBeenCalledTimes(2);
+      expect(mockIndex.softDelete).toHaveBeenCalledTimes(1);
     });
 
     it('should handle removing non-existent ID (no-op)', async () => {
       await service.remove('non-existent-id' as UUID);
 
       // Should not throw, just log warning
-      expect(mockIndex.remove).not.toHaveBeenCalled();
+      expect(mockIndex.softDelete).not.toHaveBeenCalled();
     });
 
     it('should reject invalid embedding dimensions', async () => {
@@ -280,22 +297,20 @@ describe('HNSWIndexService', () => {
 
       expect(mockIndex.search).toHaveBeenCalledTimes(1);
       expect(mockIndex.search).toHaveBeenCalledWith(
-        Array.from(queryEmbedding),
-        5,
-        50 // default efSearch
+        queryEmbedding,
+        5
       );
       expect(results).toHaveLength(3); // Mock returns 3 results
     });
 
-    it('should search with custom efSearch parameter', async () => {
+    it('should search with k=10', async () => {
       const queryEmbedding = new Float32Array(Array(384).fill(0.7));
 
-      await service.search(queryEmbedding, 10, 100);
+      await service.search(queryEmbedding, 10);
 
       expect(mockIndex.search).toHaveBeenCalledWith(
-        Array.from(queryEmbedding),
-        10,
-        100 // custom efSearch
+        queryEmbedding,
+        10
       );
     });
 
@@ -356,32 +371,27 @@ describe('HNSWIndexService', () => {
     it('should serialize and persist to IndexedDB', async () => {
       await service.persist(mockDb);
 
-      expect(mockIndex.serialize).toHaveBeenCalledTimes(1);
-      expect(mockDb.hnswIndex.bulkPut).toHaveBeenCalledTimes(1);
+      expect(mockIndex.save).toHaveBeenCalledTimes(1);
+      expect(mockIndex.save).toHaveBeenCalledWith('engram-hnsw-index');
+      expect(mockDb.hnswIndex.put).toHaveBeenCalledTimes(1);
 
-      const putCall = mockDb.hnswIndex.bulkPut.mock.calls[0][0];
-      expect(putCall).toHaveLength(2); // graph + metadata
-      expect(putCall[0].key).toBe('graph');
-      expect(putCall[1].key).toBe('metadata');
-      expect(putCall[0].vectorCount).toBe(2);
+      const putCall = mockDb.hnswIndex.put.mock.calls[0][0];
+      expect(putCall.key).toBe('metadata');
+      expect(putCall.vectorCount).toBe(2);
     });
 
     it('should load index from IndexedDB', async () => {
+      // Mock EdgeVec.load to return the mockIndex
+      mockLoadStatic.mockResolvedValue(mockIndex);
+
+      // Mock metadata from database
       mockDb.hnswIndex.get.mockImplementation((key: string) => {
-        if (key === 'graph') {
-          return Promise.resolve({
-            key: 'graph',
-            data: { graph: 'serialized' },
-            lastUpdated: Date.now(),
-            vectorCount: 2,
-          });
-        } else if (key === 'metadata') {
+        if (key === 'metadata') {
           return Promise.resolve({
             key: 'metadata',
             data: {
               vectorIdMap: [['mem1', 0], ['mem2', 1]],
               indexToIdMap: [[0, 'mem1'], [1, 'mem2']],
-              nextVectorId: 2,
             },
             lastUpdated: Date.now(),
             vectorCount: 2,
@@ -394,12 +404,15 @@ describe('HNSWIndexService', () => {
       const loaded = await newService.load(mockDb);
 
       expect(loaded).toBe(true);
-      expect(mockIndex.deserialize).toHaveBeenCalledTimes(1);
+      expect(mockLoadStatic).toHaveBeenCalledTimes(1);
+      expect(mockLoadStatic).toHaveBeenCalledWith('engram-hnsw-index');
       expect(newService.isReady()).toBe(true);
       expect(newService.getStats().vectorCount).toBe(2);
     });
 
     it('should handle missing IndexedDB entries', async () => {
+      // Mock EdgeVec.load to fail (no saved index)
+      mockLoadStatic.mockRejectedValue(new Error('No saved index'));
       mockDb.hnswIndex.get.mockResolvedValue(null);
 
       const newService = new HNSWIndexService();
@@ -410,16 +423,8 @@ describe('HNSWIndexService', () => {
     });
 
     it('should handle corrupted serialization data', async () => {
-      mockDb.hnswIndex.get.mockResolvedValue({
-        key: 'graph',
-        data: null, // Corrupted
-        lastUpdated: Date.now(),
-        vectorCount: 2,
-      });
-
-      mockIndex.deserialize.mockImplementation(() => {
-        throw new Error('Deserialization error');
-      });
+      // Mock EdgeVec.load to throw error
+      mockLoadStatic.mockRejectedValue(new Error('Deserialization error'));
 
       const newService = new HNSWIndexService();
       const loaded = await newService.load(mockDb);
@@ -433,8 +438,8 @@ describe('HNSWIndexService', () => {
 
       await emptyService.persist(mockDb);
 
-      expect(mockIndex.serialize).not.toHaveBeenCalled();
-      expect(mockDb.hnswIndex.bulkPut).not.toHaveBeenCalled();
+      expect(mockIndex.save).not.toHaveBeenCalled();
+      expect(mockDb.hnswIndex.put).not.toHaveBeenCalled();
     });
   });
 

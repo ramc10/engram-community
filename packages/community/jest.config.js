@@ -16,9 +16,10 @@ module.exports = {
   coverageReporters: ['text', 'lcov', 'html'],
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json'],
   moduleNameMapper: {
-    '^engram-shared$': '<rootDir>/../shared/src/index.ts',
-    '^engram-shared/(.*)$': '<rootDir>/../shared/src/$1',
-    '^dexie$': '<rootDir>/../node_modules/dexie/dist/dexie.js',
+    '^@engram/core$': '<rootDir>/../core/src/index.ts',
+    '^@engram/core/(.*)$': '<rootDir>/../core/src/$1',
+    '^dexie$': '<rootDir>/../../node_modules/dexie/dist/dexie.js',
+    '^edgevec$': '<rootDir>/tests/__mocks__/edgevec.ts',
     '@xenova/transformers': '<rootDir>/tests/__mocks__/@xenova/transformers.ts',
   },
   setupFilesAfterEnv: ['<rootDir>/tests/setup.ts'],

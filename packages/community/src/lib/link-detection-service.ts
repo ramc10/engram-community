@@ -14,6 +14,7 @@ import type {
   UUID,
 } from '../../../shared/src/types/memory';
 import { getEmbeddingService, type MemoryWithEmbedding, type SimilarityResult } from './embedding-service';
+import { getPremiumClient } from './premium-api-client';
 
 /**
  * Rate limiter for API calls
@@ -106,6 +107,7 @@ export class LinkDetectionService {
   private totalTokens = 0;
   private linksCreated = 0;
   private memoryCount = 0;
+  private currentRequest: LinkDetectionRequest | null = null;
 
   constructor(private config: EnrichmentConfig) {
     // 60 calls per minute (conservative, same as enrichment)
@@ -135,9 +137,15 @@ export class LinkDetectionService {
     }
 
     // Check credentials based on provider
-    const hasCredentials = this.config.provider === 'local'
-      ? !!this.config.localEndpoint
-      : !!this.config.apiKey;
+    let hasCredentials = false;
+    if (this.config.provider === 'premium') {
+      const client = getPremiumClient();
+      hasCredentials = client.isAuthenticated();
+    } else if (this.config.provider === 'local') {
+      hasCredentials = !!this.config.localEndpoint;
+    } else {
+      hasCredentials = !!this.config.apiKey;
+    }
 
     if (!hasCredentials) {
       console.warn('[LinkDetection] No credentials configured for provider:', this.config.provider);
@@ -277,6 +285,9 @@ export class LinkDetectionService {
           })),
         };
 
+        // Store request for premium provider to access structured data
+        this.currentRequest = request;
+
         const prompt = this.buildPrompt(request);
         const response = await this.callLLM(prompt);
 
@@ -374,10 +385,12 @@ Return valid JSON only:
 
   /**
    * Call LLM API for link detection
-   * Handles OpenAI, Anthropic, and local providers
+   * Handles OpenAI, Anthropic, local, and premium providers
    */
   private async callLLM(prompt: string): Promise<LinkDetectionResponse> {
-    if (this.config.provider === 'openai') {
+    if (this.config.provider === 'premium') {
+      return this.callPremium(prompt);
+    } else if (this.config.provider === 'openai') {
       return this.callOpenAI(prompt);
     } else if (this.config.provider === 'anthropic') {
       return this.callAnthropic(prompt);
@@ -385,6 +398,53 @@ Return valid JSON only:
       return this.callLocal(prompt);
     } else {
       throw new Error(`Unknown provider: ${this.config.provider}`);
+    }
+  }
+
+  /**
+   * Call Premium API
+   * Routes link detection to premium server with LM Studio backend
+   */
+  private async callPremium(_prompt: string): Promise<LinkDetectionResponse> {
+    const client = getPremiumClient();
+
+    if (!client.isAuthenticated()) {
+      throw new Error('Not authenticated with premium API. Please configure your license key in settings.');
+    }
+
+    if (!this.currentRequest) {
+      throw new Error('No current request available for premium API call');
+    }
+
+    try {
+      const source = this.currentRequest.sourceMemory;
+
+      // Build request in premium API format
+      const newMemory = {
+        id: source.id,
+        content: source.content.text,
+        context: source.context,
+      };
+
+      const existingMemories = this.currentRequest.candidates.map(candidate => ({
+        id: candidate.id,
+        content: candidate.content,
+        context: candidate.context,
+      }));
+
+      const result = await client.detectLinks(newMemory, existingMemories);
+
+      // Transform premium API response to LinkDetectionResponse format
+      return {
+        links: result.links.map(link => ({
+          memoryId: link.targetId,
+          confidence: link.confidence,
+          reason: link.reason,
+        })),
+      };
+    } catch (error) {
+      console.error('[LinkDetection] Premium API error:', error);
+      throw new Error(`Premium API link detection failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
