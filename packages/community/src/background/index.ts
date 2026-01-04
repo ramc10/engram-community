@@ -10,8 +10,8 @@
  */
 
 import { MasterKey, generateUUID } from '@engram/core';
-// Import CryptoService from source file (not exported from @engram/core to avoid bundling issues)
-import { CryptoService } from '../../../core/src/crypto-service';
+// Import CryptoService from local lib (not from @engram/core to avoid bundling issues)
+import { CryptoService } from '../lib/crypto-service';
 import { StorageService } from '../lib/storage';
 import { MessageType, Message, createErrorResponse } from '../lib/messages';
 import { handleMessage } from './message-handler';
@@ -112,6 +112,9 @@ class BackgroundService {
       console.log('[Engram] Background service ready');
     } catch (error) {
       console.error('[Engram] Initialization failed:', error);
+      console.error('[Engram] Error name:', error?.name);
+      console.error('[Engram] Error message:', error?.message);
+      console.error('[Engram] Error stack:', error?.stack);
       throw error;
     }
   }
@@ -488,6 +491,11 @@ chrome.runtime.onInstalled.addListener(async (details) => {
     }
   } catch (error) {
     console.error('[Engram] Failed to initialize on install:', error);
+    console.error('[Engram] Install error details:', {
+      name: error?.name,
+      message: error?.message,
+      stack: error?.stack
+    });
   }
 });
 
@@ -501,6 +509,11 @@ chrome.runtime.onStartup.addListener(async () => {
     await backgroundService.initialize();
   } catch (error) {
     console.error('[Engram] Failed to initialize on startup:', error);
+    console.error('[Engram] Startup error details:', {
+      name: error?.name,
+      message: error?.message,
+      stack: error?.stack
+    });
   }
 });
 

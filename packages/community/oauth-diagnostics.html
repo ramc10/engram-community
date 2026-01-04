@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>OAuth Diagnostics - Engram Extension</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      max-width: 800px;
+      margin: 40px auto;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+    .container {
+      background: white;
+      padding: 30px;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    h1 {
+      color: #333;
+      margin-top: 0;
+    }
+    .info-box {
+      background: #f0f9ff;
+      border-left: 4px solid #0284c7;
+      padding: 15px;
+      margin: 20px 0;
+      border-radius: 4px;
+    }
+    .code {
+      background: #1e293b;
+      color: #e2e8f0;
+      padding: 15px;
+      border-radius: 4px;
+      font-family: 'Monaco', 'Menlo', monospace;
+      font-size: 14px;
+      overflow-x: auto;
+      margin: 10px 0;
+    }
+    button {
+      background: #0284c7;
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 6px;
+      font-size: 16px;
+      cursor: pointer;
+      margin: 10px 0;
+    }
+    button:hover {
+      background: #0369a1;
+    }
+    .result {
+      background: #f0fdf4;
+      border: 2px solid #22c55e;
+      padding: 20px;
+      border-radius: 6px;
+      margin: 20px 0;
+      display: none;
+    }
+    .result.show {
+      display: block;
+    }
+    .url {
+      font-family: 'Monaco', 'Menlo', monospace;
+      font-size: 16px;
+      color: #0369a1;
+      font-weight: bold;
+      word-break: break-all;
+      margin: 10px 0;
+    }
+    .step {
+      margin: 20px 0;
+      padding: 15px;
+      background: #fefce8;
+      border-left: 4px solid #facc15;
+      border-radius: 4px;
+    }
+    .step h3 {
+      margin-top: 0;
+      color: #854d0e;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🔐 OAuth Diagnostics for Engram Extension</h1>
+
+    <div class="info-box">
+      <strong>Purpose:</strong> This page helps you find the correct OAuth redirect URL for your Chrome extension build (dev or prod).
+    </div>
+
+    <h2>Step 1: Get Your Redirect URL</h2>
+    <p>Click the button below to get your extension's OAuth redirect URL:</p>
+
+    <button onclick="getRedirectURL()">Get OAuth Redirect URL</button>
+
+    <div id="result" class="result">
+      <h3>✅ Your OAuth Redirect URL:</h3>
+      <div id="redirectUrl" class="url"></div>
+      <p><strong>Extension ID:</strong> <span id="extensionId" class="url"></span></p>
+    </div>
+
+    <div class="step">
+      <h3>Step 2: Add to Google Cloud Console</h3>
+      <ol>
+        <li>Go to <a href="https://console.cloud.google.com/apis/credentials" target="_blank">Google Cloud Console - Credentials</a></li>
+        <li>Click on your OAuth 2.0 Client ID (e.g., "Engram Extension")</li>
+        <li>Under "Authorized redirect URIs", add:
+          <div class="code" id="googleRedirectUri">Click "Get OAuth Redirect URL" above</div>
+        </li>
+        <li>Also ensure this Supabase callback URL is present:
+          <div class="code">https://wtylimoxssbgurawreps.supabase.co/auth/v1/callback</div>
+        </li>
+        <li>Click <strong>Save</strong></li>
+      </ol>
+    </div>
+
+    <div class="step">
+      <h3>Step 3: Test Google Sign-In</h3>
+      <ol>
+        <li>Wait 1-2 minutes for Google's changes to propagate</li>
+        <li>Reload your Engram extension in <code>chrome://extensions</code></li>
+        <li>Open Engram side panel on ChatGPT/Claude/Perplexity</li>
+        <li>Click "Sign in with Google"</li>
+        <li>Complete the OAuth flow</li>
+      </ol>
+    </div>
+
+    <h2>Troubleshooting</h2>
+    <div class="info-box">
+      <p><strong>If button doesn't work:</strong></p>
+      <ol>
+        <li>Open DevTools Console (F12)</li>
+        <li>Run this command:
+          <div class="code">chrome.identity.getRedirectURL()</div>
+        </li>
+        <li>Copy the output and use it in Step 2 above</li>
+      </ol>
+    </div>
+
+    <div class="info-box">
+      <p><strong>Different redirect URLs for dev vs prod:</strong></p>
+      <p>Each extension build (dev/prod) gets a different extension ID when loaded, which means different redirect URLs. You need to add BOTH to Google Cloud Console:</p>
+      <ul>
+        <li>Dev build redirect URL</li>
+        <li>Prod build redirect URL</li>
+      </ul>
+    </div>
+  </div>
+
+  <script>
+    function getRedirectURL() {
+      if (typeof chrome === 'undefined' || !chrome.identity) {
+        alert('This page must be opened from a Chrome extension context. Please load this as a page in your extension or run the command in DevTools console: chrome.identity.getRedirectURL()');
+        return;
+      }
+
+      const redirectUrl = chrome.identity.getRedirectURL();
+      const extensionId = chrome.runtime.id;
+
+      document.getElementById('redirectUrl').textContent = redirectUrl;
+      document.getElementById('extensionId').textContent = extensionId;
+      document.getElementById('googleRedirectUri').textContent = redirectUrl;
+      document.getElementById('result').classList.add('show');
+
+      console.log('OAuth Redirect URL:', redirectUrl);
+      console.log('Extension ID:', extensionId);
+    }
+  </script>
+</body>
+</html>

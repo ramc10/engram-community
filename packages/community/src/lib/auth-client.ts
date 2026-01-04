@@ -174,35 +174,62 @@ export class AuthClient {
           const hashParams = new URLSearchParams(url.hash.substring(1));
           const accessToken = hashParams.get('access_token');
           const refreshToken = hashParams.get('refresh_token');
+          const expiresIn = hashParams.get('expires_in');
+
+          console.log('[Auth] Extracted tokens from URL');
+          console.log('[Auth] Access token present:', !!accessToken);
+          console.log('[Auth] Refresh token present:', !!refreshToken);
 
           if (!accessToken) {
             reject(new Error('No access token in OAuth response'));
             return;
           }
 
-          // Set the session with the OAuth tokens
-          const { data: sessionData, error: sessionError } = await this.supabase.auth.setSession({
-            access_token: accessToken,
-            refresh_token: refreshToken || '',
-          });
+          try {
+            // Set the session with the OAuth tokens
+            console.log('[Auth] Setting session with tokens...');
+            const { data: sessionData, error: sessionError } = await this.supabase.auth.setSession({
+              access_token: accessToken,
+              refresh_token: refreshToken || '',
+            });
 
-          if (sessionError || !sessionData.user || !sessionData.session) {
-            reject(new Error(sessionError?.message || 'Failed to establish session'));
-            return;
+            console.log('[Auth] setSession result:', { sessionData, sessionError });
+
+            if (sessionError) {
+              console.error('[Auth] Session error:', sessionError);
+              reject(new Error(`Failed to establish session: ${sessionError.message}`));
+              return;
+            }
+
+            if (!sessionData.user || !sessionData.session) {
+              console.error('[Auth] No user or session in response');
+              reject(new Error('Failed to establish session - no user or session returned'));
+              return;
+            }
+
+            this.session = sessionData.session;
+            console.log('[Auth] Session established successfully');
+
+            resolve({
+              token: sessionData.session.access_token,
+              expiresIn: String(sessionData.session.expires_in || expiresIn || 3600),
+              user: {
+                id: sessionData.user.id,
+                email: sessionData.user.email!,
+                emailVerified: !!sessionData.user.email_confirmed_at,
+                createdAt: new Date(sessionData.user.created_at).getTime() / 1000,
+              },
+            });
+          } catch (error) {
+            console.error('[Auth] Exception during setSession:', error);
+            const err = error as any;
+            console.error('[Auth] Error details:', {
+              name: err?.name,
+              message: err?.message,
+              stack: err?.stack,
+            });
+            reject(new Error(`OAuth session error: ${err?.message || 'Unknown error'}`));
           }
-
-          this.session = sessionData.session;
-
-          resolve({
-            token: sessionData.session.access_token,
-            expiresIn: String(sessionData.session.expires_in || 3600),
-            user: {
-              id: sessionData.user.id,
-              email: sessionData.user.email!,
-              emailVerified: !!sessionData.user.email_confirmed_at,
-              createdAt: new Date(sessionData.user.created_at).getTime() / 1000,
-            },
-          });
         }
       );
     });

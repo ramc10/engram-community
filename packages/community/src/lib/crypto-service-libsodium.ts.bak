@@ -1,0 +1,348 @@
+/**
+ * Cryptography service implementation using libsodium
+ * Implements zero-knowledge encryption with E2E security
+ */
+
+import {
+  ICryptoService,
+  MasterKey,
+  DeviceKeyPair,
+  EncryptedBlob,
+  SearchTag,
+  KeyDerivationConfig,
+  Timestamp,
+  CRYPTO_CONFIG,
+  uint8ArrayToBase64,
+  base64ToUint8Array,
+  stringToUint8Array,
+  uint8ArrayToString,
+} from '@engram/core';
+
+/**
+ * Key derivation configuration matching spec
+ */
+const KEY_DERIVATION_CONFIG: KeyDerivationConfig = {
+  algorithm: 'Argon2id',
+  saltBytes: 16, // crypto_pwhash_SALTBYTES
+  iterations: 4, // Time cost
+  memoryKiB: 65536, // 64 MB
+  parallelism: 1,
+  outputKeyBytes: 32, // 256-bit key
+};
+
+/**
+ * CryptoService implementation
+ */
+export class CryptoService implements ICryptoService {
+  private initialized = false;
+  private sodium: any = null;
+
+  /**
+   * Initialize libsodium (must be called before any crypto operations)
+   * Uses dynamic import to avoid bundling issues with Plasmo
+   */
+  async initialize(): Promise<void> {
+    if (this.initialized) return;
+
+    // Dynamic import to avoid Plasmo bundling issues
+    const libsodiumModule = await import('libsodium-wrappers');
+    const _sodium = libsodiumModule.default || libsodiumModule;
+
+    await _sodium.ready;
+    this.sodium = _sodium;
+    this.initialized = true;
+  }
+
+  /**
+   * Ensure libsodium is initialized
+   */
+  private ensureInitialized(): any {
+    if (!this.initialized || !this.sodium) {
+      throw new Error('CryptoService not initialized. Call initialize() first.');
+    }
+    return this.sodium;
+  }
+
+  /**
+   * Derive a master key from a passphrase using Argon2id
+   */
+  async deriveKey(passphrase: string, salt?: Uint8Array): Promise<MasterKey> {
+    const sodium = this.ensureInitialized();
+
+    // Generate salt if not provided
+    const keySalt = salt || this.generateSalt();
+
+    // Derive key using Argon2id
+    // libsodium uses Argon2i by default, but we want Argon2id for better security
+    const key = sodium.crypto_pwhash(
+      KEY_DERIVATION_CONFIG.outputKeyBytes,
+      passphrase,
+      keySalt,
+      KEY_DERIVATION_CONFIG.iterations, // ops limit (time cost)
+      KEY_DERIVATION_CONFIG.memoryKiB * 1024, // mem limit in bytes
+      sodium.crypto_pwhash_ALG_ARGON2ID13
+    );
+
+    return {
+      key,
+      salt: keySalt,
+      derivedAt: Date.now(),
+    };
+  }
+
+  /**
+   * Generate Ed25519 key pair for device signing
+   */
+  async generateDeviceKeyPair(): Promise<DeviceKeyPair> {
+    const sodium = this.ensureInitialized();
+
+    const keyPair = sodium.crypto_sign_keypair();
+
+    return {
+      publicKey: uint8ArrayToBase64(keyPair.publicKey),
+      privateKey: keyPair.privateKey,
+      algorithm: 'Ed25519',
+    };
+  }
+
+  /**
+   * Encrypt data using XChaCha20-Poly1305
+   */
+  async encrypt(data: Uint8Array | string, key: Uint8Array): Promise<EncryptedBlob> {
+    const sodium = this.ensureInitialized();
+
+    // Validate key length
+    if (key.length !== CRYPTO_CONFIG.KEY_SIZE) {
+      throw new Error(
+        `Invalid key size. Expected ${CRYPTO_CONFIG.KEY_SIZE} bytes, got ${key.length}`
+      );
+    }
+
+    // Generate nonce
+    const nonce = this.generateNonce();
+
+    // Encrypt with XChaCha20-Poly1305
+    // This includes authentication tag (MAC) in the ciphertext
+    // Note: libsodium-wrappers-sumo in Node.js/Jest environments has issues with
+    // Uint8Array from TextEncoder, so we also accept strings directly
+    const ciphertext = sodium.crypto_aead_xchacha20poly1305_ietf_encrypt(
+      data,
+      null, // No additional data
+      null, // No secret nonce
+      nonce,
+      key
+    );
+
+    // Extract auth tag (last 16 bytes)
+    const authTag = ciphertext.slice(-16);
+
+    return {
+      version: 1,
+      algorithm: 'XChaCha20-Poly1305',
+      nonce,
+      ciphertext,
+      authTag,
+    };
+  }
+
+  /**
+   * Decrypt data using XChaCha20-Poly1305
+   */
+  async decrypt(blob: EncryptedBlob, key: Uint8Array): Promise<Uint8Array> {
+    const sodium = this.ensureInitialized();
+
+    // Validate key length
+    if (key.length !== CRYPTO_CONFIG.KEY_SIZE) {
+      throw new Error(
+        `Invalid key size. Expected ${CRYPTO_CONFIG.KEY_SIZE} bytes, got ${key.length}`
+      );
+    }
+
+    // Validate version
+    if (blob.version !== 1) {
+      throw new Error(`Unsupported encryption version: ${blob.version}`);
+    }
+
+    // Validate algorithm
+    if (blob.algorithm !== 'XChaCha20-Poly1305') {
+      throw new Error(`Unsupported algorithm: ${blob.algorithm}`);
+    }
+
+    try {
+      // Decrypt with XChaCha20-Poly1305
+      // The ciphertext already includes the auth tag
+      const plaintext = sodium.crypto_aead_xchacha20poly1305_ietf_decrypt(
+        null, // No secret nonce
+        blob.ciphertext,
+        null, // No additional data
+        blob.nonce,
+        key
+      );
+
+      return plaintext;
+    } catch (error) {
+      throw new Error(`Decryption failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Sign data with Ed25519 private key
+   */
+  async sign(data: Uint8Array, privateKey: Uint8Array): Promise<string> {
+    const sodium = this.ensureInitialized();
+
+    // Create detached signature
+    const signature = sodium.crypto_sign_detached(data, privateKey);
+
+    // Return as base64
+    return uint8ArrayToBase64(signature);
+  }
+
+  /**
+   * Verify Ed25519 signature
+   */
+  async verify(data: Uint8Array, signature: string, publicKey: string): Promise<boolean> {
+    const sodium = this.ensureInitialized();
+
+    try {
+      const signatureBytes = base64ToUint8Array(signature);
+      const publicKeyBytes = base64ToUint8Array(publicKey);
+
+      // Verify detached signature
+      return sodium.crypto_sign_verify_detached(signatureBytes, data, publicKeyBytes);
+    } catch (error) {
+      // Invalid signature format or verification failed
+      return false;
+    }
+  }
+
+  /**
+   * Generate searchable encryption tag using HMAC
+   */
+  async generateSearchTag(keyword: string, searchKey: Uint8Array): Promise<SearchTag> {
+    const sodium = this.ensureInitialized();
+
+    // Normalize keyword (lowercase, trim)
+    const normalizedKeyword = keyword.toLowerCase().trim();
+
+    // Generate HMAC-SHA256 tag
+    const keywordBytes = stringToUint8Array(normalizedKeyword);
+    const tag = sodium.crypto_auth(keywordBytes, searchKey);
+
+    return {
+      tag: uint8ArrayToBase64(tag),
+      algorithm: 'HMAC-SHA256',
+    };
+  }
+
+  /**
+   * Generate random salt for key derivation
+   */
+  generateSalt(): Uint8Array {
+    const sodium = this.ensureInitialized();
+    return sodium.randombytes_buf(KEY_DERIVATION_CONFIG.saltBytes);
+  }
+
+  /**
+   * Generate random nonce for encryption
+   */
+  generateNonce(): Uint8Array {
+    const sodium = this.ensureInitialized();
+    return sodium.randombytes_buf(CRYPTO_CONFIG.NONCE_SIZE);
+  }
+
+  /**
+   * Hash data using BLAKE2b (fast, secure hash)
+   */
+  async hash(data: Uint8Array): Promise<string> {
+    const sodium = this.ensureInitialized();
+
+    // Use BLAKE2b-256 (32 bytes output)
+    const hash = sodium.crypto_generichash(32, data);
+    return uint8ArrayToBase64(hash);
+  }
+
+  /**
+   * Encrypt a string and return base64-encoded result
+   */
+  async encryptString(text: string, key: Uint8Array): Promise<string> {
+    // Pass string directly to encrypt() to work around libsodium Uint8Array issues in Node.js
+    const blob = await this.encrypt(text, key);
+
+    // Serialize blob to JSON then base64
+    const serialized = JSON.stringify({
+      v: blob.version,
+      a: blob.algorithm,
+      n: uint8ArrayToBase64(blob.nonce),
+      c: uint8ArrayToBase64(blob.ciphertext),
+    });
+
+    return uint8ArrayToBase64(stringToUint8Array(serialized));
+  }
+
+  /**
+   * Decrypt a base64-encoded encrypted string
+   */
+  async decryptString(encrypted: string, key: Uint8Array): Promise<string> {
+    // Decode from base64
+    const serialized = uint8ArrayToString(base64ToUint8Array(encrypted));
+    const parsed = JSON.parse(serialized);
+
+    // Reconstruct blob
+    const blob: EncryptedBlob = {
+      version: parsed.v,
+      algorithm: parsed.a,
+      nonce: base64ToUint8Array(parsed.n),
+      ciphertext: base64ToUint8Array(parsed.c),
+      authTag: new Uint8Array(16), // Will be extracted from ciphertext
+    };
+
+    const plaintext = await this.decrypt(blob, key);
+    return uint8ArrayToString(plaintext);
+  }
+
+  /**
+   * Generate a random encryption key
+   */
+  generateEncryptionKey(): Uint8Array {
+    const sodium = this.ensureInitialized();
+    return sodium.randombytes_buf(CRYPTO_CONFIG.KEY_SIZE);
+  }
+
+  /**
+   * Derive a search key from the master key
+   * Uses HKDF-like derivation with a fixed context
+   */
+  async deriveSearchKey(masterKey: Uint8Array): Promise<Uint8Array> {
+    const sodium = this.ensureInitialized();
+
+    // Use BLAKE2b with a context string for key derivation
+    const context = stringToUint8Array('engram-search-key');
+    const combinedInput = new Uint8Array(masterKey.length + context.length);
+    combinedInput.set(masterKey);
+    combinedInput.set(context, masterKey.length);
+
+    return sodium.crypto_generichash(32, combinedInput);
+  }
+}
+
+/**
+ * Global singleton instance
+ */
+let cryptoServiceInstance: CryptoService | null = null;
+
+/**
+ * Get the global CryptoService instance
+ */
+export async function getCryptoService(): Promise<CryptoService> {
+  if (!cryptoServiceInstance) {
+    cryptoServiceInstance = new CryptoService();
+    await cryptoServiceInstance.initialize();
+  }
+  return cryptoServiceInstance;
+}
+
+/**
+ * Export singleton for direct use
+ */
+export const cryptoService = new CryptoService();

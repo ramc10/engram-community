@@ -315,8 +315,9 @@ function PlatformLogo({ platform }: { platform?: string }) {
     case 'claude':
       return (
         <div style={style}>
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M17.034 8.66c-.742-2.337-2.724-4.62-5.377-5.658a.8.8 0 0 0-.314 0C8.69 4.04 6.708 6.323 5.966 8.66c-.47 1.48-.429 3.065.115 4.463.544 1.398 1.567 2.577 2.88 3.32a6.563 6.563 0 0 0 6.078 0c1.313-.743 2.336-1.922 2.88-3.32.544-1.398.585-2.983.115-4.463zm-5.034 9.84c-3.59 0-6.5-2.91-6.5-6.5s2.91-6.5 6.5-6.5 6.5 2.91 6.5 6.5-2.91 6.5-6.5 6.5z"/>
+          <svg width="12" height="12" viewBox="0 0 30 30" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect x="3" y="3" width="24" height="24" rx="5" fill="#CC9B7A"/>
+            <path d="M19.5 8L17 15.5L22.5 18L17 20.5L19.5 28L15 22L10.5 28L13 20.5L7.5 18L13 15.5L10.5 8L15 14L19.5 8Z" fill="#1A1A1A"/>
           </svg>
           <span>Claude</span>
         </div>
@@ -324,8 +325,9 @@ function PlatformLogo({ platform }: { platform?: string }) {
     case 'perplexity':
       return (
         <div style={style}>
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-            <circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="12" cy="12" r="10" fill="#20808D"/>
+            <path d="M12 7V12M12 12V17M12 12H7M12 12H17" stroke="white" strokeWidth="2" strokeLinecap="round"/>
           </svg>
           <span>Perplexity</span>
         </div>
@@ -1043,14 +1045,14 @@ function SidePanelContent() {
                               alignItems: 'center',
                               gap: '6px',
                             }}>
-                              <div style={{
-                                fontSize: '11px',
-                                color: colors.text.secondary,
-                                fontWeight: 600,
-                                textTransform: 'uppercase',
-                              }}>
-                                {memory.content.role === 'user' ? '👤 You' : '🤖 AI'}
-                              </div>
+                              {/* Platform Badge */}
+                              {memory.platform && (
+                                <div style={{
+                                  color: colors.text.secondary,
+                                }}>
+                                  <PlatformLogo platform={memory.platform} />
+                                </div>
+                              )}
                               {/* Evolution Badge */}
                               {(() => {
                                 const memoryWithEvolution = memory as any;
@@ -1092,13 +1094,6 @@ function SidePanelContent() {
                           }}>
                             {isExpanded ? memory.content.text : summarizeText(memory.content.text)}
                           </div>
-                          {memory.platform && (
-                            <div style={{
-                              color: colors.text.tertiary,
-                            }}>
-                              <PlatformLogo platform={memory.platform} />
-                            </div>
-                          )}
 
                           {/* Related Memories Section */}
                           {(() => {
@@ -1688,7 +1683,7 @@ function SidePanelContent() {
                     </div>
                     <select
                       value={enrichmentConfig.provider}
-                      onChange={(e) => updateEnrichmentConfig({ provider: e.target.value as 'openai' | 'anthropic' | 'local' })}
+                      onChange={(e) => updateEnrichmentConfig({ provider: e.target.value as 'openai' | 'anthropic' | 'local' | 'premium' })}
                       disabled={isUpdatingEnrichment}
                       style={{
                         width: '100%',
@@ -1704,6 +1699,7 @@ function SidePanelContent() {
                     >
                       <option value="openai">OpenAI (GPT-4o-mini)</option>
                       <option value="anthropic">Anthropic (Claude 3 Haiku)</option>
+                      <option value="premium">Premium API (Engram Cloud)</option>
                       <option value="local">Local Model (Ollama/LM Studio)</option>
                     </select>
                   </div>
@@ -1785,14 +1781,18 @@ function SidePanelContent() {
                   {enrichmentConfig.provider !== 'local' && (
                     <div style={{ marginBottom: '10px' }}>
                       <div style={{ fontSize: '11px', color: colors.text.secondary, marginBottom: '4px' }}>
-                        API Key
+                        {enrichmentConfig.provider === 'premium' ? 'License Key' : 'API Key'}
                       </div>
                       <div style={{ display: 'flex', gap: '6px' }}>
                         <input
                           type={showApiKey ? 'text' : 'password'}
                           value={enrichmentConfig.apiKey || ''}
                           onChange={(e) => updateEnrichmentConfig({ apiKey: e.target.value })}
-                          placeholder={enrichmentConfig.provider === 'openai' ? 'sk-...' : 'sk-ant-...'}
+                          placeholder={
+                            enrichmentConfig.provider === 'premium' ? 'engram-lic-...' :
+                            enrichmentConfig.provider === 'openai' ? 'sk-...' :
+                            'sk-ant-...'
+                          }
                           disabled={isUpdatingEnrichment}
                           style={{
                             flex: 1,

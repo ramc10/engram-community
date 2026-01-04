@@ -34,6 +34,68 @@ import { premiumService } from '../lib/premium-service';
 import { CloudSyncService } from '../lib/cloud-sync';
 
 /**
+ * Decrypt memories retrieved from storage
+ * Replaces the placeholder content with decrypted actual content
+ */
+async function decryptMemories(
+  memories: Memory[],
+  service: BackgroundService
+): Promise<Memory[]> {
+  // Check if we have a master key to decrypt
+  if (!service.hasMasterKey()) {
+    console.warn('[Engram] No master key available - returning encrypted memories');
+    return memories;
+  }
+
+  const masterKey = service.getMasterKey();
+  if (!masterKey) {
+    console.warn('[Engram] Master key is null - returning encrypted memories');
+    return memories;
+  }
+
+  const crypto = service.getCrypto();
+  const decryptedMemories: Memory[] = [];
+
+  for (const memory of memories) {
+    try {
+      // Check if memory has encrypted content
+      if (!(memory as any).encryptedContent) {
+        console.warn(`[Engram] Memory ${memory.id} has no encryptedContent - skipping decryption`);
+        decryptedMemories.push(memory);
+        continue;
+      }
+
+      const encryptedContent = (memory as any).encryptedContent;
+
+      // Decrypt the content (encryptedContent is now the full EncryptedBlob)
+      const decryptedBytes = await crypto.decrypt(encryptedContent, masterKey.key);
+
+      // Convert Uint8Array to string
+      const decryptedJson = new TextDecoder().decode(decryptedBytes);
+      const decryptedData = JSON.parse(decryptedJson);
+
+      // Create decrypted memory with real content
+      const decryptedMemory: Memory = {
+        ...memory,
+        content: {
+          role: decryptedData.role,
+          text: decryptedData.text,
+          metadata: decryptedData.metadata || {},
+        },
+      };
+
+      decryptedMemories.push(decryptedMemory);
+    } catch (error) {
+      console.error(`[Engram] Failed to decrypt memory ${memory.id}:`, error);
+      // On decryption error, return memory as-is (with placeholder)
+      decryptedMemories.push(memory);
+    }
+  }
+
+  return decryptedMemories;
+}
+
+/**
  * Handle incoming messages
  */
 export async function handleMessage(
@@ -179,19 +241,18 @@ async function handleSaveMessage(
     console.log('[Engram] Content encrypted with master key');
 
     // Create memory object with encrypted content
+    // IMPORTANT: We store encrypted content only. The 'content' field is a placeholder
+    // and will be populated by decrypting 'encryptedContent' when retrieving memories.
     const memory: Memory = {
       id: generateUUID(),
       conversationId: extractedMessage.conversationId,
       platform,
       content: {
         role: extractedMessage.role,
-        text: extractedMessage.content,
-        metadata: extractedMessage.metadata,
+        text: '[ENCRYPTED]', // Placeholder - real content is in encryptedContent
+        metadata: {}, // Empty metadata - real data encrypted
       },
-      encryptedContent: {
-        ciphertext: encrypted.ciphertext,
-        nonce: encrypted.nonce,
-      },
+      encryptedContent: encrypted, // Store the complete encrypted blob with version and algorithm
       timestamp: extractedMessage.timestamp || Date.now(),
       vectorClock: {
         [service.getDeviceId()]: 1,
@@ -234,10 +295,13 @@ async function handleGetMemories(
 
     const memories = await storage.getMemories(filter);
 
+    // Decrypt memories before returning
+    const decryptedMemories = await decryptMemories(memories, service);
+
     return {
       type: MessageType.GET_MEMORIES_RESPONSE,
       success: true,
-      memories,
+      memories: decryptedMemories,
     };
   } catch (error) {
     console.error('[Engram] Failed to get memories:', error);
@@ -266,10 +330,13 @@ async function handleSearchMemories(
 
     const memories = await storage.searchMemories(query);
 
+    // Decrypt memories before returning
+    const decryptedMemories = await decryptMemories(memories, service);
+
     return {
       type: MessageType.SEARCH_MEMORIES_RESPONSE,
       success: true,
-      memories,
+      memories: decryptedMemories,
     };
   } catch (error) {
     console.error('[Engram] Failed to search memories:', error);
@@ -462,16 +529,28 @@ async function handleAuthLoginGoogle(
 
     console.log('[Engram] Google login successful, userId:', authToken.user.id);
 
-    // 2. For Google OAuth, we need a separate encryption password
-    // This will be prompted in the UI after successful OAuth
-    // For now, we'll store a flag that encryption setup is needed
+    // 2. For Google OAuth users, we generate a secure master key
+    // Since they don't have a password, we generate a cryptographically secure random key
+    // This key is stored securely in chrome.storage and used for E2E encryption
+    const cryptoService = service.getCrypto();
+    const masterKeyBytes = cryptoService.generateEncryptionKey(); // 32 bytes of secure random data
+
+    // Create master key object
+    const masterKey = {
+      key: masterKeyBytes,
+      salt: cryptoService.generateSalt(),
+      derivedAt: Date.now(),
+    };
+
+    // Set master key in service
+    service.setMasterKey(masterKey);
+    console.log('[Engram] Master key generated and set for Google OAuth user');
 
     return {
       type: MessageType.AUTH_LOGIN_GOOGLE_RESPONSE,
       success: true,
       userId: authToken.user.id,
       email: authToken.user.email,
-      needsEncryptionPassword: true, // Signal UI to prompt for encryption password
     };
   } catch (error) {
     console.error('[Engram] Google login failed:', error);

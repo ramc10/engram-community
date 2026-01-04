@@ -143,7 +143,14 @@ export class StorageService implements IStorage {
     }
 
     // Initialize HNSW vector index (Phase 4)
-    await this.initializeHNSWIndex();
+    // Non-blocking: If HNSW fails, extension still works with basic search
+    try {
+      await this.initializeHNSWIndex();
+    } catch (error) {
+      console.warn('[Storage] HNSW index initialization failed (non-critical):', error);
+      console.warn('[Storage] Extension will work with basic search instead of vector search');
+      // Continue without HNSW - basic search will still work
+    }
   }
 
   /**

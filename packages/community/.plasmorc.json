@@ -1,0 +1,10 @@
+{
+  "build": {
+    "sourceMap": false
+  },
+  "bundle": {
+    "alias": {
+      "libsodium-wrappers": "libsodium-wrappers/dist/modules/libsodium-wrappers.js"
+    }
+  }
+}

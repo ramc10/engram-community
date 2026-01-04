@@ -3,8 +3,8 @@
  * Provides secure encryption/decryption for LLM provider API keys
  */
 
-// Import CryptoService from source file (not exported from @engram/core to avoid bundling issues)
-import { CryptoService } from '../../../core/src/crypto-service';
+// Import CryptoService from local lib (not from @engram/core to avoid bundling issues)
+import { CryptoService } from './crypto-service';
 
 const ENCRYPTION_KEY_STORAGE_KEY = 'engram_api_key_encryption_key';
 
