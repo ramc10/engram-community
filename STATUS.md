@@ -82,30 +82,37 @@ npm run build            # Production build
 npm run package          # Chrome Web Store package
 ```
 
----
-
-## ⏸️ What's Partially Working (Needs Attention)
-
-### Premium API Integration ⏳
-**Status**: UI ready, backend not deployed
+### Premium API Integration ✅
+**Status**: Deployed locally on Mac Mini M4 Pro (Jan 5, 2026)
 
 **What Works**:
 - ✅ Premium provider option in settings
 - ✅ License key input field
 - ✅ Premium API client implemented
+- ✅ Docker stack running locally (PostgreSQL, Redis, API)
+- ✅ Authentication endpoint tested and working
+- ✅ Enrichment endpoint tested with LM Studio
+- ✅ Extension configured to use local API
 
-**What's Missing**:
-- ❌ Premium API server not deployed (Task 4.2)
-- ❌ No backend to authenticate against
-- ❌ Premium enrichment untested
+**Local Deployment**:
+- **API URL**: http://localhost:3000
+- **Database**: PostgreSQL 15 (Docker)
+- **Cache**: Redis 7 (Docker)
+- **LLM**: LM Studio (llama-3.2-3b-instruct on Mac)
+- **Test License**: ENGRAM-A9R4-TLC6-69H9-RH3Z (PRO tier)
 
 **Files**:
-- [premium-api-client.ts](packages/community/src/lib/premium-api-client.ts) - Client implementation (ready)
-- Server: Needs deployment to Railway/Render
+- [premium-api-client.ts](packages/community/src/lib/premium-api-client.ts) - Client implementation
+- Server: Running at `/Users/rc/Projects/engram-premium-api`
+- [Dockerfile](../engram-premium-api/Dockerfile) - Multi-stage build
+- [docker-compose.yml](../engram-premium-api/docker-compose.yml) - Full stack
+- [DEPLOYMENT_DOCKER.md](../engram-premium-api/DEPLOYMENT_DOCKER.md) - Deployment guide
 
-**Blocker**: Requires Task 4.2 completion (server deployment)
+**Cloud Deployment**: Ready for Railway/Render when needed (~$160/month vs $0 local)
 
 ---
+
+## ⏸️ What's Partially Working (Needs Attention)
 
 ### Memory Update/Delete Operations ⏳
 **Status**: Backend exists, not exposed in UI
