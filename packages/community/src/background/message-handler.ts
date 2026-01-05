@@ -328,15 +328,57 @@ async function handleSearchMemories(
       throw new Error('Search query is required');
     }
 
-    const memories = await storage.searchMemories(query);
+    // CRITICAL FIX: Decrypt memories BEFORE searching
+    // Previous implementation searched on "[ENCRYPTED]" placeholder
+    // Now we:
+    // 1. Get all memories
+    // 2. Decrypt them
+    // 3. Search on decrypted content
 
-    // Decrypt memories before returning
-    const decryptedMemories = await decryptMemories(memories, service);
+    // Get all memories (we'll filter after decryption)
+    const allMemories = await storage.getMemories({});
+
+    // Decrypt all memories first
+    const decryptedMemories = await decryptMemories(allMemories, service);
+
+    // Now search on decrypted content
+    const normalizedQuery = query.toLowerCase().trim();
+    const results = decryptedMemories.filter((memory) => {
+      const text = memory.content.text.toLowerCase();
+      const tags = memory.tags.map((t) => t.toLowerCase());
+      const title = memory.content.title?.toLowerCase() || '';
+
+      return (
+        text.includes(normalizedQuery) ||
+        tags.some((tag) => tag.includes(normalizedQuery)) ||
+        title.includes(normalizedQuery)
+      );
+    });
+
+    // Sort by relevance (more occurrences = more relevant)
+    results.sort((a, b) => {
+      const aText = a.content.text.toLowerCase();
+      const bText = b.content.text.toLowerCase();
+      const aOccurrences = (aText.match(new RegExp(normalizedQuery, 'g')) || []).length;
+      const bOccurrences = (bText.match(new RegExp(normalizedQuery, 'g')) || []).length;
+
+      if (aOccurrences !== bOccurrences) {
+        return bOccurrences - aOccurrences; // More occurrences first
+      }
+
+      // If same occurrences, sort by timestamp (newest first)
+      return b.timestamp - a.timestamp;
+    });
+
+    // Apply limit if provided
+    const limitedResults = limit ? results.slice(0, limit) : results;
+
+    console.log(`[Engram] Search for "${query}" found ${results.length} results (returning ${limitedResults.length})`);
 
     return {
       type: MessageType.SEARCH_MEMORIES_RESPONSE,
       success: true,
-      memories: decryptedMemories,
+      memories: limitedResults,
     };
   } catch (error) {
     console.error('[Engram] Failed to search memories:', error);
