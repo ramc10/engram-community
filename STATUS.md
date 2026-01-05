@@ -43,12 +43,13 @@
 ### Memory Operations ✅
 - **Create**: Save memories from AI conversations
 - **Read**: Retrieve and display encrypted memories
-- **Search**: Basic text search (⚠️ **Note**: Searches on encrypted placeholders, needs fix)
+- **Search**: Full-text search on decrypted content (text, tags, title)
 - **Platform Detection**: Automatically detects ChatGPT, Claude, Perplexity
 
 **Files**:
 - [storage.ts](packages/community/src/lib/storage.ts) - IndexedDB operations
 - [message-handler.ts:220-275](packages/community/src/background/message-handler.ts#L220-L275) - Save handler
+- [message-handler.ts:319-391](packages/community/src/background/message-handler.ts#L319-L391) - Search handler (fixed Jan 5, 2026)
 
 ### Local Enrichment ✅
 - **LM Studio/Ollama**: Working end-to-end
@@ -84,27 +85,6 @@ npm run package          # Chrome Web Store package
 ---
 
 ## ⏸️ What's Partially Working (Needs Attention)
-
-### Search Functionality ⚠️
-**Status**: Works but limited by encryption
-
-**Issue**: Search uses `memory.content.text` which is now `"[ENCRYPTED]"`
-
-**Current Behavior**:
-- Search only finds the word "ENCRYPTED"
-- Cannot search actual memory content
-
-**Fix Needed**:
-1. **Option A**: Decrypt all memories client-side before searching
-2. **Option B**: Use encrypted search tags (store HMAC of keywords)
-3. **Option C**: Build search index on decrypted content
-
-**Files to Modify**:
-- [storage.ts:433-448](packages/community/src/lib/storage.ts#L433-L448) - `searchMemories()` function
-
-**Priority**: Medium (basic functionality works, search can be improved)
-
----
 
 ### Premium API Integration ⏳
 **Status**: UI ready, backend not deployed
@@ -215,24 +195,7 @@ npm run package          # Chrome Web Store package
 
 ### Immediate (Can Start Now)
 
-#### 1. Fix Search Functionality 🔍
-**Effort**: Medium (4-6 hours)
-**Priority**: High
-**Blocker**: None
-
-**Tasks**:
-1. Modify `searchMemories()` to decrypt memories before searching
-2. Add loading indicator for search
-3. Test with 50+ memories
-4. Optimize performance
-
-**Files**:
-- [storage.ts:433-448](packages/community/src/lib/storage.ts#L433-L448)
-- [message-handler.ts:326-356](packages/community/src/background/message-handler.ts#L326-L356)
-
----
-
-#### 2. Add Update/Delete UI 🗑️
+#### 1. Add Update/Delete UI 🗑️
 **Effort**: Low (2-3 hours)
 **Priority**: Medium
 **Blocker**: None
@@ -249,7 +212,7 @@ npm run package          # Chrome Web Store package
 
 ---
 
-#### 3. Complete Remaining Testing 🧪
+#### 2. Complete Remaining Testing 🧪
 **Effort**: High (1-2 days)
 **Priority**: High
 **Blocker**: None
@@ -266,7 +229,7 @@ npm run package          # Chrome Web Store package
 
 ### Short-term (Requires Setup)
 
-#### 4. Deploy Premium API 🌐
+#### 3. Deploy Premium API 🌐
 **Effort**: High (2-3 days)
 **Priority**: Medium
 **Blocker**: Requires Railway/Render account, costs ~$160/month
@@ -283,7 +246,7 @@ npm run package          # Chrome Web Store package
 
 ---
 
-#### 5. Prepare Chrome Web Store Package 📦
+#### 4. Prepare Chrome Web Store Package 📦
 **Effort**: Medium (1 day)
 **Priority**: High
 **Blocker**: None (can start anytime)
@@ -301,7 +264,7 @@ npm run package          # Chrome Web Store package
 
 ### Long-term (Future Versions)
 
-#### 6. UI/UX Improvements 🎨
+#### 5. UI/UX Improvements 🎨
 **Effort**: High (1-2 weeks)
 **Priority**: Low
 **Version**: v0.2.0
@@ -310,7 +273,7 @@ npm run package          # Chrome Web Store package
 
 ---
 
-#### 7. Additional Features ✨
+#### 6. Additional Features ✨
 **Priority**: Low
 **Version**: v0.3.0+
 
@@ -384,9 +347,6 @@ npm run build -- --tag dev
 ---
 
 ## 🐛 Known Bugs & Workarounds
-
-### Bug: Search doesn't work on encrypted content
-**Workaround**: Decrypt all memories before searching (see "Fix Search Functionality" above)
 
 ### Bug: HNSW vector search unavailable
 **Workaround**: Use basic text search instead

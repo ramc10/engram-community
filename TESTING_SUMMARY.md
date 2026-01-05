@@ -247,6 +247,7 @@
 | Issue | Severity | Status | Fix |
 |-------|----------|--------|-----|
 | **Plaintext storage vulnerability** | **🚨 CRITICAL** | **✅ Fixed** | **Store only encrypted content, decrypt on retrieval** |
+| **Search on encrypted placeholders** | **High** | **✅ Fixed (Jan 5)** | **Decrypt memories before searching** |
 | Google OAuth not updating UI | Critical | ✅ Fixed | Auto-generate master key for OAuth users |
 | Method name typo (`getCryptoService`) | Critical | ✅ Fixed | Renamed to `getCrypto()` |
 | Encrypted blob missing version/algorithm | Critical | ✅ Fixed | Store complete EncryptedBlob structure |
