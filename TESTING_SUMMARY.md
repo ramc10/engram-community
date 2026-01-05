@@ -208,14 +208,49 @@
 
 **File**: [crypto-service.ts](packages/community/src/lib/crypto-service.ts)
 
+### Critical Security Fix (Jan 5, 2026) ✅ FIXED
+
+**Issue Discovered**: Memories stored with BOTH plaintext AND encrypted content
+
+**Security Impact**: 🚨 CRITICAL - Plaintext readable in IndexedDB storage
+
+**Root Cause**:
+- [message-handler.ts](packages/community/src/background/message-handler.ts) was storing:
+  - `content.text`: Plaintext memory content
+  - `encryptedContent`: Encrypted version
+- Both stored simultaneously in database
+
+**Fix Implemented**:
+1. Modified save operation to store only `"[ENCRYPTED]"` placeholder in `content.text`
+2. Store complete `EncryptedBlob` (with version, algorithm, nonce, ciphertext)
+3. Added `decryptMemories()` function to decrypt on retrieval
+4. Updated `handleGetMemories()` and `handleSearchMemories()` to decrypt before returning
+
+**Verification Tests Passed**:
+- ✅ Storage inspection shows `content.text = "[ENCRYPTED]"`
+- ✅ No plaintext visible in IndexedDB
+- ✅ UI displays decrypted content correctly
+- ✅ Encrypted blob includes version (1) and algorithm
+- ✅ Decryption works with master key
+- ✅ Decryption errors handled gracefully
+
+**Files Modified**:
+- [message-handler.ts:259](packages/community/src/background/message-handler.ts#L259) - Store encrypted blob only
+- [message-handler.ts:40-99](packages/community/src/background/message-handler.ts#L40-L99) - Decrypt memories function
+- [message-handler.ts:240](packages/community/src/background/message-handler.ts#L240) - Decrypt in GET_MEMORIES
+- [message-handler.ts:341](packages/community/src/background/message-handler.ts#L341) - Decrypt in SEARCH_MEMORIES
+
 ---
 
 ## Issues & Fixes Summary
 
 | Issue | Severity | Status | Fix |
 |-------|----------|--------|-----|
+| **Plaintext storage vulnerability** | **🚨 CRITICAL** | **✅ Fixed** | **Store only encrypted content, decrypt on retrieval** |
 | Google OAuth not updating UI | Critical | ✅ Fixed | Auto-generate master key for OAuth users |
 | Method name typo (`getCryptoService`) | Critical | ✅ Fixed | Renamed to `getCrypto()` |
+| Encrypted blob missing version/algorithm | Critical | ✅ Fixed | Store complete EncryptedBlob structure |
+| Decryption failing with version error | Critical | ✅ Fixed | Include all EncryptedBlob fields |
 | Redundant AI badge on memory cards | Minor | ✅ Fixed | Replaced with platform badges |
 | Claude/Perplexity logo quality | Minor | ✅ Fixed | Implemented branded SVG logos |
 | Premium API option missing | Feature | ✅ Added | Added to provider dropdown |

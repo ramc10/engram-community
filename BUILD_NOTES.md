@@ -89,13 +89,47 @@ npm run package          # Create .zip for Chrome Web Store
 
 ---
 
-## Recent Changes (Jan 4, 2026)
+## Security & Encryption ✅ VERIFIED (Jan 5, 2026)
 
-1. **Fixed Google OAuth** - Auto-generates master key for OAuth users
-2. **Updated UI** - Added Premium API provider option, fixed platform badges
-3. **Crypto Migration** - Completed migration to Noble libraries
-4. **Testing** - Confirmed local enrichment working end-to-end
+### Critical Security Fix Implemented
+
+**Issue Found**: Memories were being stored with BOTH plaintext AND encrypted content in IndexedDB.
+
+**Security Risk**: 🚨 CRITICAL - Anyone with browser access could read all memories in plaintext.
+
+**Fix Applied**:
+1. **Storage**: Only store encrypted content (`EncryptedBlob`) with placeholder text `"[ENCRYPTED]"`
+2. **Retrieval**: Decrypt content dynamically when loading memories
+3. **Verification**: Storage inspection shows NO plaintext content
+
+**Implementation Details**:
+- Store complete `EncryptedBlob` (version, algorithm, nonce, ciphertext)
+- Content field contains `"[ENCRYPTED]"` placeholder
+- Decryption happens in message handler using master key
+- Proper error handling for decryption failures
+
+**Files Modified**:
+- [message-handler.ts:259](packages/community/src/background/message-handler.ts#L259) - Store full encrypted blob
+- [message-handler.ts:40-99](packages/community/src/background/message-handler.ts#L40-L99) - Decrypt on retrieval
+
+**Testing**:
+- ✅ Memories save with encrypted content only
+- ✅ Storage shows `"[ENCRYPTED]"` placeholder
+- ✅ UI displays decrypted content correctly
+- ✅ No plaintext visible in IndexedDB inspection
+- ✅ Encryption includes version (1) and algorithm (XChaCha20-Poly1305)
 
 ---
 
-_Last updated: 2026-01-04_
+## Recent Changes (Jan 4-5, 2026)
+
+1. **🔒 CRITICAL: Fixed plaintext storage vulnerability** - All memories now properly encrypted at rest
+2. **Fixed Google OAuth** - Auto-generates master key for OAuth users
+3. **Updated UI** - Added Premium API provider option, fixed platform badges
+4. **Crypto Migration** - Completed migration to Noble libraries
+5. **Testing** - Confirmed local enrichment working end-to-end
+6. **Documentation** - Added comprehensive testing guides and roadmap
+
+---
+
+_Last updated: 2026-01-05_
