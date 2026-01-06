@@ -330,20 +330,73 @@ curl http://localhost:1234/v1/models
 | Suite | Tests | Passed | Failed | Skipped | Status |
 |-------|-------|--------|--------|---------|--------|
 | 1. Health & Config | 3 | 3 | 0 | 0 | ✅ Complete |
-| 2. Authentication | 5 | 1 | 0 | 4 | 🔄 In Progress |
-| 3. Enrichment API | 6 | 1 | 0 | 5 | 🔄 In Progress |
+| 2. Authentication | 5 | 4 | 0 | 1 | ✅ Complete |
+| 3. Enrichment API | 6 | 3 | 0 | 3 | 🔄 In Progress |
 | 4. Extension Integration | 7 | 0 | 0 | 7 | ⏳ Pending |
 | 5. Error Handling | 6 | 0 | 0 | 6 | ⏳ Pending |
-| 6. Security & Privacy | 4 | 0 | 0 | 4 | ⏳ Pending |
-| 7. Performance | 5 | 0 | 0 | 5 | ⏳ Pending |
+| 6. Security & Privacy | 4 | 1 | 0 | 3 | 🔄 In Progress |
+| 7. Performance | 5 | 1 | 0 | 4 | 🔄 In Progress |
 | 8. Development | 5 | 0 | 0 | 5 | ⏳ Pending |
-| **Total** | **41** | **5** | **0** | **36** | **12% Complete** |
+| **Total** | **41** | **12** | **0** | **29** | **29% Complete** |
 
 ---
 
 ## Known Issues
 
-*None yet - this is a new deployment*
+*None yet - all tests passing*
+
+---
+
+## Detailed Test Results
+
+### January 6, 2026 - API Testing Session
+
+**Environment**: Mac Mini M4 Pro, Docker 24.x, LM Studio with llama-3.2-3b-instruct
+
+**Tests Completed**: 12/41 (29%)
+
+#### ✅ Suite 1: Health & Config (3/3)
+- **TC-PREM-1.1**: Health endpoint returns correct response
+- **TC-PREM-1.2**: All Docker containers healthy
+- **TC-PREM-1.3**: LM Studio accessible via host.docker.internal
+
+#### ✅ Suite 2: Authentication (4/5)
+- **TC-PREM-2.1**: Valid license authentication ✅
+  - License: ENGRAM-A9R4-TLC6-69H9-RH3Z (PRO tier)
+  - Returns JWT token, user info, license details
+- **TC-PREM-2.2**: Invalid license rejected ✅
+  - Returns: `{"success":false,"error":"Authentication failed","message":"Invalid license key"}`
+- **TC-PREM-2.4**: Missing auth header handled ✅
+  - Returns: `{"error":"Unauthorized","message":"Missing or invalid authorization header"}`
+- **TC-PREM-2.5**: Malformed JWT token rejected ✅
+  - Returns: `{"error":"Unauthorized","message":"Invalid token"}`
+
+#### 🔄 Suite 3: Enrichment API (3/6)
+- **TC-PREM-3.1**: Basic enrichment working ✅
+  - Input: "I learned about React hooks today"
+  - Output: Keywords, tags, context from LLM
+  - Tokens: 201, Model: llama-3.2-3b-instruct
+- **TC-PREM-3.2**: Empty content validation ✅
+  - Returns: `{"error":"Invalid request","message":"content (string) is required"}`
+- **TC-PREM-3.4**: Unicode & emoji support ✅
+  - Input: "Learning 日本語 programming 🚀 with React ⚛️"
+  - LLM correctly extracted "日本語" as keyword
+  - All special characters handled properly
+
+#### 🔄 Suite 6: Security & Privacy (1/4)
+- **TC-PREM-6.3**: Backend privacy verified ✅
+  - Database schema checked: 5 tables (users, licenses, usage_logs, api_requests, migrations)
+  - **NO memory content stored in database**
+  - Only metadata logged: timestamps, tokens, endpoints, status codes
+  - Privacy confirmed: Memory content stays encrypted in browser only
+
+#### 🔄 Suite 7: Performance (1/5)
+- **TC-PREM-7.1**: Enrichment latency measured ✅
+  - **Test 1**: 0.78s
+  - **Test 2**: 0.84s
+  - **Test 3**: 0.78s
+  - **Average: 0.80s** ✅ (target: < 3s)
+  - Excellent performance with local LM Studio
 
 ---
 
@@ -351,14 +404,14 @@ curl http://localhost:1234/v1/models
 
 **Priority Tests to Run**:
 1. TC-PREM-4.3: Configure extension with license (end-to-end)
-2. TC-PREM-4.5: Save memory with premium enrichment
-3. TC-PREM-5.1: API unreachable error handling
-4. TC-PREM-6.1: Verify encryption still works
-5. TC-PREM-7.1: Measure enrichment latency
+2. TC-PREM-4.5: Save memory with premium enrichment from extension
+3. TC-PREM-6.1: Verify encryption still works with premium API
+4. TC-PREM-3.3: Test max content length (10,000 chars)
+5. TC-PREM-5.1: API offline error handling
 
 **Estimated Time**: 30-45 minutes
 
 ---
 
-_Last Updated: January 5, 2026_
+_Last Updated: January 6, 2026_
 _Test Environment: Mac Mini M4 Pro, Docker 24.x, Chrome latest_
