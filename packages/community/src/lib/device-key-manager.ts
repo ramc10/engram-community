@@ -14,6 +14,9 @@
 
 import { MasterKey } from '@engram/core';
 
+// Declare chrome for TypeScript
+declare const chrome: any;
+
 const DEVICE_KEY_STORAGE_KEY = 'device_encryption_key';
 const ENCRYPTED_MASTER_KEY_STORAGE_KEY = 'encrypted_master_key';
 

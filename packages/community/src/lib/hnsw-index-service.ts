@@ -13,8 +13,7 @@
 
 // @ts-ignore - edgevec types not fully compatible
 import { EdgeVec, EdgeVecConfig } from 'edgevec';
-import type { UUID, Timestamp } from '@engram/core';
-import type { Memory } from '@engram/core';
+import type { UUID, Timestamp, Memory, MemoryWithMemA } from '@engram/core';
 import type { EngramDatabase } from './storage';
 
 /**
@@ -89,7 +88,7 @@ export class HNSWIndexService {
       this.indexToIdMap.clear();
 
       // Filter memories with embeddings
-      const memoriesWithEmbeddings = memories.filter(m => m.embedding && m.embedding.length === 384);
+      const memoriesWithEmbeddings = memories.filter(m => (m as any).embedding && (m as any).embedding.length === 384);
 
       if (memoriesWithEmbeddings.length === 0) {
         console.log('[HNSW] No valid embeddings found, skipping build');
@@ -110,7 +109,7 @@ export class HNSWIndexService {
         const memory = memoriesWithEmbeddings[i];
 
         // Insert returns the auto-generated vector ID
-        const vectorId = this.index.insert(new Float32Array(memory.embedding!));
+        const vectorId = this.index.insert(new Float32Array((memory as any).embedding!));
 
         // Store ID mappings
         this.vectorIdMap.set(memory.id, vectorId);

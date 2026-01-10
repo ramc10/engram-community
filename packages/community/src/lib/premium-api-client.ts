@@ -4,10 +4,16 @@
  */
 
 import { Memory } from '@engram/core';
+import { createLogger } from './logger';
+
+// Declare chrome for TypeScript
+declare const chrome: any;
+
+const logger = createLogger('PremiumAPI');
 
 // API endpoint (can be overridden via env var)
 const PREMIUM_API_URL =
-  process.env.PLASMO_PUBLIC_PREMIUM_API_URL || 'http://localhost:3000';
+  (typeof (globalThis as any).process !== 'undefined' && (globalThis as any).process.env.PLASMO_PUBLIC_PREMIUM_API_URL) || 'http://localhost:3000';
 
 // Storage keys
 const STORAGE_KEYS = {
@@ -79,9 +85,9 @@ export class PremiumAPIClient {
    * Initialize client - restore token and user info from storage
    */
   async initialize(): Promise<boolean> {
-    console.log('[PremiumAPI] initialize() called');
+    logger.log('initialize() called');
     try {
-      console.log('[PremiumAPI] Fetching storage keys:', [
+      logger.log('Fetching storage keys:', [
         STORAGE_KEYS.PREMIUM_TOKEN,
         STORAGE_KEYS.PREMIUM_USER,
         STORAGE_KEYS.PREMIUM_LICENSE,
@@ -93,7 +99,7 @@ export class PremiumAPIClient {
         STORAGE_KEYS.PREMIUM_LICENSE,
       ]);
 
-      console.log('[PremiumAPI] Storage fetched:', {
+      logger.log('Storage fetched:', {
         hasToken: !!storage[STORAGE_KEYS.PREMIUM_TOKEN],
         hasUser: !!storage[STORAGE_KEYS.PREMIUM_USER],
         hasLicense: !!storage[STORAGE_KEYS.PREMIUM_LICENSE],
@@ -105,21 +111,21 @@ export class PremiumAPIClient {
 
       // Verify token if present
       if (this.token) {
-        console.log('[PremiumAPI] Token found in storage, verifying...');
+        logger.log('Token found in storage, verifying...');
         const isValid = await this.verifyToken();
         if (!isValid) {
-          console.log('[PremiumAPI] Token invalid, clearing auth');
+          logger.log('Token invalid, clearing auth');
           await this.clearAuth();
           return false;
         }
-        console.log('[PremiumAPI] Token valid, authentication restored');
+        logger.log('Token valid, authentication restored');
         return true;
       }
 
-      console.log('[PremiumAPI] No token in storage, returning false');
+      logger.log('No token in storage, returning false');
       return false;
     } catch (error) {
-      console.error('[PremiumAPI] Failed to initialize:', error);
+      logger.error('Failed to initialize:', error);
       return false;
     }
   }
@@ -128,9 +134,9 @@ export class PremiumAPIClient {
    * Authenticate with license key
    */
   async authenticate(licenseKey: string): Promise<void> {
-    console.log('[PremiumAPI] authenticate() called');
+    logger.log('authenticate() called');
     try {
-      console.log('[PremiumAPI] Calling auth endpoint:', `${this.baseURL}/auth/login`);
+      logger.log('Calling auth endpoint:', `${this.baseURL}/auth/login`);
       const response = await fetch(`${this.baseURL}/auth/login`, {
         method: 'POST',
         headers: {
@@ -139,16 +145,16 @@ export class PremiumAPIClient {
         body: JSON.stringify({ licenseKey }),
       });
 
-      console.log('[PremiumAPI] Auth response status:', response.status);
+      logger.log('Auth response status:', response.status);
 
       if (!response.ok) {
         const error = await response.json();
-        console.error('[PremiumAPI] Auth failed:', error);
+        logger.error('Auth failed:', error);
         throw new Error(error.message || 'Authentication failed');
       }
 
       const data = await response.json();
-      console.log('[PremiumAPI] Auth response data:', {
+      logger.log('Auth response data:', {
         hasToken: !!data.token,
         hasUser: !!data.user,
         hasLicense: !!data.license,
@@ -160,7 +166,7 @@ export class PremiumAPIClient {
       this.user = data.user;
       this.license = data.license;
 
-      console.log('[PremiumAPI] Set instance properties:', {
+      logger.log('Set instance properties:', {
         token: this.token ? `${this.token.substring(0, 20)}...` : null,
         user: this.user,
         license: this.license,
@@ -172,10 +178,10 @@ export class PremiumAPIClient {
         [STORAGE_KEYS.PREMIUM_USER]: this.user,
         [STORAGE_KEYS.PREMIUM_LICENSE]: this.license,
       };
-      console.log('[PremiumAPI] Saving to chrome.storage.local:', Object.keys(storageData));
+      logger.log('Saving to chrome.storage.local:', Object.keys(storageData));
 
       await chrome.storage.local.set(storageData);
-      console.log('[PremiumAPI] Saved to chrome.storage.local successfully');
+      logger.log('Saved to chrome.storage.local successfully');
 
       // Verify it was saved
       const verification = await chrome.storage.local.get([
@@ -183,16 +189,16 @@ export class PremiumAPIClient {
         STORAGE_KEYS.PREMIUM_USER,
         STORAGE_KEYS.PREMIUM_LICENSE,
       ]);
-      console.log('[PremiumAPI] Verification - stored values:', {
+      logger.log('Verification - stored values:', {
         hasToken: !!verification[STORAGE_KEYS.PREMIUM_TOKEN],
         hasUser: !!verification[STORAGE_KEYS.PREMIUM_USER],
         hasLicense: !!verification[STORAGE_KEYS.PREMIUM_LICENSE],
       });
 
-      console.log('[PremiumAPI] Authenticated successfully');
+      logger.log('Authenticated successfully');
     } catch (error) {
-      console.error('[PremiumAPI] Authentication error:', error);
-      console.error('[PremiumAPI] Error stack:', error instanceof Error ? error.stack : 'No stack');
+      logger.error('Authentication error:', error);
+      logger.error('Error stack:', error instanceof Error ? error.stack : 'No stack');
       throw error;
     }
   }
@@ -216,7 +222,7 @@ export class PremiumAPIClient {
 
       return response.ok;
     } catch (error) {
-      console.error('[PremiumAPI] Token verification error:', error);
+      logger.error('Token verification error:', error);
       return false;
     }
   }
@@ -235,7 +241,7 @@ export class PremiumAPIClient {
       STORAGE_KEYS.PREMIUM_LICENSE,
     ]);
 
-    console.log('[PremiumAPI] Authentication cleared');
+    logger.log('Authentication cleared');
   }
 
   /**
@@ -243,7 +249,7 @@ export class PremiumAPIClient {
    */
   isAuthenticated(): boolean {
     const result = this.token !== null;
-    console.log('[PremiumAPI] isAuthenticated() called:', {
+    logger.log('isAuthenticated() called:', {
       hasToken: result,
       tokenPreview: this.token ? `${this.token.substring(0, 20)}...` : null,
     });
@@ -273,7 +279,7 @@ export class PremiumAPIClient {
     }
 
     try {
-      console.log('[PremiumAPI] Sending enrichment request to:', `${this.baseURL}/enrich`);
+      logger.log('Sending enrichment request to:', `${this.baseURL}/enrich`);
       const response = await fetch(`${this.baseURL}/enrich`, {
         method: 'POST',
         headers: {
@@ -283,20 +289,20 @@ export class PremiumAPIClient {
         body: JSON.stringify({ content }),
       });
 
-      console.log('[PremiumAPI] Response status:', response.status, response.statusText);
-      console.log('[PremiumAPI] Response headers:', Object.fromEntries(response.headers.entries()));
+      logger.log('Response status:', response.status, response.statusText);
+      logger.log('Response headers:', Object.fromEntries(response.headers.entries()));
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('[PremiumAPI] Error response:', errorText);
+        logger.error('Error response:', errorText);
         throw new Error(errorText || 'Enrichment failed');
       }
 
       const responseText = await response.text();
-      console.log('[PremiumAPI] Response body:', responseText);
+      logger.log('Response body:', responseText);
 
       const data = JSON.parse(responseText);
-      console.log('[PremiumAPI] Parsed data:', data);
+      logger.log('Parsed data:', data);
 
       if (!data.enrichment) {
         throw new Error('No enrichment data in response');
@@ -304,7 +310,7 @@ export class PremiumAPIClient {
 
       return data.enrichment;
     } catch (error) {
-      console.error('[PremiumAPI] Enrichment error:', error);
+      logger.error('Enrichment error:', error);
       throw error;
     }
   }
@@ -349,7 +355,7 @@ export class PremiumAPIClient {
       const data = await response.json();
       return data.links;
     } catch (error) {
-      console.error('[PremiumAPI] Link detection error:', error);
+      logger.error('Link detection error:', error);
       throw error;
     }
   }
@@ -391,7 +397,7 @@ export class PremiumAPIClient {
       const data = await response.json();
       return data.evolution;
     } catch (error) {
-      console.error('[PremiumAPI] Evolution check error:', error);
+      logger.error('Evolution check error:', error);
       throw error;
     }
   }
@@ -404,7 +410,7 @@ export class PremiumAPIClient {
       const response = await fetch(`${this.baseURL}/health`);
       return response.ok;
     } catch (error) {
-      console.error('[PremiumAPI] Health check failed:', error);
+      logger.error('Health check failed:', error);
       return false;
     }
   }

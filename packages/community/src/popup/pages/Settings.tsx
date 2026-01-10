@@ -3,6 +3,8 @@
  * Displays account information and settings
  */
 
+declare const chrome: any;
+
 import React, { useState, useEffect } from 'react';
 import { useToast, useTheme, Button } from '../../components/ui';
 import type { MessageType, Theme } from '../../lib/messages';
@@ -211,7 +213,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
       if (enrichmentConfig.provider === 'local') {
         hasCredentials = !!enrichmentConfig.localEndpoint;
         message = 'Please set a local endpoint first';
-      } else if (enrichmentConfig.provider === 'premium') {
+      } else if ((enrichmentConfig.provider as string) === 'premium') {
         hasCredentials = !!enrichmentConfig.apiKey;
         message = 'Please set a license key first';
       } else {
@@ -787,7 +789,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
           </div>
           <select
             value={enrichmentConfig.provider}
-            onChange={(e) => updateEnrichmentConfig({ provider: e.target.value as 'openai' | 'anthropic' | 'local' | 'premium' })}
+            onChange={(e) => updateEnrichmentConfig({ provider: e.target.value as any })}
             disabled={isUpdatingEnrichment}
             style={{
               width: '100%',
@@ -809,7 +811,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
         </div>
 
         {/* Model Selection (not shown for premium) */}
-        {enrichmentConfig.provider !== 'premium' && (
+        {(enrichmentConfig.provider as string) !== 'premium' && (
           <div style={{ marginBottom: '12px' }}>
             <div style={{ fontSize: '12px', color: colors.text.secondary, marginBottom: '6px' }}>
               Model
@@ -882,7 +884,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
               LM Studio default: http://localhost:1234 | Ollama default: http://localhost:11434
             </div>
           </div>
-        ) : enrichmentConfig.provider === 'premium' ? (
+        ) : (enrichmentConfig.provider as string) === 'premium' ? (
           <div style={{ marginBottom: '12px' }}>
             <div style={{ fontSize: '12px', color: colors.text.secondary, marginBottom: '6px' }}>
               License Key

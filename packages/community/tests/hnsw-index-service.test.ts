@@ -57,11 +57,10 @@ describe('HNSWIndexService', () => {
       content: {
         role: 'user',
         text: 'Test message',
-        modelUsed: 'gpt-4',
       },
       tags: [],
-      syncStatus: { synced: true, lastSyncTime: now() },
-      vectorClock: createVectorClock(id),
+      syncStatus: 'synced',
+      vectorClock: createVectorClock(),
       deviceId: generateUUID(),
       keywords: ['test'],
       context: 'Test context',

@@ -11,6 +11,9 @@ import { createMemory, createEnrichedMemory } from '../../__fixtures__/memories'
 import { createUser, createMasterKey } from '../../__fixtures__/users';
 import { createMockChromeStorage } from '../../__utils__/test-helpers';
 
+// Declare chrome for TypeScript
+declare const chrome: any;
+
 // Mock dependencies
 jest.mock('../../../src/lib/premium-service', () => ({
   premiumService: {
@@ -24,9 +27,9 @@ jest.mock('../../../src/lib/premium-service', () => ({
 }));
 
 jest.mock('../../../src/lib/cloud-sync', () => ({
-  CloudSyncService: jest.fn().mockImplementation(() => ({
-    start: jest.fn().mockResolvedValue(undefined),
-    stop: jest.fn().mockResolvedValue(undefined),
+  CloudSyncService: jest.fn<any>().mockImplementation(() => ({
+    start: jest.fn<any>().mockResolvedValue(undefined),
+    stop: jest.fn<any>().mockResolvedValue(undefined),
   })),
 }));
 
@@ -35,28 +38,29 @@ describe('Message Handler', () => {
   let mockStorage: any;
   let mockCrypto: any;
   let mockAuthClient: any;
-  let mockSender: chrome.runtime.MessageSender;
+  let mockSender: any;
 
   beforeEach(() => {
     // Setup mocks
     const chromeStorage = createMockChromeStorage();
 
     mockStorage = {
-      saveMemory: jest.fn().mockResolvedValue(undefined),
-      getMemories: jest.fn().mockResolvedValue([]),
-      getMetadata: jest.fn().mockResolvedValue(null),
-      reinitializeEnrichment: jest.fn().mockResolvedValue(undefined),
+      saveMemory: jest.fn<any>().mockResolvedValue(undefined),
+      getMemories: jest.fn<any>().mockResolvedValue([]),
+      getMemory: jest.fn<any>().mockResolvedValue(null),
+      getMetadata: jest.fn<any>().mockResolvedValue(null),
+      reinitializeEnrichment: jest.fn<any>().mockResolvedValue(undefined),
     };
 
     mockCrypto = {
-      encrypt: jest.fn().mockResolvedValue({
+      encrypt: jest.fn<any>().mockResolvedValue({
         version: 1,
         algorithm: 'AES-GCM',
         ciphertext: new Uint8Array([1, 2, 3]),
         iv: new Uint8Array([4, 5, 6]),
         salt: new Uint8Array([7, 8, 9]),
       }),
-      decrypt: jest.fn().mockImplementation(async () => {
+      decrypt: jest.fn<any>().mockImplementation(async () => {
         const json = JSON.stringify({
           role: 'user',
           text: 'Decrypted content',
@@ -64,55 +68,55 @@ describe('Message Handler', () => {
         });
         return new TextEncoder().encode(json);
       }),
-      deriveKey: jest.fn().mockResolvedValue(createMasterKey()),
-      generateEncryptionKey: jest.fn().mockReturnValue(new Uint8Array(32)),
-      generateSalt: jest.fn().mockReturnValue(new Uint8Array(16)),
+      deriveKey: jest.fn<any>().mockResolvedValue(createMasterKey()),
+      generateEncryptionKey: jest.fn<any>().mockReturnValue(new Uint8Array(32)),
+      generateSalt: jest.fn<any>().mockReturnValue(new Uint8Array(16)),
     };
 
     mockAuthClient = {
-      register: jest.fn().mockResolvedValue({
+      register: jest.fn<any>().mockResolvedValue({
         user: { id: 'user-123', email: 'test@example.com' },
         token: 'jwt-token',
       }),
-      login: jest.fn().mockResolvedValue({
+      login: jest.fn<any>().mockResolvedValue({
         user: { id: 'user-123', email: 'test@example.com' },
         token: 'jwt-token',
       }),
-      loginWithGoogle: jest.fn().mockResolvedValue({
+      loginWithGoogle: jest.fn<any>().mockResolvedValue({
         user: { id: 'user-123', email: 'test@example.com' },
         token: 'jwt-token',
       }),
-      logout: jest.fn().mockResolvedValue(undefined),
-      getAuthState: jest.fn().mockResolvedValue({
+      logout: jest.fn<any>().mockResolvedValue(undefined),
+      getAuthState: jest.fn<any>().mockResolvedValue({
         isAuthenticated: true,
         userId: 'user-123',
         email: 'test@example.com',
       }),
-      registerDevice: jest.fn().mockResolvedValue(undefined),
-      getSupabaseClient: jest.fn().mockReturnValue({}),
+      registerDevice: jest.fn<any>().mockResolvedValue(undefined),
+      getSupabaseClient: jest.fn<any>().mockReturnValue({}),
     };
 
     mockService = {
-      getDeviceId: jest.fn().mockReturnValue('device-123'),
-      getStorage: jest.fn().mockReturnValue(mockStorage),
-      getCrypto: jest.fn().mockReturnValue(mockCrypto),
-      getAuthClient: jest.fn().mockReturnValue(mockAuthClient),
-      hasMasterKey: jest.fn().mockReturnValue(true),
-      getMasterKey: jest.fn().mockReturnValue(createMasterKey()),
+      getDeviceId: jest.fn<any>().mockReturnValue('device-123'),
+      getStorage: jest.fn<any>().mockReturnValue(mockStorage),
+      getCrypto: jest.fn<any>().mockReturnValue(mockCrypto),
+      getAuthClient: jest.fn<any>().mockReturnValue(mockAuthClient),
+      hasMasterKey: jest.fn<any>().mockReturnValue(true),
+      getMasterKey: jest.fn<any>().mockReturnValue(createMasterKey()),
       setMasterKey: jest.fn(),
       clearMasterKey: jest.fn(),
-      persistMasterKey: jest.fn().mockResolvedValue(undefined),
-      clearPersistedMasterKey: jest.fn().mockResolvedValue(undefined),
-      initializeCloudSyncIfNeeded: jest.fn().mockResolvedValue(undefined),
-      initializePremiumClientIfNeeded: jest.fn().mockResolvedValue(undefined),
-      getCloudSync: jest.fn().mockReturnValue(null),
+      persistMasterKey: jest.fn<any>().mockResolvedValue(undefined),
+      clearPersistedMasterKey: jest.fn<any>().mockResolvedValue(undefined),
+      initializeCloudSyncIfNeeded: jest.fn<any>().mockResolvedValue(undefined),
+      initializePremiumClientIfNeeded: jest.fn<any>().mockResolvedValue(undefined),
+      getCloudSync: jest.fn<any>().mockReturnValue(null),
     } as unknown as BackgroundService;
 
     mockSender = {
       tab: {
         url: 'https://chat.openai.com/c/123',
       },
-    } as chrome.runtime.MessageSender;
+    } as any;
   });
 
   afterEach(() => {
@@ -171,7 +175,7 @@ describe('Message Handler', () => {
       it('should return error for unknown message type', async () => {
         const message = { type: 'UNKNOWN_TYPE' } as any;
 
-        const response = await handleMessage(message, mockSender, mockService);
+        const response = await handleMessage(message as any, mockSender, mockService);
 
         expect(response.type).toBe(MessageType.ERROR);
         expect(response.error).toContain('Invalid message');
@@ -183,7 +187,7 @@ describe('Message Handler', () => {
     it('should handle init request successfully', async () => {
       const message = { type: MessageType.INIT_REQUEST };
 
-      const response = await handleMessage(message, mockSender, mockService);
+      const response = await handleMessage(message as any, mockSender, mockService);
 
       expect(response.type).toBe(MessageType.INIT_RESPONSE);
       expect(response.success).toBe(true);
@@ -198,7 +202,7 @@ describe('Message Handler', () => {
 
       const message = { type: MessageType.INIT_REQUEST };
 
-      const response = await handleMessage(message, mockSender, mockService);
+      const response = await handleMessage(message as any, mockSender, mockService);
 
       expect(response.type).toBe(MessageType.INIT_RESPONSE);
       expect(response.success).toBe(false);
@@ -221,7 +225,7 @@ describe('Message Handler', () => {
         message: extractedMessage,
       };
 
-      const response = await handleMessage(message, mockSender, mockService);
+      const response = await handleMessage(message as any, mockSender, mockService);
 
       expect(response.type).toBe(MessageType.SAVE_MESSAGE_RESPONSE);
       expect(response.success).toBe(true);
@@ -243,7 +247,7 @@ describe('Message Handler', () => {
         },
       };
 
-      await handleMessage(message, mockSender, mockService);
+      await handleMessage(message as any, mockSender, mockService);
 
       const savedMemory = mockStorage.saveMemory.mock.calls[0][0];
       expect(savedMemory.platform).toBe('claude');
@@ -262,7 +266,7 @@ describe('Message Handler', () => {
         },
       };
 
-      const response = await handleMessage(message, mockSender, mockService);
+      const response = await handleMessage(message as any, mockSender, mockService);
 
       expect(response.success).toBe(false);
       expect(response.error).toContain('Authentication required');
@@ -273,7 +277,7 @@ describe('Message Handler', () => {
         type: MessageType.SAVE_MESSAGE,
       };
 
-      const response = await handleMessage(message, mockSender, mockService);
+      const response = await handleMessage(message as any, mockSender, mockService);
 
       expect(response.success).toBe(false);
       expect(response.error).toBe('Missing message data');
@@ -292,7 +296,7 @@ describe('Message Handler', () => {
         },
       };
 
-      const response = await handleMessage(message, mockSender, mockService);
+      const response = await handleMessage(message as any, mockSender, mockService);
 
       expect(response.success).toBe(false);
       expect(response.error).toBe('Encryption failed');
@@ -317,7 +321,7 @@ describe('Message Handler', () => {
 
       const message = { type: MessageType.GET_MEMORIES };
 
-      const response = await handleMessage(message, mockSender, mockService);
+      const response = await handleMessage(message as any, mockSender, mockService);
 
       expect(response.type).toBe(MessageType.GET_MEMORIES_RESPONSE);
       expect(response.success).toBe(true);
@@ -334,7 +338,7 @@ describe('Message Handler', () => {
         filter: { conversationId: 'conv-123' },
       };
 
-      await handleMessage(message, mockSender, mockService);
+      await handleMessage(message as any, mockSender, mockService);
 
       expect(mockStorage.getMemories).toHaveBeenCalledWith({ conversationId: 'conv-123' });
     });
@@ -355,7 +359,7 @@ describe('Message Handler', () => {
 
       const message = { type: MessageType.GET_MEMORIES };
 
-      const response = await handleMessage(message, mockSender, mockService);
+      const response = await handleMessage(message as any, mockSender, mockService);
 
       expect(response.success).toBe(true);
       expect(mockCrypto.decrypt).toHaveBeenCalled();
@@ -380,7 +384,7 @@ describe('Message Handler', () => {
 
       const message = { type: MessageType.GET_MEMORIES };
 
-      const response = await handleMessage(message, mockSender, mockService);
+      const response = await handleMessage(message as any, mockSender, mockService);
 
       expect(response.success).toBe(true);
       expect(mockCrypto.decrypt).not.toHaveBeenCalled();
@@ -405,7 +409,7 @@ describe('Message Handler', () => {
 
       const message = { type: MessageType.GET_MEMORIES };
 
-      const response = await handleMessage(message, mockSender, mockService);
+      const response = await handleMessage(message as any, mockSender, mockService);
 
       expect(response.success).toBe(true);
       // Should return memory as-is when decryption fails
@@ -462,7 +466,7 @@ describe('Message Handler', () => {
         query: 'world',
       };
 
-      const response = await handleMessage(message, mockSender, mockService);
+      const response = await handleMessage(message as any, mockSender, mockService);
 
       expect(response.type).toBe(MessageType.SEARCH_MEMORIES_RESPONSE);
       expect(response.success).toBe(true);
@@ -503,7 +507,7 @@ describe('Message Handler', () => {
         query: 'world',
       };
 
-      const response = await handleMessage(message, mockSender, mockService);
+      const response = await handleMessage(message as any, mockSender, mockService);
 
       expect(response.success).toBe(true);
       expect(response.memories).toHaveLength(1);
@@ -531,7 +535,7 @@ describe('Message Handler', () => {
         limit: 5,
       };
 
-      const response = await handleMessage(message, mockSender, mockService);
+      const response = await handleMessage(message as any, mockSender, mockService);
 
       expect(response.success).toBe(true);
       expect(response.memories).toHaveLength(5);
@@ -543,7 +547,7 @@ describe('Message Handler', () => {
         query: '',
       };
 
-      const response = await handleMessage(message, mockSender, mockService);
+      const response = await handleMessage(message as any, mockSender, mockService);
 
       expect(response.success).toBe(false);
       expect(response.error).toBe('Search query is required');
@@ -572,7 +576,7 @@ describe('Message Handler', () => {
         query: 'javascript',
       };
 
-      const response = await handleMessage(message, mockSender, mockService);
+      const response = await handleMessage(message as any, mockSender, mockService);
 
       expect(response.success).toBe(true);
       expect(response.memories).toHaveLength(1);
@@ -600,7 +604,7 @@ describe('Message Handler', () => {
         query: 'javascript',
       };
 
-      const response = await handleMessage(message, mockSender, mockService);
+      const response = await handleMessage(message as any, mockSender, mockService);
 
       expect(response.success).toBe(true);
       expect(response.memories).toHaveLength(1);
@@ -613,7 +617,7 @@ describe('Message Handler', () => {
 
       const message = { type: MessageType.GET_SYNC_STATUS };
 
-      const response = await handleMessage(message, mockSender, mockService);
+      const response = await handleMessage(message as any, mockSender, mockService);
 
       expect(response.type).toBe(MessageType.GET_SYNC_STATUS_RESPONSE);
       expect(response.success).toBe(true);
@@ -628,7 +632,7 @@ describe('Message Handler', () => {
 
       const message = { type: MessageType.GET_SYNC_STATUS };
 
-      const response = await handleMessage(message, mockSender, mockService);
+      const response = await handleMessage(message as any, mockSender, mockService);
 
       expect(response.status.lastSyncTime).toBe(lastSyncTime);
     });
@@ -642,7 +646,7 @@ describe('Message Handler', () => {
         password: 'SecurePass123!',
       };
 
-      const response = await handleMessage(message, mockSender, mockService);
+      const response = await handleMessage(message as any, mockSender, mockService);
 
       expect(response.type).toBe(MessageType.AUTH_REGISTER_RESPONSE);
       expect(response.success).toBe(true);
@@ -663,7 +667,7 @@ describe('Message Handler', () => {
         email: 'test@example.com',
       };
 
-      const response = await handleMessage(message, mockSender, mockService);
+      const response = await handleMessage(message as any, mockSender, mockService);
 
       expect(response.success).toBe(false);
       expect(response.error).toBe('Email and password are required');
@@ -678,7 +682,7 @@ describe('Message Handler', () => {
         password: 'SecurePass123!',
       };
 
-      const response = await handleMessage(message, mockSender, mockService);
+      const response = await handleMessage(message as any, mockSender, mockService);
 
       expect(response.success).toBe(false);
       expect(response.error).toBe('Email already exists');
@@ -693,7 +697,7 @@ describe('Message Handler', () => {
         password: 'SecurePass123!',
       };
 
-      const response = await handleMessage(message, mockSender, mockService);
+      const response = await handleMessage(message as any, mockSender, mockService);
 
       expect(response.type).toBe(MessageType.AUTH_LOGIN_RESPONSE);
       expect(response.success).toBe(true);
@@ -713,7 +717,7 @@ describe('Message Handler', () => {
         password: 'SecurePass123!',
       };
 
-      const response = await handleMessage(message, mockSender, mockService);
+      const response = await handleMessage(message as any, mockSender, mockService);
 
       expect(response.success).toBe(false);
       expect(response.error).toBe('Email and password are required');
@@ -728,7 +732,7 @@ describe('Message Handler', () => {
         password: 'WrongPass',
       };
 
-      const response = await handleMessage(message, mockSender, mockService);
+      const response = await handleMessage(message as any, mockSender, mockService);
 
       expect(response.success).toBe(false);
       expect(response.error).toBe('Invalid credentials');
@@ -739,7 +743,7 @@ describe('Message Handler', () => {
     it('should login with Google successfully', async () => {
       const message = { type: MessageType.AUTH_LOGIN_GOOGLE };
 
-      const response = await handleMessage(message, mockSender, mockService);
+      const response = await handleMessage(message as any, mockSender, mockService);
 
       expect(response.type).toBe(MessageType.AUTH_LOGIN_GOOGLE_RESPONSE);
       expect(response.success).toBe(true);
@@ -753,7 +757,7 @@ describe('Message Handler', () => {
     it('should generate master key for Google OAuth user', async () => {
       const message = { type: MessageType.AUTH_LOGIN_GOOGLE };
 
-      await handleMessage(message, mockSender, mockService);
+      await handleMessage(message as any, mockSender, mockService);
 
       expect(mockCrypto.generateEncryptionKey).toHaveBeenCalled();
       expect(mockCrypto.generateSalt).toHaveBeenCalled();
@@ -764,7 +768,7 @@ describe('Message Handler', () => {
 
       const message = { type: MessageType.AUTH_LOGIN_GOOGLE };
 
-      const response = await handleMessage(message, mockSender, mockService);
+      const response = await handleMessage(message as any, mockSender, mockService);
 
       expect(response.success).toBe(false);
       expect(response.error).toBe('OAuth cancelled');
@@ -775,7 +779,7 @@ describe('Message Handler', () => {
     it('should logout user successfully', async () => {
       const message = { type: MessageType.AUTH_LOGOUT };
 
-      const response = await handleMessage(message, mockSender, mockService);
+      const response = await handleMessage(message as any, mockSender, mockService);
 
       expect(response.type).toBe(MessageType.AUTH_LOGOUT_RESPONSE);
       expect(response.success).toBe(true);
@@ -786,13 +790,13 @@ describe('Message Handler', () => {
 
     it('should stop cloud sync on logout', async () => {
       const mockCloudSync = {
-        stop: jest.fn().mockResolvedValue(undefined),
+        stop: jest.fn<any>().mockResolvedValue(undefined),
       };
       mockService.getCloudSync.mockReturnValue(mockCloudSync);
 
       const message = { type: MessageType.AUTH_LOGOUT };
 
-      await handleMessage(message, mockSender, mockService);
+      await handleMessage(message as any, mockSender, mockService);
 
       expect(mockCloudSync.stop).toHaveBeenCalled();
     });
@@ -802,7 +806,7 @@ describe('Message Handler', () => {
 
       const message = { type: MessageType.AUTH_LOGOUT };
 
-      const response = await handleMessage(message, mockSender, mockService);
+      const response = await handleMessage(message as any, mockSender, mockService);
 
       expect(response.success).toBe(false);
       expect(mockService.clearMasterKey).toHaveBeenCalled();
@@ -814,7 +818,7 @@ describe('Message Handler', () => {
     it('should get auth state successfully', async () => {
       const message = { type: MessageType.GET_AUTH_STATE };
 
-      const response = await handleMessage(message, mockSender, mockService);
+      const response = await handleMessage(message as any, mockSender, mockService);
 
       expect(response.type).toBe(MessageType.GET_AUTH_STATE_RESPONSE);
       expect(response.success).toBe(true);
@@ -829,7 +833,7 @@ describe('Message Handler', () => {
 
       const message = { type: MessageType.GET_AUTH_STATE };
 
-      const response = await handleMessage(message, mockSender, mockService);
+      const response = await handleMessage(message as any, mockSender, mockService);
 
       expect(response.success).toBe(true);
       expect(response.authState.isAuthenticated).toBe(false);
@@ -850,7 +854,7 @@ describe('Message Handler', () => {
 
       const message = { type: MessageType.GET_PREMIUM_STATUS };
 
-      const response = await handleMessage(message, mockSender, mockService);
+      const response = await handleMessage(message as any, mockSender, mockService);
 
       expect(response.type).toBe(MessageType.GET_PREMIUM_STATUS_RESPONSE);
       expect(response.success).toBe(true);
@@ -867,7 +871,7 @@ describe('Message Handler', () => {
 
       const message = { type: MessageType.GET_PREMIUM_STATUS };
 
-      const response = await handleMessage(message, mockSender, mockService);
+      const response = await handleMessage(message as any, mockSender, mockService);
 
       expect(response.success).toBe(false);
       expect(response.error).toBe('Not authenticated');
@@ -882,7 +886,7 @@ describe('Message Handler', () => {
 
       const message = { type: MessageType.UPGRADE_TO_PREMIUM };
 
-      const response = await handleMessage(message, mockSender, mockService);
+      const response = await handleMessage(message as any, mockSender, mockService);
 
       expect(response.type).toBe(MessageType.UPGRADE_TO_PREMIUM_RESPONSE);
       expect(response.success).toBe(true);
@@ -898,7 +902,7 @@ describe('Message Handler', () => {
 
       const message = { type: MessageType.UPGRADE_TO_PREMIUM };
 
-      const response = await handleMessage(message, mockSender, mockService);
+      const response = await handleMessage(message as any, mockSender, mockService);
 
       expect(response.success).toBe(false);
       expect(response.error).toBe('Not authenticated');
@@ -913,7 +917,7 @@ describe('Message Handler', () => {
 
       const message = { type: MessageType.REQUEST_PREMIUM_UPGRADE };
 
-      const response = await handleMessage(message, mockSender, mockService);
+      const response = await handleMessage(message as any, mockSender, mockService);
 
       expect(response.type).toBe(MessageType.REQUEST_PREMIUM_UPGRADE_RESPONSE);
       expect(response.success).toBe(true);
@@ -933,7 +937,7 @@ describe('Message Handler', () => {
 
       const message = { type: MessageType.REQUEST_PREMIUM_UPGRADE };
 
-      const response = await handleMessage(message, mockSender, mockService);
+      const response = await handleMessage(message as any, mockSender, mockService);
 
       expect(response.success).toBe(false);
       expect(response.error).toBe('Not authenticated');
@@ -949,7 +953,7 @@ describe('Message Handler', () => {
 
       const message = { type: MessageType.START_CLOUD_SYNC };
 
-      const response = await handleMessage(message, mockSender, mockService);
+      const response = await handleMessage(message as any, mockSender, mockService);
 
       expect(response.type).toBe(MessageType.START_CLOUD_SYNC_RESPONSE);
       expect(response.success).toBe(true);
@@ -963,7 +967,7 @@ describe('Message Handler', () => {
 
       const message = { type: MessageType.START_CLOUD_SYNC };
 
-      const response = await handleMessage(message, mockSender, mockService);
+      const response = await handleMessage(message as any, mockSender, mockService);
 
       expect(response.success).toBe(false);
       expect(response.error).toBe('Premium subscription required for cloud sync');
@@ -978,7 +982,7 @@ describe('Message Handler', () => {
 
       const message = { type: MessageType.START_CLOUD_SYNC };
 
-      const response = await handleMessage(message, mockSender, mockService);
+      const response = await handleMessage(message as any, mockSender, mockService);
 
       expect(response.success).toBe(false);
       expect(response.error).toBe('Not authenticated');
@@ -990,14 +994,14 @@ describe('Message Handler', () => {
 
     it('should stop cloud sync successfully', async () => {
       const mockCloudSync = {
-        stop: jest.fn().mockResolvedValue(undefined),
+        stop: jest.fn<any>().mockResolvedValue(undefined),
       };
       mockService.getCloudSync.mockReturnValue(mockCloudSync);
       premiumService.disableSync.mockResolvedValue(undefined);
 
       const message = { type: MessageType.STOP_CLOUD_SYNC };
 
-      const response = await handleMessage(message, mockSender, mockService);
+      const response = await handleMessage(message as any, mockSender, mockService);
 
       expect(response.type).toBe(MessageType.STOP_CLOUD_SYNC_RESPONSE);
       expect(response.success).toBe(true);
@@ -1010,7 +1014,7 @@ describe('Message Handler', () => {
 
       const message = { type: MessageType.STOP_CLOUD_SYNC };
 
-      const response = await handleMessage(message, mockSender, mockService);
+      const response = await handleMessage(message as any, mockSender, mockService);
 
       expect(response.success).toBe(true);
     });
@@ -1020,7 +1024,7 @@ describe('Message Handler', () => {
     it('should reinitialize enrichment successfully', async () => {
       const message = { type: MessageType.REINITIALIZE_ENRICHMENT };
 
-      const response = await handleMessage(message, mockSender, mockService);
+      const response = await handleMessage(message as any, mockSender, mockService);
 
       expect(response.type).toBe(MessageType.REINITIALIZE_ENRICHMENT_RESPONSE);
       expect(response.success).toBe(true);
@@ -1033,7 +1037,7 @@ describe('Message Handler', () => {
 
       const message = { type: MessageType.REINITIALIZE_ENRICHMENT };
 
-      const response = await handleMessage(message, mockSender, mockService);
+      const response = await handleMessage(message as any, mockSender, mockService);
 
       expect(response.success).toBe(false);
       expect(response.error).toBe('Init failed');
@@ -1062,7 +1066,7 @@ describe('Message Handler', () => {
           ],
         },
       };
-      mockStorage.getMemories.mockResolvedValue([memory]);
+      mockStorage.getMemory.mockResolvedValue(memory);
 
       const message = {
         type: MessageType.REVERT_EVOLUTION,
@@ -1070,7 +1074,7 @@ describe('Message Handler', () => {
         versionIndex: 0,
       };
 
-      const response = await handleMessage(message, mockSender, mockService);
+      const response = await handleMessage(message as any, mockSender, mockService);
 
       expect(response.type).toBe(MessageType.REVERT_EVOLUTION_RESPONSE);
       expect(response.success).toBe(true);
@@ -1083,7 +1087,7 @@ describe('Message Handler', () => {
         versionIndex: 0,
       };
 
-      const response = await handleMessage(message, mockSender, mockService);
+      const response = await handleMessage(message as any, mockSender, mockService);
 
       expect(response.success).toBe(false);
       expect(response.error).toBe('Missing memoryId');
@@ -1095,14 +1099,14 @@ describe('Message Handler', () => {
         memoryId: 'mem-123',
       };
 
-      const response = await handleMessage(message, mockSender, mockService);
+      const response = await handleMessage(message as any, mockSender, mockService);
 
       expect(response.success).toBe(false);
       expect(response.error).toBe('Missing versionIndex');
     });
 
     it('should handle memory not found', async () => {
-      mockStorage.getMemories.mockResolvedValue([]);
+      mockStorage.getMemory.mockResolvedValue(null);
 
       const message = {
         type: MessageType.REVERT_EVOLUTION,
@@ -1110,7 +1114,7 @@ describe('Message Handler', () => {
         versionIndex: 0,
       };
 
-      const response = await handleMessage(message, mockSender, mockService);
+      const response = await handleMessage(message as any, mockSender, mockService);
 
       expect(response.success).toBe(false);
       expect(response.error).toBe('Memory not found');
@@ -1118,7 +1122,7 @@ describe('Message Handler', () => {
 
     it('should handle memory with no evolution history', async () => {
       const memory = createMemory();
-      mockStorage.getMemories.mockResolvedValue([memory]);
+      mockStorage.getMemory.mockResolvedValue(memory);
 
       const message = {
         type: MessageType.REVERT_EVOLUTION,
@@ -1126,7 +1130,7 @@ describe('Message Handler', () => {
         versionIndex: 0,
       };
 
-      const response = await handleMessage(message, mockSender, mockService);
+      const response = await handleMessage(message as any, mockSender, mockService);
 
       expect(response.success).toBe(false);
       expect(response.error).toBe('Memory has no evolution history');
@@ -1140,7 +1144,7 @@ describe('Message Handler', () => {
           history: [{ keywords: [], tags: [], context: '', timestamp: Date.now() }],
         },
       };
-      mockStorage.getMemories.mockResolvedValue([memory]);
+      mockStorage.getMemory.mockResolvedValue(memory);
 
       const message = {
         type: MessageType.REVERT_EVOLUTION,
@@ -1148,7 +1152,7 @@ describe('Message Handler', () => {
         versionIndex: 5,
       };
 
-      const response = await handleMessage(message, mockSender, mockService);
+      const response = await handleMessage(message as any, mockSender, mockService);
 
       expect(response.success).toBe(false);
       expect(response.error).toContain('Invalid versionIndex');
@@ -1163,7 +1167,7 @@ describe('Message Handler', () => {
 
       const message = { type: MessageType.INIT_REQUEST };
 
-      const response = await handleMessage(message, mockSender, mockService);
+      const response = await handleMessage(message as any, mockSender, mockService);
 
       expect(response.type).toBe(MessageType.INIT_RESPONSE);
       expect(response.success).toBe(false);

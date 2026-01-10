@@ -176,7 +176,7 @@ export function createAuthCredentials(overrides: Partial<AuthCredentials> = {}):
 /**
  * Create a batch of users for testing
  */
-export function createUserBatch(count: number, options: UserFactoryOptions = []) {
+export function createUserBatch(count: number, options: UserFactoryOptions = {}) {
   return Array.from({ length: count }, (_, i) =>
     createUser({
       ...options,

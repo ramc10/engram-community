@@ -89,7 +89,7 @@ export class EmbeddingService {
         revision: 'main',
         // Use default cache (browser cache API)
         cache_dir: undefined,
-      });
+      }) as any;
 
       console.log('[Engram Embeddings] Model ready! Using BGE-Small for better semantic search.');
     } catch (error) {
@@ -326,8 +326,7 @@ export class EmbeddingService {
       const k = maxResults * 3;
       const hnswResults = await this.hnswIndex.search(
         new Float32Array(queryEmbedding),
-        k,
-        50 // efSearch
+        k
       );
 
       // Convert HNSW results to candidates

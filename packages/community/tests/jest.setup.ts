@@ -9,8 +9,7 @@ import '@testing-library/jest-dom';
 // Register custom matchers
 registerCustomMatchers();
 
-// Extend timeout for integration tests
-jest.setTimeout(10000);
+// Note: Test timeout is configured in jest.config.js (testTimeout: 10000)
 
 // Suppress console errors in tests (optional - comment out to debug)
 // global.console.error = jest.fn();

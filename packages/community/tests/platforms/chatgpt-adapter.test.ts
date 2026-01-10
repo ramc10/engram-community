@@ -4,7 +4,7 @@
 
 import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
 import { ChatGPTAdapter } from '../../src/content/platforms/chatgpt-adapter';
-import { ExtractedMessage } from 'engram-shared/types/platform-adapter';
+import type { ExtractedMessage } from '@engram/core';
 
 describe('ChatGPTAdapter', () => {
   let adapter: ChatGPTAdapter;

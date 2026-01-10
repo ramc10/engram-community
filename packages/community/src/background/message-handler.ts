@@ -3,6 +3,8 @@
  * Processes messages from content scripts
  */
 
+declare const chrome: any;
+
 import {
   Message,
   MessageType,
@@ -13,6 +15,7 @@ import {
   GetSyncStatusResponse,
   AuthRegisterResponse,
   AuthLoginResponse,
+  AuthLoginGoogleResponse,
   AuthLogoutResponse,
   GetAuthStateResponse,
   GetPremiumStatusResponse,
@@ -100,7 +103,7 @@ async function decryptMemories(
  */
 export async function handleMessage(
   message: Message,
-  sender: chrome.runtime.MessageSender,
+  sender: any,
   service: BackgroundService
 ): Promise<any> {
   // Validate message structure
@@ -200,7 +203,7 @@ async function handleInitRequest(service: BackgroundService): Promise<InitRespon
 async function handleSaveMessage(
   message: any,
   service: BackgroundService,
-  sender?: chrome.runtime.MessageSender
+  sender?: any
 ): Promise<SaveMessageResponse> {
   try {
     const extractedMessage = message.message;
@@ -243,7 +246,7 @@ async function handleSaveMessage(
     // Create memory object with encrypted content
     // IMPORTANT: We store encrypted content only. The 'content' field is a placeholder
     // and will be populated by decrypting 'encryptedContent' when retrieving memories.
-    const memory: Memory = {
+    const memory: any = {
       id: generateUUID(),
       conversationId: extractedMessage.conversationId,
       platform,
@@ -353,7 +356,7 @@ async function handleSearchMemories(
     const results = decryptedMemories.filter((memory) => {
       const text = memory.content.text.toLowerCase();
       const tags = memory.tags.map((t) => t.toLowerCase());
-      const title = memory.content.title?.toLowerCase() || '';
+      const title = (memory.content as any).title?.toLowerCase() || '';
 
       return (
         text.includes(normalizedQuery) ||
@@ -567,7 +570,7 @@ async function handleAuthLogin(
  */
 async function handleAuthLoginGoogle(
   service: BackgroundService
-): Promise<AuthLoginResponse> {
+): Promise<AuthLoginGoogleResponse> {
   try {
     const authClient = service.getAuthClient();
 
@@ -954,12 +957,10 @@ async function handleRevertEvolution(
     const storage = service.getStorage();
 
     // Get the memory
-    const memories = await storage.getMemories({ ids: [memoryId] });
-    if (!memories || memories.length === 0) {
+    const memory = await storage.getMemory(memoryId) as any;
+    if (!memory) {
       throw new Error('Memory not found');
     }
-
-    const memory = memories[0] as any;
 
     // Check if memory has evolution history
     if (!memory.evolution || !memory.evolution.history || memory.evolution.history.length === 0) {

@@ -1,11 +1,13 @@
 /**
  * Message Protocol
  * Type-safe message passing between content scripts and background service worker
- * 
+ *
  * Message Flow:
  * Content Script → Background Worker → Storage/Crypto
  * Background Worker → Content Script (responses)
  */
+
+declare const chrome: any;
 
 import { ExtractedMessage } from '@engram/core';
 import { Memory, UUID } from '@engram/core';
@@ -190,6 +192,18 @@ export interface AuthLoginResponse extends BaseMessage {
   error?: string;
 }
 
+export interface AuthLoginGoogleRequest extends BaseMessage {
+  type: MessageType.AUTH_LOGIN_GOOGLE;
+}
+
+export interface AuthLoginGoogleResponse extends BaseMessage {
+  type: MessageType.AUTH_LOGIN_GOOGLE_RESPONSE;
+  success: boolean;
+  userId?: string;
+  email?: string;
+  error?: string;
+}
+
 export interface AuthLogoutRequest extends BaseMessage {
   type: MessageType.AUTH_LOGOUT;
 }
@@ -331,6 +345,8 @@ export type Message =
   | AuthRegisterResponse
   | AuthLoginRequest
   | AuthLoginResponse
+  | AuthLoginGoogleRequest
+  | AuthLoginGoogleResponse
   | AuthLogoutRequest
   | AuthLogoutResponse
   | GetAuthStateRequest
@@ -375,7 +391,7 @@ export async function sendMessage<T extends Message>(
   const messageWithId = { ...message, requestId } as T;
 
   return new Promise((resolve, reject) => {
-    chrome.runtime.sendMessage(messageWithId, (response) => {
+    chrome.runtime.sendMessage(messageWithId, (response: any) => {
       if (chrome.runtime.lastError) {
         reject(new Error(chrome.runtime.lastError.message));
         return;
@@ -452,7 +468,7 @@ export async function sendGetSyncStatus(): Promise<GetSyncStatusResponse> {
  */
 export type MessageHandler = (
   message: Message,
-  sender: chrome.runtime.MessageSender,
+  sender: any,
   sendResponse: (response: any) => void
 ) => boolean | void | Promise<void>;
 
