@@ -371,7 +371,7 @@ class BackgroundService {
       console.log('[PremiumAPI] Config provider:', config.provider);
 
       // Check if using premium provider
-      if (config.provider !== 'premium') {
+      if ((config.provider as string) !== 'premium') {
         console.log('[PremiumAPI] Not using premium provider');
         return;
       }
