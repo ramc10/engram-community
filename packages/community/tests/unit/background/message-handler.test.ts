@@ -165,7 +165,7 @@ describe('Message Handler', () => {
         const response = await handleMessage(invalidMessage, mockSender, mockService);
 
         expect(response.type).toBe(MessageType.ERROR);
-        expect(response.error).toContain('Invalid message');
+        expect(response.error).toBe('Message must have a type string');
       });
 
       it('should return error for unknown message type', async () => {
@@ -414,17 +414,45 @@ describe('Message Handler', () => {
   });
 
   describe('SEARCH_MEMORIES', () => {
+    beforeEach(() => {
+      // Update decrypt mock to preserve the original text during search tests
+      mockCrypto.decrypt.mockImplementation(async (encryptedContent: any) => {
+        // Return the text that was "encrypted"
+        const text = encryptedContent.originalText || 'Decrypted content';
+        const json = JSON.stringify({
+          role: 'user',
+          text: text,
+          metadata: {},
+        });
+        return new TextEncoder().encode(json);
+      });
+    });
+
     it('should search memories successfully', async () => {
       const memories = [
         {
           ...createMemory(),
-          content: { role: 'user', text: 'Hello world', metadata: {} },
-          encryptedContent: {} as any,
+          content: { role: 'user', text: '[ENCRYPTED]', metadata: {} },
+          encryptedContent: {
+            version: 1,
+            algorithm: 'AES-GCM',
+            ciphertext: new Uint8Array([1, 2, 3]),
+            iv: new Uint8Array([4, 5, 6]),
+            salt: new Uint8Array([7, 8, 9]),
+            originalText: 'Hello world', // Helper for mock
+          } as any,
         },
         {
           ...createMemory(),
-          content: { role: 'user', text: 'Goodbye world', metadata: {} },
-          encryptedContent: {} as any,
+          content: { role: 'user', text: '[ENCRYPTED]', metadata: {} },
+          encryptedContent: {
+            version: 1,
+            algorithm: 'AES-GCM',
+            ciphertext: new Uint8Array([1, 2, 3]),
+            iv: new Uint8Array([4, 5, 6]),
+            salt: new Uint8Array([7, 8, 9]),
+            originalText: 'Goodbye world', // Helper for mock
+          } as any,
         },
       ];
       mockStorage.getMemories.mockResolvedValue(memories);
@@ -445,13 +473,27 @@ describe('Message Handler', () => {
       const memories = [
         {
           ...createMemory(),
-          content: { role: 'user', text: 'Hello world', metadata: {} },
-          encryptedContent: {} as any,
+          content: { role: 'user', text: '[ENCRYPTED]', metadata: {} },
+          encryptedContent: {
+            version: 1,
+            algorithm: 'AES-GCM',
+            ciphertext: new Uint8Array([1, 2, 3]),
+            iv: new Uint8Array([4, 5, 6]),
+            salt: new Uint8Array([7, 8, 9]),
+            originalText: 'Hello world',
+          } as any,
         },
         {
           ...createMemory(),
-          content: { role: 'user', text: 'Unrelated content', metadata: {} },
-          encryptedContent: {} as any,
+          content: { role: 'user', text: '[ENCRYPTED]', metadata: {} },
+          encryptedContent: {
+            version: 1,
+            algorithm: 'AES-GCM',
+            ciphertext: new Uint8Array([1, 2, 3]),
+            iv: new Uint8Array([4, 5, 6]),
+            salt: new Uint8Array([7, 8, 9]),
+            originalText: 'Unrelated content',
+          } as any,
         },
       ];
       mockStorage.getMemories.mockResolvedValue(memories);
@@ -471,8 +513,15 @@ describe('Message Handler', () => {
     it('should apply limit when provided', async () => {
       const memories = Array.from({ length: 10 }, () => ({
         ...createMemory(),
-        content: { role: 'user' as const, text: 'Match content', metadata: {} },
-        encryptedContent: {} as any,
+        content: { role: 'user' as const, text: '[ENCRYPTED]', metadata: {} },
+        encryptedContent: {
+          version: 1,
+          algorithm: 'AES-GCM',
+          ciphertext: new Uint8Array([1, 2, 3]),
+          iv: new Uint8Array([4, 5, 6]),
+          salt: new Uint8Array([7, 8, 9]),
+          originalText: 'Match content',
+        } as any,
       }));
       mockStorage.getMemories.mockResolvedValue(memories);
 
@@ -504,9 +553,16 @@ describe('Message Handler', () => {
       const memories = [
         {
           ...createMemory(),
-          content: { role: 'user', text: 'Some text', metadata: {} },
+          content: { role: 'user', text: '[ENCRYPTED]', metadata: {} },
           tags: ['javascript', 'testing'],
-          encryptedContent: {} as any,
+          encryptedContent: {
+            version: 1,
+            algorithm: 'AES-GCM',
+            ciphertext: new Uint8Array([1, 2, 3]),
+            iv: new Uint8Array([4, 5, 6]),
+            salt: new Uint8Array([7, 8, 9]),
+            originalText: 'Some text',
+          } as any,
         },
       ];
       mockStorage.getMemories.mockResolvedValue(memories);
@@ -526,8 +582,15 @@ describe('Message Handler', () => {
       const memories = [
         {
           ...createMemory(),
-          content: { role: 'user', text: 'JavaScript Tutorial', metadata: {} },
-          encryptedContent: {} as any,
+          content: { role: 'user', text: '[ENCRYPTED]', metadata: {} },
+          encryptedContent: {
+            version: 1,
+            algorithm: 'AES-GCM',
+            ciphertext: new Uint8Array([1, 2, 3]),
+            iv: new Uint8Array([4, 5, 6]),
+            salt: new Uint8Array([7, 8, 9]),
+            originalText: 'JavaScript Tutorial',
+          } as any,
         },
       ];
       mockStorage.getMemories.mockResolvedValue(memories);
