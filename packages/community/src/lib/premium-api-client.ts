@@ -79,12 +79,25 @@ export class PremiumAPIClient {
    * Initialize client - restore token and user info from storage
    */
   async initialize(): Promise<boolean> {
+    console.log('[PremiumAPI] initialize() called');
     try {
+      console.log('[PremiumAPI] Fetching storage keys:', [
+        STORAGE_KEYS.PREMIUM_TOKEN,
+        STORAGE_KEYS.PREMIUM_USER,
+        STORAGE_KEYS.PREMIUM_LICENSE,
+      ]);
+
       const storage = await chrome.storage.local.get([
         STORAGE_KEYS.PREMIUM_TOKEN,
         STORAGE_KEYS.PREMIUM_USER,
         STORAGE_KEYS.PREMIUM_LICENSE,
       ]);
+
+      console.log('[PremiumAPI] Storage fetched:', {
+        hasToken: !!storage[STORAGE_KEYS.PREMIUM_TOKEN],
+        hasUser: !!storage[STORAGE_KEYS.PREMIUM_USER],
+        hasLicense: !!storage[STORAGE_KEYS.PREMIUM_LICENSE],
+      });
 
       this.token = storage[STORAGE_KEYS.PREMIUM_TOKEN] || null;
       this.user = storage[STORAGE_KEYS.PREMIUM_USER] || null;
@@ -92,14 +105,18 @@ export class PremiumAPIClient {
 
       // Verify token if present
       if (this.token) {
+        console.log('[PremiumAPI] Token found in storage, verifying...');
         const isValid = await this.verifyToken();
         if (!isValid) {
+          console.log('[PremiumAPI] Token invalid, clearing auth');
           await this.clearAuth();
           return false;
         }
+        console.log('[PremiumAPI] Token valid, authentication restored');
         return true;
       }
 
+      console.log('[PremiumAPI] No token in storage, returning false');
       return false;
     } catch (error) {
       console.error('[PremiumAPI] Failed to initialize:', error);
@@ -111,7 +128,9 @@ export class PremiumAPIClient {
    * Authenticate with license key
    */
   async authenticate(licenseKey: string): Promise<void> {
+    console.log('[PremiumAPI] authenticate() called');
     try {
+      console.log('[PremiumAPI] Calling auth endpoint:', `${this.baseURL}/auth/login`);
       const response = await fetch(`${this.baseURL}/auth/login`, {
         method: 'POST',
         headers: {
@@ -120,27 +139,60 @@ export class PremiumAPIClient {
         body: JSON.stringify({ licenseKey }),
       });
 
+      console.log('[PremiumAPI] Auth response status:', response.status);
+
       if (!response.ok) {
         const error = await response.json();
+        console.error('[PremiumAPI] Auth failed:', error);
         throw new Error(error.message || 'Authentication failed');
       }
 
       const data = await response.json();
+      console.log('[PremiumAPI] Auth response data:', {
+        hasToken: !!data.token,
+        hasUser: !!data.user,
+        hasLicense: !!data.license,
+        user: data.user,
+        license: data.license,
+      });
 
       this.token = data.token;
       this.user = data.user;
       this.license = data.license;
 
+      console.log('[PremiumAPI] Set instance properties:', {
+        token: this.token ? `${this.token.substring(0, 20)}...` : null,
+        user: this.user,
+        license: this.license,
+      });
+
       // Store in chrome.storage
-      await chrome.storage.local.set({
+      const storageData = {
         [STORAGE_KEYS.PREMIUM_TOKEN]: this.token,
         [STORAGE_KEYS.PREMIUM_USER]: this.user,
         [STORAGE_KEYS.PREMIUM_LICENSE]: this.license,
+      };
+      console.log('[PremiumAPI] Saving to chrome.storage.local:', Object.keys(storageData));
+
+      await chrome.storage.local.set(storageData);
+      console.log('[PremiumAPI] Saved to chrome.storage.local successfully');
+
+      // Verify it was saved
+      const verification = await chrome.storage.local.get([
+        STORAGE_KEYS.PREMIUM_TOKEN,
+        STORAGE_KEYS.PREMIUM_USER,
+        STORAGE_KEYS.PREMIUM_LICENSE,
+      ]);
+      console.log('[PremiumAPI] Verification - stored values:', {
+        hasToken: !!verification[STORAGE_KEYS.PREMIUM_TOKEN],
+        hasUser: !!verification[STORAGE_KEYS.PREMIUM_USER],
+        hasLicense: !!verification[STORAGE_KEYS.PREMIUM_LICENSE],
       });
 
       console.log('[PremiumAPI] Authenticated successfully');
     } catch (error) {
       console.error('[PremiumAPI] Authentication error:', error);
+      console.error('[PremiumAPI] Error stack:', error instanceof Error ? error.stack : 'No stack');
       throw error;
     }
   }
@@ -190,7 +242,12 @@ export class PremiumAPIClient {
    * Check if authenticated
    */
   isAuthenticated(): boolean {
-    return this.token !== null;
+    const result = this.token !== null;
+    console.log('[PremiumAPI] isAuthenticated() called:', {
+      hasToken: result,
+      tokenPreview: this.token ? `${this.token.substring(0, 20)}...` : null,
+    });
+    return result;
   }
 
   /**
@@ -216,6 +273,7 @@ export class PremiumAPIClient {
     }
 
     try {
+      console.log('[PremiumAPI] Sending enrichment request to:', `${this.baseURL}/enrich`);
       const response = await fetch(`${this.baseURL}/enrich`, {
         method: 'POST',
         headers: {
@@ -225,12 +283,25 @@ export class PremiumAPIClient {
         body: JSON.stringify({ content }),
       });
 
+      console.log('[PremiumAPI] Response status:', response.status, response.statusText);
+      console.log('[PremiumAPI] Response headers:', Object.fromEntries(response.headers.entries()));
+
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'Enrichment failed');
+        const errorText = await response.text();
+        console.error('[PremiumAPI] Error response:', errorText);
+        throw new Error(errorText || 'Enrichment failed');
       }
 
-      const data = await response.json();
+      const responseText = await response.text();
+      console.log('[PremiumAPI] Response body:', responseText);
+
+      const data = JSON.parse(responseText);
+      console.log('[PremiumAPI] Parsed data:', data);
+
+      if (!data.enrichment) {
+        throw new Error('No enrichment data in response');
+      }
+
       return data.enrichment;
     } catch (error) {
       console.error('[PremiumAPI] Enrichment error:', error);

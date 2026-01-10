@@ -1,8 +1,8 @@
 # Engram Community Edition - Current Status
 
-**Last Updated**: January 5, 2026
+**Last Updated**: January 10, 2026
 **Version**: v0.1.0 (pre-release)
-**Phase**: Phase 4.1 Testing (75% complete)
+**Phase**: Phase 4 Testing & Deployment (25% complete)
 
 ---
 
@@ -82,24 +82,38 @@ npm run build            # Production build
 npm run package          # Chrome Web Store package
 ```
 
-### Premium API Integration ✅
-**Status**: Deployed locally on Mac Mini M4 Pro (Jan 5, 2026)
+### Premium API Integration 🔄 IN PROGRESS
+**Status**: Deployed locally, extension integration blocked (Jan 10, 2026)
 
-**What Works**:
-- ✅ Premium provider option in settings
-- ✅ License key input field
-- ✅ Premium API client implemented
-- ✅ Docker stack running locally (PostgreSQL, Redis, API)
-- ✅ Authentication endpoint tested and working
-- ✅ Enrichment endpoint tested with LM Studio
-- ✅ Extension configured to use local API
+**✅ What Works (API Level)**:
+- ✅ Docker stack deployed on Mac Mini M4 Pro
+- ✅ PostgreSQL 15 + Redis 7 + Express API
+- ✅ LM Studio integration via host.docker.internal
+- ✅ CORS for chrome-extension:// origins
+- ✅ License authentication (JWT, PRO tier)
+- ✅ Enrichment endpoint (0.80s avg latency)
+- ✅ API testing: 15/41 tests passing (37% coverage)
+
+**🔴 Critical Blocker (Extension Integration)**:
+- ❌ Premium API client initialization broken
+- **Issue**: Background service doesn't restore JWT tokens from storage
+- **Root Cause**: Never called `premiumClient.initialize()` on startup
+- **Fix**: Applied to [background/index.ts:343-398](packages/community/src/background/index.ts#L343-L398)
+- **Status**: Needs rebuild + verification via service worker console
 
 **Local Deployment**:
 - **API URL**: http://localhost:3000
-- **Database**: PostgreSQL 15 (Docker)
-- **Cache**: Redis 7 (Docker)
-- **LLM**: LM Studio (llama-3.2-3b-instruct on Mac)
-- **Test License**: ENGRAM-A9R4-TLC6-69H9-RH3Z (PRO tier)
+- **Database**: PostgreSQL 15 (Docker container)
+- **Cache**: Redis 7 (Docker container)
+- **LLM**: LM Studio on Mac host (llama-3.2-3b-instruct)
+- **Test License**: ENGRAM-A9R4-TLC6-69H9-RH3Z (PRO tier, 100 req/hr)
+
+**Next Steps**:
+1. Rebuild extension: `cd packages/community && npm run build`
+2. Reload extension in chrome://extensions
+3. Open service worker console (click "service worker" link)
+4. Verify initialization logs: `[PremiumAPI] Session restored successfully`
+5. Test memory save with enrichment
 
 **Files**:
 - [premium-api-client.ts](packages/community/src/lib/premium-api-client.ts) - Client implementation

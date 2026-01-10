@@ -262,8 +262,15 @@ async function handleSaveMessage(
       tags: [],
     };
 
-    // Save to storage
-    await storage.saveMemory(memory);
+    // Save to storage WITH plaintext content for enrichment
+    // The plaintext is needed for LLM-based enrichment (keywords/tags extraction)
+    // It's only used temporarily and never persisted in plaintext
+    const plaintextContent = {
+      role: extractedMessage.role,
+      text: extractedMessage.content,
+      metadata: extractedMessage.metadata,
+    };
+    await storage.saveMemory(memory, plaintextContent);
 
     console.log('[Engram] Saved memory:', memory.id);
 
@@ -902,6 +909,10 @@ async function handleReinitializeEnrichment(
 
     const storage = service.getStorage();
     await storage.reinitializeEnrichment();
+
+    // Re-initialize Premium API client if using premium provider
+    // This ensures the client is authenticated after user configures license key in UI
+    await service.initializePremiumClientIfNeeded();
 
     console.log('[Enrichment] Enrichment services reinitialized successfully');
 

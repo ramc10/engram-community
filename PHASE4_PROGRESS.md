@@ -135,9 +135,9 @@ Phase 4 completes the Engram project by:
 
 ### Task 4.2: Premium API Deployment 📦
 
-**Status**: PENDING
+**Status**: ✅ COMPLETE (Local Docker Deployment)
 
-**Platform**: Railway.app (recommended) or Render.com
+**Platform**: Docker on Mac Mini M4 Pro (Development/Testing)
 
 #### Deployment Steps:
 
@@ -191,6 +191,43 @@ Phase 4 completes the Engram project by:
 - Production API URL: `https://api.theengram.tech`
 - Health dashboard showing uptime
 - Deployment documentation (DEPLOYMENT.md)
+
+#### Local Docker Deployment (Jan 10, 2026) ✅
+
+**Completed**:
+- [x] Docker multi-stage build for ARM64/AMD64
+- [x] Docker Compose orchestration (PostgreSQL, Redis, API)
+- [x] Database migrations via Prisma
+- [x] LM Studio integration via host.docker.internal
+- [x] CORS configuration for Chrome extensions
+- [x] License authentication system
+- [x] API testing (15/41 tests passing, 37% coverage)
+
+**Infrastructure**:
+- PostgreSQL 15 (Docker container)
+- Redis 7 (Docker container)
+- Premium API (Node.js/Express, Docker)
+- LM Studio (Mac host, llama-3.2-3b-instruct model)
+
+**Test Results**:
+- ✅ Health endpoint working
+- ✅ Authentication (JWT, PRO tier, 100 requests/hour)
+- ✅ Enrichment API (0.80s avg latency)
+- ✅ Max content length (9999 chars)
+- ✅ Container restart resilience
+- ✅ Privacy (no memory content in database)
+- ✅ Unicode/emoji support
+
+**Current Blocker**: Extension integration not working
+- Premium API client initialization flow was broken
+- Fixed in [background/index.ts:343-398](packages/community/src/background/index.ts#L343-L398)
+- Extension needs rebuild + service worker console verification
+
+**Files Modified**:
+- `/Users/rc/Projects/engram-premium-api/Dockerfile` - Multi-stage build with permission fixes
+- `/Users/rc/Projects/engram-premium-api/docker-compose.yml` - Full stack orchestration
+- `/Users/rc/Projects/engram-premium-api/src/index.ts` - CORS for chrome-extension://
+- `/Users/rc/Projects/engram-community/packages/community/src/background/index.ts` - Fixed initialization
 
 ---
 
@@ -513,8 +550,49 @@ Phase 4 completes the Engram project by:
 - 🔒 **Tested**: Decryption working correctly, no plaintext in storage
 - 🔒 **Ready**: Encryption security audit passed
 
+### Critical Issues (Jan 10, 2026)
+
+#### 🔴 BLOCKER: Premium API Client Initialization Broken
+
+**Issue**: Extension fails to initialize Premium API client on startup, causing all enrichment requests to fail with "No credentials configured for provider: premium"
+
+**Root Cause**: The background service initialization flow had a fundamental flaw:
+1. Only attempted to authenticate with license key on startup
+2. Never restored existing JWT tokens from `chrome.storage.local`
+3. Created a loop where credentials were saved but never loaded
+
+**Impact**:
+- Premium API enrichment not working
+- Link detection not working
+- All memories saved without LLM-generated metadata
+
+**Fix Applied** (Jan 10, 2026):
+- Modified `initializePremiumClientIfNeeded()` in [background/index.ts:343-398](packages/community/src/background/index.ts#L343-L398)
+- Now follows proper flow:
+  1. Try to restore session from storage (load JWT)
+  2. If successful, use existing session
+  3. If no session, authenticate with license key
+  4. Save JWT to storage for future reloads
+
+**Status**:
+- ✅ Fix committed to source
+- ⏳ Needs rebuild + verification
+- ⚠️ User must check service worker console (not page console) for initialization logs
+
+**Verification Steps**:
+1. Rebuild extension: `npm run build`
+2. Reload extension in chrome://extensions
+3. Open service worker console (click "service worker" link)
+4. Look for: `[PremiumAPI] Attempting to restore session from storage...`
+5. Should see: `[PremiumAPI] Session restored successfully`
+6. Test memory save - should see enrichment working
+
+**Testing Documentation**:
+- See [PREMIUM_API_TESTS.md](PREMIUM_API_TESTS.md) for API-level tests (15/41 complete)
+- See [EXTENSION_PREMIUM_TESTING.md](EXTENSION_PREMIUM_TESTING.md) for E2E testing guide
+
 ---
 
 _Started: 2026-01-03_
 _Target Completion: 2026-02-03 (4 weeks)_
-_Phase 4 Status: 20% Complete (Task 4.1 mostly done - security verified, core testing complete)_
+_Phase 4 Status: 25% Complete (Task 4.1 testing ongoing, Task 4.2 locally deployed, critical fix applied)_

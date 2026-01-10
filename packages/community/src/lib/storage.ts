@@ -256,8 +256,10 @@ export class StorageService implements IStorage {
 
   /**
    * Save a memory
+   * @param memory Memory object with encrypted content
+   * @param plaintextContent Optional plaintext content for enrichment (not persisted)
    */
-  async saveMemory(memory: Memory): Promise<void> {
+  async saveMemory(memory: Memory, plaintextContent?: { role: string; text: string; metadata?: any }): Promise<void> {
     const memoryWithMemA = memory as MemoryWithMemA;
     await this.db.memories.put(memoryWithMemA);
 
@@ -267,7 +269,7 @@ export class StorageService implements IStorage {
     // Enrich in background (non-blocking)
     // Skip background enrichment in test environments to avoid database timing issues
     if (this.enrichmentService && process.env.NODE_ENV !== 'test') {
-      this.enrichInBackground(memoryWithMemA).catch((err) => {
+      this.enrichInBackground(memoryWithMemA, plaintextContent).catch((err) => {
         console.error('[Storage] Background enrichment failed:', err);
       });
     }
@@ -628,11 +630,24 @@ export class StorageService implements IStorage {
   /**
    * Enrich a memory in the background (non-blocking)
    */
-  private async enrichInBackground(memory: MemoryWithMemA): Promise<void> {
+  private async enrichInBackground(memory: MemoryWithMemA, plaintextContent?: { role: string; text: string; metadata?: any }): Promise<void> {
     if (!this.enrichmentService) return;
 
+    // If we have plaintext content for enrichment, create a temporary memory with it
+    // Otherwise use the encrypted memory (which will fail enrichment with [ENCRYPTED] placeholder)
+    const memoryForEnrichment = plaintextContent ? {
+      ...memory,
+      content: {
+        role: plaintextContent.role,
+        text: plaintextContent.text,
+        metadata: plaintextContent.metadata || {},
+      }
+    } : memory;
+
+    console.log('[Storage] Enriching memory with content:', memoryForEnrichment.content.text.substring(0, 100) + '...');
+
     // Trigger enrichment (non-blocking queue processing)
-    await this.enrichmentService.enrichMemory(memory);
+    await this.enrichmentService.enrichMemory(memoryForEnrichment);
 
     // Regenerate embedding with enhanced metadata (keywords + context + tags)
     try {

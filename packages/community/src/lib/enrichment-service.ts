@@ -259,9 +259,12 @@ Return valid JSON only:
     }
 
     // Extract content from prompt
-    // The prompt contains the full conversation text after "Content: "
-    const contentMatch = prompt.match(/Content: (.+)/s);
-    const content = contentMatch ? contentMatch[1] : prompt;
+    // The prompt contains the message content on the line after "Content: "
+    // We only want the actual message content, not the extraction instructions
+    const contentMatch = prompt.match(/Content: ([^\n]+)/);
+    const content = contentMatch ? contentMatch[1].trim() : prompt;
+
+    console.log('[Enrichment] Extracted content for Premium API:', content);
 
     try {
       const result = await client.enrich(content);

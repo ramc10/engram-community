@@ -341,23 +341,43 @@ class BackgroundService {
    * Called on startup and when enrichment settings change
    */
   async initializePremiumClientIfNeeded(): Promise<void> {
+    console.log('[PremiumAPI] initializePremiumClientIfNeeded() started');
     try {
-      // Load enrichment config from storage
+      // Get the premium client singleton
+      const premiumClient = getPremiumClient();
+      console.log('[PremiumAPI] Got premium client singleton');
+
+      // First, try to load existing credentials from storage
+      console.log('[PremiumAPI] Attempting to restore session from storage...');
+      const restored = await premiumClient.initialize();
+      console.log('[PremiumAPI] initialize() returned:', restored);
+
+      if (restored) {
+        console.log('[PremiumAPI] Session restored successfully');
+        return;
+      }
+
+      // No saved session, check if we have a license key to authenticate
+      console.log('[PremiumAPI] No saved session, checking for license key...');
       const result = await chrome.storage.local.get('enrichmentConfig');
+      console.log('[PremiumAPI] Got enrichmentConfig:', !!result.enrichmentConfig);
+
       if (!result.enrichmentConfig) {
         console.log('[PremiumAPI] No enrichment config found');
         return;
       }
 
       const config: EnrichmentConfig = result.enrichmentConfig;
+      console.log('[PremiumAPI] Config provider:', config.provider);
 
       // Check if using premium provider
       if (config.provider !== 'premium') {
-        console.log('[PremiumAPI] Not using premium provider, skipping initialization');
+        console.log('[PremiumAPI] Not using premium provider');
         return;
       }
 
       // Check if license key is set (stored in apiKey field for premium)
+      console.log('[PremiumAPI] Config has apiKey:', !!config.apiKey);
       if (!config.apiKey) {
         console.log('[PremiumAPI] No license key configured');
         return;
@@ -365,22 +385,27 @@ class BackgroundService {
 
       // Decrypt license key if encrypted
       let licenseKey = config.apiKey;
-      if (isEncrypted(config.apiKey)) {
+      const encrypted = isEncrypted(config.apiKey);
+      console.log('[PremiumAPI] License key is encrypted:', encrypted);
+
+      if (encrypted) {
         try {
+          console.log('[PremiumAPI] Decrypting license key...');
           licenseKey = await decryptApiKey(config.apiKey);
+          console.log('[PremiumAPI] License key decrypted successfully');
         } catch (err) {
           console.error('[PremiumAPI] Failed to decrypt license key:', err);
           return;
         }
       }
 
-      // Authenticate with premium API
-      console.log('[PremiumAPI] Authenticating with premium API...');
-      const premiumClient = getPremiumClient();
+      // Authenticate with premium API using license key
+      console.log('[PremiumAPI] Authenticating with license key...');
       await premiumClient.authenticate(licenseKey);
-      console.log('[PremiumAPI] Premium API client authenticated successfully');
+      console.log('[PremiumAPI] Authentication successful');
     } catch (error) {
       console.error('[PremiumAPI] Failed to initialize premium client:', error);
+      console.error('[PremiumAPI] Error stack:', error instanceof Error ? error.stack : 'No stack');
       // Don't throw - allow extension to continue without premium features
     }
   }

@@ -1,8 +1,39 @@
 # Engram Community Edition - Roadmap
 
-**Last Updated**: January 4, 2026
+**Last Updated**: January 10, 2026
 
-This document tracks future enhancements and improvements planned for Engram.
+This document tracks current status, immediate priorities, and future enhancements for Engram.
+
+---
+
+## 🎯 Current Status (Phase 4: Testing & Deployment)
+
+### ✅ Completed (Last 7 Days)
+- **Security**: Fixed critical plaintext storage vulnerability (Jan 5)
+- **Premium API**: Deployed locally via Docker on Mac Mini M4 Pro (Jan 10)
+- **API Testing**: 15/41 tests passing (37% coverage)
+- **CORS**: Chrome extension support enabled
+- **Authentication**: License-based JWT authentication working
+- **Infrastructure**: PostgreSQL + Redis + LM Studio integration
+
+### 🔴 Critical Blocker
+**Premium API Client Initialization** (Jan 10)
+- **Issue**: Extension doesn't load JWT tokens from storage on startup
+- **Root Cause**: Background service never called `client.initialize()` to restore session
+- **Fix**: Applied to [background/index.ts:343-398](packages/community/src/background/index.ts#L343-L398)
+- **Next Step**: Rebuild extension, verify in service worker console
+
+### 📋 Immediate Priorities (This Week)
+1. **Verify Fix**: Check service worker console for `[PremiumAPI] Session restored successfully`
+2. **Test E2E**: Complete end-to-end memory enrichment with Premium API
+3. **Complete Testing**: Finish remaining 26/41 test cases (Suite 4-8)
+4. **Production Decision**: Local-only ($0/month) vs Cloud deployment ($160/month)
+
+### 📊 Progress Metrics
+- **Phase 4 Progress**: 25% complete
+- **API Test Coverage**: 37% (15/41 tests)
+- **Known Critical Bugs**: 1 (initialization blocker - fix applied)
+- **Days to Target Launch**: 31 days (Feb 10, 2026)
 
 ---
 
