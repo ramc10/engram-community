@@ -3,7 +3,7 @@
  * Handles user registration, login, and session management via Supabase Auth
  */
 
-import { createClient, SupabaseClient, Session, User } from '@supabase/supabase-js';
+import { createClient, SupabaseClient, Session } from '@supabase/supabase-js';
 import { SUPABASE_CONFIG, SYNC_CONFIG } from '@engram/core';
 
 const API_BASE_URL = SYNC_CONFIG.API_BASE_URL;

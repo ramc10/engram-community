@@ -13,7 +13,7 @@
 
 // @ts-ignore - edgevec types not fully compatible
 import { EdgeVec, EdgeVecConfig } from 'edgevec';
-import type { UUID, Timestamp, Memory, MemoryWithMemA } from '@engram/core';
+import type { UUID, Timestamp, Memory } from '@engram/core';
 import type { EngramDatabase } from './storage';
 
 /**
