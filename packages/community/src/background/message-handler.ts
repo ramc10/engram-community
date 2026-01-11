@@ -349,11 +349,14 @@ async function handleSearchMemories(
 
     // Sort by relevance (keyword matching if they have the query in text)
     const normalizedQuery = query.toLowerCase().trim();
+    const escapedQuery = normalizedQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const queryRegExp = new RegExp(escapedQuery, 'g');
+
     decryptedResults.sort((a, b) => {
       const aText = a.content?.text?.toLowerCase() || '';
       const bText = b.content?.text?.toLowerCase() || '';
-      const aOccurrences = (aText.match(new RegExp(normalizedQuery, 'g')) || []).length;
-      const bOccurrences = (bText.match(new RegExp(normalizedQuery, 'g')) || []).length;
+      const aOccurrences = (aText.match(queryRegExp) || []).length;
+      const bOccurrences = (bText.match(queryRegExp) || []).length;
 
       if (aOccurrences !== bOccurrences) {
         return bOccurrences - aOccurrences; // More occurrences first
@@ -402,10 +405,20 @@ async function handleGetSyncStatus(
     const lastSyncTime = await storage.getMetadata<number>('lastSyncTime');
 
     const cloudSync = service.getCloudSync();
-    const syncManager = service.getSyncManager();
+    let isConnected = cloudSync?.isStarted() || false;
+
+    if (!isConnected) {
+      try {
+        const syncManager = service.getSyncManager();
+        isConnected = syncManager?.isConnected() || false;
+      } catch (e) {
+        // Sync manager not initialized, which occurs during initial setup
+        // or in unit tests. This is expected.
+      }
+    }
 
     const status: SyncStatus = {
-      isConnected: cloudSync?.isStarted() || syncManager?.isConnected() || false,
+      isConnected,
       lastSyncTime: lastSyncTime || undefined,
       pendingOperations,
       deviceId,
