@@ -56,7 +56,7 @@ engram-community/
 **community** (AGPL-3.0):
 - Browser extension code
 - Local-first features
-- Premium API client
+
 - Copyleft (modifications must be open source)
 
 ---
@@ -139,7 +139,7 @@ packages/community/src/
 ├── lib/                  # Core services
 │   ├── storage.ts        # IndexedDB + encryption
 │   ├── embedding-service.ts
-│   ├── enrichment-service.ts  # Can use premium API
+│   ├── enrichment-service.ts  # Enriches memories
 │   ├── link-detection-service.ts
 │   └── evolution-service.ts
 │
@@ -199,8 +199,7 @@ For local development:
 PLASMO_PUBLIC_SUPABASE_URL=https://xxx.supabase.co
 PLASMO_PUBLIC_SUPABASE_ANON_KEY=xxx
 
-# Premium API (if using premium)
-PLASMO_PUBLIC_PREMIUM_API_URL=https://api.engram.io
+
 ```
 
 ---
@@ -254,7 +253,7 @@ For commercial licensing inquiries: artha360.live@gmail.com
 - ✅ E2E encryption
 - ✅ Semantic search
 - ✅ Memory injection
-- ✅ Premium API integration
+
 
 ### Coming Soon
 - 🔜 Firefox support
