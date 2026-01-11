@@ -13,7 +13,7 @@ import { MasterKey, generateUUID } from '@engram/core';
 // Import CryptoService from local lib (not from @engram/core to avoid bundling issues)
 import { CryptoService } from '../lib/crypto-service';
 import { StorageService } from '../lib/storage';
-import { MessageType, Message, createErrorResponse } from '../lib/messages';
+import { Message, createErrorResponse } from '../lib/messages';
 import { handleMessage } from './message-handler';
 import { SyncManager } from '../sync/sync-manager';
 import { authClient } from '../lib/auth-client';
