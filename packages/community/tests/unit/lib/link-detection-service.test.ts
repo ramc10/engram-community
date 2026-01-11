@@ -5,9 +5,9 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
-import { LinkDetectionService } from '../src/lib/link-detection-service';
+import { LinkDetectionService } from '../../../src/lib/link-detection-service';
 import type { EnrichmentConfig, MemoryWithMemA } from '@engram/core';
-import type { MemoryWithEmbedding } from '../src/lib/embedding-service';
+import type { MemoryWithEmbedding } from '../../../src/lib/embedding-service';
 
 interface LinkScore {
   memoryId: string;
@@ -19,7 +19,7 @@ interface LinkScore {
 // Create persistent mock for embedding service
 const mockFindSimilar = jest.fn<any>();
 
-jest.mock('../src/lib/embedding-service', () => ({
+jest.mock('../../../src/lib/embedding-service', () => ({
   getEmbeddingService: () => ({
     findSimilar: mockFindSimilar,
   }),

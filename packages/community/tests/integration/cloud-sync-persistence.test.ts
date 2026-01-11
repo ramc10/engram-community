@@ -5,6 +5,7 @@
  * @jest-environment node
  */
 
+import { describe, it, expect, beforeEach, afterEach, jest, test, beforeAll, afterAll } from '@jest/globals';
 import { BackgroundService } from '../../src/background/index';
 import { MasterKey, Memory } from '@engram/core';
 // Import CryptoService from source file (not exported from @engram/core to avoid bundling issues)
@@ -278,7 +279,7 @@ describe('Cloud Sync Persistence Integration', () => {
       const remoteMemories: Memory[] = [
         {
           id: 'remote-1',
-          content: 'Remote memory 1',
+          content: { role: 'user', text: 'Remote memory 1' },
           platform: 'claude',
           timestamp: Date.now(),
           conversationId: 'conv-1',

@@ -6,7 +6,7 @@
 import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
 import type { MemoryWithMemA, UUID } from '@engram/core';
 import { generateUUID, now, createVectorClock } from '@engram/core';
-import { HNSWIndexService } from '../src/lib/hnsw-index-service';
+import { HNSWIndexService } from '../../../src/lib/hnsw-index-service';
 
 // Mock EdgeVec before importing
 var nextVectorId = 0; // Auto-incrementing vector ID (var is hoisted)

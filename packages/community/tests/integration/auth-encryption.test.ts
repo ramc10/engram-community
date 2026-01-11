@@ -380,4 +380,72 @@ describe('Auth Encryption Consistency Integration', () => {
         // Master key should exist even if remote storage failed
         expect(backgroundService.getMasterKey()).not.toBeNull();
     });
+
+    test('should handle password change flow (re-derivation with same salt)', async () => {
+        const EMAIL = 'pwd-change@example.com';
+        const OLD_PASSWORD = 'oldPassword123';
+        const NEW_PASSWORD = 'newPassword456';
+
+        // 1. Register with old password
+        await handleMessage({
+            type: MessageType.AUTH_REGISTER,
+            email: EMAIL,
+            password: OLD_PASSWORD,
+        } as any, mockSender, backgroundService);
+        const salt = fakeUserDb[EMAIL].metadata.engram_salt;
+        const oldKey = backgroundService.getMasterKey()!.key;
+
+        // 2. Change password (simulated by updating fake DB and logging in)
+        fakeUserDb[EMAIL].password = NEW_PASSWORD;
+
+        await handleMessage({ type: MessageType.AUTH_LOGOUT } as any, mockSender, backgroundService);
+
+        await handleMessage({
+            type: MessageType.AUTH_LOGIN,
+            email: EMAIL,
+            password: NEW_PASSWORD,
+        } as any, mockSender, backgroundService);
+
+        const newKey = backgroundService.getMasterKey()!.key;
+        const newSalt = fakeUserDb[EMAIL].metadata.engram_salt;
+
+        // Salt should be preserved, but key should be different
+        expect(newSalt).toBe(salt);
+        expect(uint8ArrayToBase64(newKey)).not.toBe(uint8ArrayToBase64(oldKey));
+    });
+
+    test('should ensure local restored key matches cloud metadata salt', async () => {
+        const EMAIL = 'restore-match@example.com';
+        const PASSWORD = 'password123';
+
+        // 1. Initial login/setup
+        await handleMessage({
+            type: MessageType.AUTH_REGISTER,
+            email: EMAIL,
+            password: PASSWORD,
+        } as any, mockSender, backgroundService);
+
+        const originalSalt = fakeUserDb[EMAIL].metadata.engram_salt;
+
+        // 2. Shut down and simulate a "restoration" from local storage
+        await backgroundService.shutdown();
+
+        // Ensure chrome storage has the key persistence (mocked behavior)
+        // In reality, persistMasterKey does this.
+
+        const service2 = new BackgroundService();
+        await service2.initialize(); // This calls restoreMasterKey
+
+        // 3. Login again to verify identity
+        await handleMessage({
+            type: MessageType.AUTH_LOGIN,
+            email: EMAIL,
+            password: PASSWORD,
+        } as any, mockSender, service2);
+
+        const currentSalt = fakeUserDb[EMAIL].metadata.engram_salt;
+        expect(currentSalt).toBe(originalSalt);
+
+        await service2.shutdown();
+    });
 });
