@@ -721,7 +721,7 @@ describe('Message Handler', () => {
     });
 
     it('should use existing salt from metadata on login', async () => {
-      const existingSalt = new Uint8Array([1, 2, 3, 4]);
+      const existingSalt = new Uint8Array(16).fill(1); // 16 bytes of 0x01
       const base64Salt = Buffer.from(existingSalt).toString('base64');
 
       mockAuthClient.login.mockResolvedValueOnce({

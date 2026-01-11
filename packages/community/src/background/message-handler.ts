@@ -557,10 +557,23 @@ async function handleAuthLogin(
     if (saltB64) {
       try {
         salt = base64ToUint8Array(saltB64);
+
+        // Basic validation: salt must be at least 16 bytes for Argon2id
+        if (salt.length < 16) {
+          throw new Error('Stored salt is too short or invalid');
+        }
+
         console.log('[Engram] Found existing user salt');
       } catch (e) {
-        console.warn('[Engram] Failed to decode user salt, generating new one');
+        console.warn('[Engram] Failed to decode user salt or invalid salt, generating new one:', e);
         salt = crypto.generateSalt();
+        // Save the fresh salt since the old one was corrupt or invalid
+        try {
+          await authClient.updateUserMetadata({ engram_salt: uint8ArrayToBase64(salt) });
+          console.log('[Engram] Replaced invalid salt with new one');
+        } catch (metadataError) {
+          console.warn('[Engram] Failed to store replacement salt:', metadataError);
+        }
       }
     } else {
       console.log('[Engram] No user salt found, generating new one');
