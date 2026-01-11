@@ -1,156 +1,137 @@
-/**
- * Mock implementation of Dexie for testing
- */
-
+// @ts-nocheck
 import { jest } from '@jest/globals';
 
 export class Dexie {
-  public memories: any;
-  public conversations: any;
-  public metadata: any;
-  public syncQueue: any;
-  public searchIndex: any;
-  public devices: any;
-  public syncOperations: any;
-  public hnswIndex: any;
-
-  private _dbName: string;
-  private _mockTables: Map<string, any> = new Map();
-
-  constructor(dbName: string) {
+  constructor(dbName) {
     this._dbName = dbName;
-
-    // Ensure version method is bound to this instance
+    this._mockTables = new Map();
+    this._data = new Map();
+    this._primaryKeys = new Map();
     this.version = this.version.bind(this);
   }
 
-  /**
-   * Mock version() method for schema definition
-   * Returns a mock object with stores() method for chaining
-   */
-  version(_versionNumber: number): any {
+  version(_versionNumber) {
     const self = this;
-
-    // Create chainable version builder
-    const versionBuilder = {
-      stores: (schema: Record<string, string>) => {
-        // Initialize mock tables based on schema
+    return {
+      stores: (schema) => {
         Object.keys(schema).forEach((tableName) => {
+          const pk = schema[tableName].split(',')[0].trim().replace(/^[&|*]*/, '') || 'id';
+          self._primaryKeys.set(tableName, pk);
+          if (!self._data.has(tableName)) self._data.set(tableName, new Map());
           if (!self._mockTables.has(tableName)) {
-            // Create a default mock table
             const mockTable = self._createMockTable(tableName);
             self._mockTables.set(tableName, mockTable);
-            // @ts-ignore - Dynamically assign table to Dexie instance
             self[tableName] = mockTable;
           }
         });
-        // Return builder to allow chaining .upgrade()
-        return versionBuilder;
+        return { upgrade: (fn) => self };
       },
-      upgrade: (fn: any) => {
-        // Mock upgrade callback - don't actually run it
-        // Return the Dexie instance for further chaining
-        return self;
-      },
-    };
-
-    return versionBuilder;
-  }
-
-  /**
-   * Mock open() method
-   */
-  async open() {
-    return this;
-  }
-
-  /**
-   * Mock close() method
-   */
-  close() {
-    // No-op for mock
-  }
-
-  /**
-   * Mock delete() method
-   */
-  async delete() {
-    return undefined;
-  }
-
-  /**
-   * Mock table() method
-   */
-  table(tableName: string) {
-    if (this._mockTables.has(tableName)) {
-      return this._mockTables.get(tableName);
-    }
-    // @ts-ignore
-    return this[tableName];
-  }
-
-  /**
-   * Helper to create a mock table with common Dexie table methods
-   */
-  private _createMockTable(tableName: string) {
-    return {
-      put: jest.fn<any>().mockResolvedValue(undefined),
-      add: jest.fn<any>().mockResolvedValue(undefined),
-      get: jest.fn<any>().mockResolvedValue(null),
-      update: jest.fn<any>().mockResolvedValue(1),
-      delete: jest.fn<any>().mockResolvedValue(undefined),
-      clear: jest.fn<any>().mockResolvedValue(undefined),
-      bulkPut: jest.fn<any>().mockResolvedValue(undefined),
-      bulkAdd: jest.fn<any>().mockResolvedValue(undefined),
-      bulkDelete: jest.fn<any>().mockResolvedValue(undefined),
-      bulkGet: jest.fn<any>().mockResolvedValue([]),
-      count: jest.fn<any>().mockResolvedValue(0),
-      toArray: jest.fn<any>().mockResolvedValue([]),
-      toCollection: jest.fn<any>().mockReturnThis(),
-      where: jest.fn<any>().mockReturnThis(),
-      filter: jest.fn<any>().mockReturnThis(),
-      equals: jest.fn<any>().mockReturnThis(),
-      above: jest.fn<any>().mockReturnThis(),
-      below: jest.fn<any>().mockReturnThis(),
-      between: jest.fn<any>().mockReturnThis(),
-      anyOf: jest.fn<any>().mockReturnThis(),
-      anyOfIgnoreCase: jest.fn<any>().mockReturnThis(),
-      noneOf: jest.fn<any>().mockReturnThis(),
-      startsWithIgnoreCase: jest.fn<any>().mockReturnThis(),
-      equalsIgnoreCase: jest.fn<any>().mockReturnThis(),
-      notEqual: jest.fn<any>().mockReturnThis(),
-      startsWith: jest.fn<any>().mockReturnThis(),
-      endsWith: jest.fn<any>().mockReturnThis(),
-      limit: jest.fn<any>().mockReturnThis(),
-      offset: jest.fn<any>().mockReturnThis(),
-      reverse: jest.fn<any>().mockReturnThis(),
-      orderBy: jest.fn<any>().mockReturnThis(),
-      sortBy: jest.fn<any>().mockResolvedValue([]),
-      each: jest.fn<any>().mockResolvedValue(undefined),
-      first: jest.fn<any>().mockResolvedValue(null),
-      last: jest.fn<any>().mockResolvedValue(null),
-      keys: jest.fn<any>().mockResolvedValue([]),
-      primaryKeys: jest.fn<any>().mockResolvedValue([]),
-      uniqueKeys: jest.fn<any>().mockResolvedValue([]),
-      modify: jest.fn<any>().mockResolvedValue(0),
-      or: jest.fn<any>().mockReturnThis(),
-      and: jest.fn<any>().mockReturnThis(),
+      upgrade: (fn) => self
     };
   }
 
-  /**
-   * Set custom mock table for testing
-   */
-  setMockTable(tableName: string, mockTable: any) {
+  async open() { return this; }
+  close() { }
+  async delete() { return undefined; }
+  table(tableName) { return this._mockTables.get(tableName) || this[tableName]; }
+
+  _createCollection(items, tableMock) {
+    let result = [...items];
+    const collection = {
+      toArray: jest.fn().mockImplementation(async () => result),
+      count: jest.fn().mockImplementation(async () => result.length),
+      limit: jest.fn().mockImplementation((n) => { result = result.slice(0, n); return collection; }),
+      offset: jest.fn().mockImplementation((n) => { result = result.slice(n); return collection; }),
+      reverse: jest.fn().mockImplementation(() => { result.reverse(); return collection; }),
+      sortBy: jest.fn().mockImplementation(async (prop) => {
+        result.sort((a, b) => (a[prop] > b[prop] ? 1 : -1));
+        return result;
+      }),
+      filter: jest.fn().mockImplementation((fn) => { result = result.filter(fn); return collection; }),
+      first: jest.fn().mockImplementation(async () => result[0]),
+      last: jest.fn().mockImplementation(async () => result[result.length - 1]),
+      each: jest.fn().mockImplementation(async (cb) => { for (const item of result) await cb(item); }),
+      or: jest.fn().mockImplementation((idx) => tableMock && tableMock.where(idx)),
+      and: jest.fn().mockImplementation((fn) => { result = result.filter(fn); return collection; })
+    };
+    return collection;
+  }
+
+  _createMockTable(tableName) {
+    const tableStore = this._data.get(tableName);
+    const pkField = this._primaryKeys.get(tableName) || 'id';
+    const self = this;
+
+    const putImpl = async (item) => {
+      const pk = item[pkField];
+      if (pk) tableStore.set(pk, item);
+      return pk;
+    };
+    const bulkPutImpl = async (items) => {
+      items.forEach(item => {
+        const pk = item[pkField];
+        if (pk) tableStore.set(pk, item);
+      });
+      return items[items.length - 1]?.[pkField];
+    };
+    const toArrayImpl = async () => Array.from(tableStore.values());
+
+    const tableMock = {
+      put: jest.fn().mockImplementation(putImpl),
+      add: jest.fn().mockImplementation(putImpl),
+      get: jest.fn().mockImplementation(async (key) => tableStore.get(key)),
+      delete: jest.fn().mockImplementation(async (k) => tableStore.delete(k)),
+      clear: jest.fn().mockImplementation(async () => tableStore.clear()),
+      update: jest.fn().mockImplementation(async (key, changes) => {
+        const item = tableStore.get(key);
+        if (item) { Object.assign(item, changes); return 1; }
+        return 0;
+      }),
+      bulkPut: jest.fn().mockImplementation(bulkPutImpl),
+      bulkAdd: jest.fn().mockImplementation(bulkPutImpl),
+      bulkGet: jest.fn().mockImplementation(async (keys) => keys.map(k => tableStore.get(k))),
+      bulkDelete: jest.fn().mockImplementation(async (keys) => keys.forEach(k => tableStore.delete(k))),
+      count: jest.fn().mockImplementation(async () => tableStore.size),
+      toArray: jest.fn().mockImplementation(toArrayImpl),
+      filter: jest.fn().mockImplementation((fn) => {
+        const items = Array.from(tableStore.values()).filter(fn);
+        return self._createCollection(items, tableMock);
+      }),
+      orderBy: jest.fn().mockImplementation((index) => {
+        const items = Array.from(tableStore.values());
+        items.sort((a, b) => (a[index] > b[index] ? 1 : -1));
+        return self._createCollection(items, tableMock);
+      }),
+      where: jest.fn().mockImplementation((index) => {
+        const items = Array.from(tableStore.values());
+        return {
+          equals: jest.fn().mockImplementation((val) => self._createCollection(items.filter(x => x[index] === val), tableMock)),
+          above: jest.fn().mockImplementation((val) => self._createCollection(items.filter(x => x[index] > val), tableMock)),
+          below: jest.fn().mockImplementation((val) => self._createCollection(items.filter(x => x[index] < val), tableMock)),
+          between: jest.fn().mockImplementation((min, max) => self._createCollection(items.filter(x => x[index] >= min && x[index] <= max), tableMock)),
+          anyOf: jest.fn().mockImplementation((...vals) => {
+            const flatVals = vals.flat();
+            return self._createCollection(items.filter(x => flatVals.includes(x[index])), tableMock);
+          }),
+          startsWith: jest.fn().mockImplementation((val) => self._createCollection(items.filter(x => typeof x[index] === 'string' && x[index].startsWith(val)), tableMock)),
+          equalsIgnoreCase: jest.fn().mockImplementation((val) => self._createCollection(items.filter(x => typeof x[index] === 'string' && x[index].toLowerCase() === val.toLowerCase()), tableMock)),
+          startsWithIgnoreCase: jest.fn().mockImplementation((val) => self._createCollection(items.filter(x => typeof x[index] === 'string' && x[index].toLowerCase().startsWith(val.toLowerCase())), tableMock)),
+          or: jest.fn().mockImplementation((idx) => tableMock.where(idx))
+        };
+      }),
+      limit: jest.fn().mockImplementation((n) => self._createCollection(Array.from(tableStore.values()), tableMock).limit(n)),
+      offset: jest.fn().mockImplementation((n) => self._createCollection(Array.from(tableStore.values()), tableMock).offset(n)),
+      reverse: jest.fn().mockImplementation(() => self._createCollection(Array.from(tableStore.values()), tableMock).reverse()),
+      toCollection: jest.fn().mockImplementation(() => self._createCollection(Array.from(tableStore.values()), tableMock)),
+      keys: jest.fn().mockResolvedValue(Array.from(tableStore.keys())),
+      primaryKeys: jest.fn().mockResolvedValue(Array.from(tableStore.keys())),
+    };
+    return tableMock;
+  }
+  setMockTable(tableName, mockTable) {
     this._mockTables.set(tableName, mockTable);
-    // @ts-ignore
     this[tableName] = mockTable;
   }
 }
-
-// Mock Table type (Dexie uses this for typed table references)
-export class Table<T = any, TKey = any> {
-  constructor() {}
-}
-
+export class Table { constructor() { } }
 export default Dexie;

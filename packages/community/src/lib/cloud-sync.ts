@@ -65,6 +65,13 @@ export class CloudSyncService {
   }
 
   /**
+   * Check if cloud sync is started
+   */
+  isStarted(): boolean {
+    return this.syncInterval !== null;
+  }
+
+  /**
    * Stop cloud sync service
    * - Unsubscribes from real-time changes
    * - Stops periodic sync

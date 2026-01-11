@@ -16,7 +16,7 @@ process.env.PLASMO_PUBLIC_SUPABASE_URL = 'https://test.supabase.co';
 process.env.PLASMO_PUBLIC_SUPABASE_ANON_KEY = 'test-anon-key';
 
 // Mock chrome APIs
-const mockStorage = new Map<string, any>();
+const mockStorage = new Map();
 
 global.chrome = {
   storage: {

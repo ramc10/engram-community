@@ -171,8 +171,8 @@ export async function handleMessage(
         return createErrorResponse(`Unknown message type: ${message.type}`);
     }
   } catch (error) {
-    console.error('[Engram] Error handling message:', error);
-    return createErrorResponse(error as Error, message.type);
+    console.error('[Engram] handleMessage error:', error);
+    return createErrorResponse((error as Error).message || 'Unknown error');
   }
 }
 
@@ -338,37 +338,20 @@ async function handleSearchMemories(
       throw new Error('Search query is required');
     }
 
-    // CRITICAL FIX: Decrypt memories BEFORE searching
-    // Previous implementation searched on "[ENCRYPTED]" placeholder
-    // Now we:
-    // 1. Get all memories
-    // 2. Decrypt them
-    // 3. Search on decrypted content
+    // Use storage search which handles both semantic (HNSW) and keyword fallback
+    const results = await storage.searchMemories(query, limit || 20);
 
-    // Get all memories (we'll filter after decryption)
-    const allMemories = await storage.getMemories({});
+    // Decrypt the search results
+    const decryptedResults = await decryptMemories(results, service);
 
-    // Decrypt all memories first
-    const decryptedMemories = await decryptMemories(allMemories, service);
+    // Map memories to their original index for stable tie-breaking (preserves semantic rank)
+    const originalOrder = new Map(decryptedResults.map((m, i) => [m.id, i]));
 
-    // Now search on decrypted content
+    // Sort by relevance (keyword matching if they have the query in text)
     const normalizedQuery = query.toLowerCase().trim();
-    const results = decryptedMemories.filter((memory) => {
-      const text = memory.content.text.toLowerCase();
-      const tags = memory.tags.map((t) => t.toLowerCase());
-      const title = (memory.content as any).title?.toLowerCase() || '';
-
-      return (
-        text.includes(normalizedQuery) ||
-        tags.some((tag) => tag.includes(normalizedQuery)) ||
-        title.includes(normalizedQuery)
-      );
-    });
-
-    // Sort by relevance (more occurrences = more relevant)
-    results.sort((a, b) => {
-      const aText = a.content.text.toLowerCase();
-      const bText = b.content.text.toLowerCase();
+    decryptedResults.sort((a, b) => {
+      const aText = a.content?.text?.toLowerCase() || '';
+      const bText = b.content?.text?.toLowerCase() || '';
       const aOccurrences = (aText.match(new RegExp(normalizedQuery, 'g')) || []).length;
       const bOccurrences = (bText.match(new RegExp(normalizedQuery, 'g')) || []).length;
 
@@ -376,12 +359,13 @@ async function handleSearchMemories(
         return bOccurrences - aOccurrences; // More occurrences first
       }
 
-      // If same occurrences, sort by timestamp (newest first)
-      return b.timestamp - a.timestamp;
+      // If same occurrences, preserve original order from storage (which might be semantic)
+      const aIndex = originalOrder.get(a.id) ?? 999;
+      const bIndex = originalOrder.get(b.id) ?? 999;
+      return aIndex - bIndex;
     });
 
-    // Apply limit if provided
-    const limitedResults = limit ? results.slice(0, limit) : results;
+    const limitedResults = limit ? decryptedResults.slice(0, limit) : decryptedResults;
 
     console.log(`[Engram] Search for "${query}" found ${results.length} results (returning ${limitedResults.length})`);
 
@@ -417,8 +401,11 @@ async function handleGetSyncStatus(
     // Get last sync time from metadata
     const lastSyncTime = await storage.getMetadata<number>('lastSyncTime');
 
+    const cloudSync = service.getCloudSync();
+    const syncManager = service.getSyncManager();
+
     const status: SyncStatus = {
-      isConnected: false, // TODO: Check actual sync connection
+      isConnected: cloudSync?.isStarted() || syncManager?.isConnected() || false,
       lastSyncTime: lastSyncTime || undefined,
       pendingOperations,
       deviceId,
@@ -458,8 +445,11 @@ async function handleAuthRegister(
 
     console.log('[Engram] Registering user:', email);
 
-    // 1. Register with auth server (gets JWT token)
     const authToken = await authClient.register({ email, password });
+
+    if (!authToken || !authToken.user) {
+      throw new Error('Registration failed: No user returned');
+    }
 
     console.log('[Engram] User registered, userId:', authToken.user.id);
 
@@ -474,9 +464,8 @@ async function handleAuthRegister(
       console.log('[Engram] User salt generated and stored');
     } catch (metadataError) {
       console.warn('[Engram] Failed to store user salt:', metadataError);
-      // We continue, but this user might have issues logging in on other devices
-      // until we successfully save the salt
     }
+
 
     const masterKey = await crypto.deriveKey(password, salt);
     service.setMasterKey(masterKey);
@@ -546,6 +535,10 @@ async function handleAuthLogin(
 
     // 1. Login with auth server (gets JWT token)
     const authToken = await authClient.login({ email, password });
+
+    if (!authToken || !authToken.user) {
+      throw new Error('Login failed: No user returned');
+    }
 
     console.log('[Engram] User logged in, userId:', authToken.user.id);
 
@@ -630,6 +623,10 @@ async function handleAuthLoginGoogle(
 
     // 1. Login with Google OAuth (launches browser flow)
     const authToken = await authClient.loginWithGoogle();
+
+    if (!authToken || !authToken.user) {
+      throw new Error('Google login failed: No user returned');
+    }
 
     console.log('[Engram] Google login successful, userId:', authToken.user.id);
 

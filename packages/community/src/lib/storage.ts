@@ -26,7 +26,7 @@ import { LinkDetectionService } from './link-detection-service';
 import { EvolutionService } from './evolution-service';
 import { decryptApiKey, isEncrypted } from './api-key-crypto';
 import { getEmbeddingService } from './embedding-service';
-import type { HNSWIndexEntry, HNSWIndexService } from './hnsw-index-service';
+import type { HNSWIndexEntry, HNSWIndexService, HNSWStats } from './hnsw-index-service';
 import { createLogger } from './logger';
 
 // Declare chrome for TypeScript
@@ -106,6 +106,7 @@ export class StorageService implements IStorage {
   private linkDetectionService: LinkDetectionService | null = null;
   private evolutionService: EvolutionService | null = null;
   private hnswIndexService: HNSWIndexService | null = null; // Phase 4: Vector index
+  public forceEnrichmentInTests = false;
 
   constructor() {
     this.db = new EngramDatabase();
@@ -276,6 +277,24 @@ export class StorageService implements IStorage {
    */
   async saveMemory(memory: Memory, plaintextContent?: { role: string; text: string; metadata?: any }): Promise<void> {
     const memoryWithMemA = memory as MemoryWithMemA;
+
+    // Conflict resolution: Only save if new version is actually newer
+    const existing = await this.db.memories.get(memory.id);
+    if (existing) {
+      const existingWithMemA = existing as MemoryWithMemA;
+      const isNewer = this.isVersionNewer(
+        memoryWithMemA.vectorClock || {},
+        memoryWithMemA.timestamp,
+        existingWithMemA.vectorClock || {},
+        existingWithMemA.timestamp
+      );
+
+      if (!isNewer) {
+        console.log(`[Storage] Skipping save for ${memory.id} - existing version is newer or identical`);
+        return;
+      }
+    }
+
     await this.db.memories.put(memoryWithMemA);
 
     // Update conversation metadata
@@ -284,11 +303,39 @@ export class StorageService implements IStorage {
     // Enrich in background (non-blocking)
     // Skip background enrichment in test environments to avoid database timing issues
     const isTestEnv = typeof (globalThis as any).process !== 'undefined' && (globalThis as any).process.env.NODE_ENV === 'test';
-    if (this.enrichmentService && !isTestEnv) {
+    if (this.enrichmentService && (!isTestEnv || this.forceEnrichmentInTests)) {
       this.enrichInBackground(memoryWithMemA, plaintextContent).catch((err) => {
         logger.error('Background enrichment failed:', err);
       });
     }
+  }
+
+  /**
+   * Compare two versions using vector clocks and timestamps
+   */
+  private isVersionNewer(
+    newClock: Record<string, number>,
+    newTimestamp: number,
+    oldClock: Record<string, number>,
+    oldTimestamp: number
+  ): boolean {
+    let newIsGreater = false;
+    let oldIsGreater = false;
+
+    const allDevices = new Set([...Object.keys(newClock), ...Object.keys(oldClock)]);
+    for (const device of allDevices) {
+      const newVal = newClock[device] || 0;
+      const oldVal = oldClock[device] || 0;
+      if (newVal > oldVal) newIsGreater = true;
+      if (oldVal > newVal) oldIsGreater = true;
+    }
+
+    // Strictly greater
+    if (newIsGreater && !oldIsGreater) return true;
+    if (oldIsGreater && !newIsGreater) return false;
+
+    // Concurrent or identical - use timestamp as tie-breaker
+    return newTimestamp > oldTimestamp;
   }
 
   /**
@@ -448,16 +495,39 @@ export class StorageService implements IStorage {
   /**
    * Search memories by query
    */
-  async searchMemories(query: string): Promise<Memory[]> {
+  async searchMemories(query: string, limit: number = 100): Promise<Memory[]> {
     const normalizedQuery = query.toLowerCase().trim();
 
-    // Simple full-text search (for MVP)
-    // In production, this should use encrypted search tags
+    // 1. Try semantic search if HNSW is ready (Phase 4)
+    if (this.hnswIndexService?.isReady()) {
+      try {
+        const embeddingService = getEmbeddingService();
+        const queryVector = await embeddingService.embed(normalizedQuery);
+        const results = await this.hnswIndexService.search(new Float32Array(queryVector), limit);
+
+        if (results.length > 0) {
+          const memories: Memory[] = [];
+          for (const res of results) {
+            const memory = await this.getMemory(res.id);
+            if (memory) {
+              memories.push(memory);
+            }
+          }
+          return memories;
+        }
+      } catch (error) {
+        logger.error('Semantic search failed, falling back to keyword search:', error);
+      }
+    }
+
+    // 2. Fallback: Simple keyword search on decrypted content (expensive for large DB)
     const allMemories = await this.db.memories.toArray();
 
     const results = allMemories.filter((memory) => {
-      const text = memory.content.text.toLowerCase();
-      const tags = memory.tags.map((t) => t.toLowerCase());
+      // Note: in a real extension, we would use a proper search index
+      // For now, we search on content if it's already decrypted or known
+      const text = memory.content?.text?.toLowerCase() || "";
+      const tags = (memory.tags || []).map((t) => t.toLowerCase());
 
       return (
         text.includes(normalizedQuery) ||
@@ -467,12 +537,28 @@ export class StorageService implements IStorage {
 
     // Sort by relevance (simple: more occurrences = more relevant)
     results.sort((a, b) => {
-      const aOccurrences = (a.content.text.toLowerCase().match(new RegExp(normalizedQuery, 'g')) || []).length;
-      const bOccurrences = (b.content.text.toLowerCase().match(new RegExp(normalizedQuery, 'g')) || []).length;
+      const aText = a.content?.text?.toLowerCase() || "";
+      const bText = b.content?.text?.toLowerCase() || "";
+      const aOccurrences = (aText.match(new RegExp(normalizedQuery, 'g')) || []).length;
+      const bOccurrences = (bText.match(new RegExp(normalizedQuery, 'g')) || []).length;
       return bOccurrences - aOccurrences;
     });
 
-    return results.slice(0, 100); // Limit to 100 results
+    return results.slice(0, limit);
+  }
+
+  /**
+   * Get HNSW index service (internal use)
+   */
+  getHNSWIndex(): HNSWIndexService | null {
+    return this.hnswIndexService;
+  }
+
+  /**
+   * Get HNSW index statistics
+   */
+  getHNSWStats(): HNSWStats | null {
+    return this.hnswIndexService?.getStats() || null;
   }
 
   /**
@@ -597,7 +683,7 @@ export class StorageService implements IStorage {
 
     // Collect all tags
     const allTags = new Set<string>();
-    memories.forEach((m) => m.tags.forEach((tag) => allTags.add(tag)));
+    memories.forEach((m) => (m.tags || []).forEach((tag: string) => allTags.add(tag)));
 
     // Get existing conversation or create new one
     let conversation = await this.getConversation(conversationId);
@@ -664,6 +750,18 @@ export class StorageService implements IStorage {
 
     // Trigger enrichment (non-blocking queue processing)
     await this.enrichmentService.enrichMemory(memoryForEnrichment);
+
+    // Copy back the enrichment data if we used a temporary object
+    if (memoryForEnrichment !== memory) {
+      memory.keywords = memoryForEnrichment.keywords;
+      memory.tags = memoryForEnrichment.tags;
+      memory.context = memoryForEnrichment.context;
+      // @ts-ignore
+      memory.memAVersion = memoryForEnrichment.memAVersion;
+    }
+
+    // Persist the enriched metadata to DB (bypass saveMemory hooks to avoid recursion)
+    await this.db.memories.put(memory);
 
     // Regenerate embedding with enhanced metadata (keywords + context + tags)
     try {
@@ -868,13 +966,7 @@ export class StorageService implements IStorage {
     logger.log('HNSW index rebuilt');
   }
 
-  /**
-   * Get HNSW index statistics (Phase 4)
-   * Returns null if index not initialized
-   */
-  getHNSWStats(): { vectorCount: number; memoryUsage: number } | null {
-    return this.hnswIndexService?.getStats() ?? null;
-  }
+
 }
 
 /**

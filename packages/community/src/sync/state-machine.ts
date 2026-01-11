@@ -70,7 +70,7 @@ export class SyncStateMachine {
 
   constructor(
     private config: StateMachineConfig = DEFAULT_STATE_MACHINE_CONFIG
-  ) {}
+  ) { }
 
   /**
    * Get current state
@@ -188,6 +188,7 @@ export class SyncStateMachine {
     switch (current) {
       case 'DISCONNECTED':
         if (event === 'CONNECT') return 'CONNECTING';
+        if (event === 'DISCONNECT') return 'DISCONNECTED';
         return null;
 
       case 'CONNECTING':
