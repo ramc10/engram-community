@@ -106,7 +106,8 @@ export class CryptoService implements ICryptoService {
   async generateDeviceKeyPair(): Promise<DeviceKeyPair> {
     this.ensureInitialized();
 
-    const privateKey = ed25519.utils.randomPrivateKey();
+    // Generate 32 random bytes for Ed25519 private key
+    const privateKey = crypto.getRandomValues(new Uint8Array(32));
     const publicKey = ed25519.getPublicKey(privateKey);
 
     return {
