@@ -26,7 +26,7 @@ jest.mock('@engram/core', () => {
 });
 
 // Mock chrome APIs
-const mockStorage = new Map<string, any>();
+const mockStorage = new Map();
 
 global.chrome = {
     storage: {

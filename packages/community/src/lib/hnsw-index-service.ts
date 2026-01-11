@@ -141,8 +141,12 @@ export class HNSWIndexService {
    */
   async add(memoryId: UUID, embedding: Float32Array): Promise<void> {
     if (!this.index) {
-      console.warn('[HNSW] Index not initialized, skipping add');
-      return;
+      console.log('[HNSW] Index not initialized, creating new index');
+      const config = new EdgeVecConfig(this.config.dimensions);
+      config.metric = this.config.metric;
+      config.m = this.config.m;
+      config.ef_construction = this.config.efConstruction;
+      this.index = new EdgeVec(config);
     }
 
     if (embedding.length !== 384) {
@@ -375,7 +379,7 @@ export class HNSWIndexService {
    * Check if index is ready for search
    */
   isReady(): boolean {
-    return this.index !== null && this.vectorIdMap.size > 0;
+    return this.index !== null;
   }
 
   /**
