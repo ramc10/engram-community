@@ -44,6 +44,11 @@ export const DEFAULT_WEBSOCKET_CONFIG: WebSocketClientConfig = {
 export class WebSocketClient {
   private ws: WebSocket | null = null;
   private isConnected: boolean = false;
+  private deviceId: string | null = null;
+  private deviceName: string | null = null;
+  private publicKey: string | null = null;
+  private vectorClock: Record<string, number> = {};
+  private lastSyncTimestamp: number = 0;
   private retryManager: RetryManager;
   private heartbeatTimer: NodeJS.Timeout | null = null;
   private messageQueue: WebSocketMessage[] = [];
@@ -56,11 +61,24 @@ export class WebSocketClient {
   /**
    * Connect to WebSocket server
    */
-  async connect(deviceId: string, signature: string): Promise<void> {
+  async connect(
+    deviceId: string,
+    deviceName: string,
+    publicKey: string,
+    vectorClock: Record<string, number>,
+    lastSyncTimestamp: number
+  ): Promise<void> {
     if (this.isConnected) {
       console.log('[WSClient] Already connected');
       return;
     }
+
+    // Store connection parameters for reconnection
+    this.deviceId = deviceId;
+    this.deviceName = deviceName;
+    this.publicKey = publicKey;
+    this.vectorClock = vectorClock;
+    this.lastSyncTimestamp = lastSyncTimestamp;
 
     try {
       console.log(`[WSClient] Connecting to ${this.config.url}...`);
@@ -75,9 +93,15 @@ export class WebSocketClient {
         // Send CONNECT message
         const connectMsg: ConnectMessage = {
           type: 'CONNECT',
-          deviceId,
           timestamp: Date.now(),
-          signature,
+          messageId: crypto.randomUUID(),
+          payload: {
+            deviceId,
+            deviceName,
+            publicKey,
+            vectorClock,
+            lastSyncTimestamp,
+          },
         };
 
         this.send(connectMsg);
@@ -104,7 +128,15 @@ export class WebSocketClient {
           });
 
           this.retryManager.setTimer(() => {
-            this.connect(deviceId, signature);
+            if (this.deviceId && this.deviceName && this.publicKey) {
+              this.connect(
+                this.deviceId,
+                this.deviceName,
+                this.publicKey,
+                this.vectorClock,
+                this.lastSyncTimestamp
+              );
+            }
           });
         }
       };
@@ -124,11 +156,7 @@ export class WebSocketClient {
     this.stopHeartbeat();
 
     if (this.ws) {
-      // Send DISCONNECT message
-      this.send({
-        type: 'DISCONNECT',
-      });
-
+      // Close the connection (no DISCONNECT message in protocol)
       this.ws.close(1000, 'Client requested disconnect');
       this.ws = null;
     }
@@ -171,7 +199,14 @@ export class WebSocketClient {
 
         case 'HEARTBEAT':
           // Echo heartbeat back
-          this.send({ type: 'HEARTBEAT', timestamp: Date.now() });
+          this.send({
+            type: 'HEARTBEAT',
+            timestamp: Date.now(),
+            messageId: crypto.randomUUID(),
+            payload: {
+              timestamp: Date.now(),
+            },
+          });
           break;
 
         default:
@@ -196,8 +231,8 @@ export class WebSocketClient {
     this.flushMessageQueue();
 
     this.emit('connected', {
-      serverTime: message.serverTime,
-      vectorClock: message.vectorClock,
+      serverTime: message.payload.serverTime,
+      vectorClock: message.payload.serverVectorClock,
     });
   }
 
@@ -205,10 +240,10 @@ export class WebSocketClient {
    * Handle ERROR message
    */
   private handleError(message: ErrorMessage): void {
-    console.error('[WSClient] Server error:', message.error);
+    console.error('[WSClient] Server error:', message.payload);
     this.emit('error', {
-      code: message.error.code,
-      message: message.error.message,
+      code: message.payload.code,
+      message: message.payload.message,
     });
   }
 
@@ -270,6 +305,10 @@ export class WebSocketClient {
         this.send({
           type: 'HEARTBEAT',
           timestamp: Date.now(),
+          messageId: crypto.randomUUID(),
+          payload: {
+            timestamp: Date.now(),
+          },
         });
       }
     }, this.config.heartbeatInterval);
@@ -337,11 +376,19 @@ export class WebSocketClient {
    * Request sync
    */
   requestSync(since: number, vectorClock: Record<string, number>, limit: number = 100): void {
+    if (!this.deviceId) {
+      throw new Error('Cannot request sync: deviceId not set. Call connect() first.');
+    }
+
     const message: SyncRequestMessage = {
       type: 'SYNC_REQUEST',
-      since,
-      vectorClock,
-      limit,
+      timestamp: Date.now(),
+      messageId: crypto.randomUUID(),
+      payload: {
+        deviceId: this.deviceId,
+        vectorClock,
+        since,
+      },
     };
 
     this.send(message);

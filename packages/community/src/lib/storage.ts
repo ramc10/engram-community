@@ -167,6 +167,13 @@ export class StorageService implements IStorage {
   }
 
   /**
+   * Get sync queue table (for operation-queue direct access)
+   */
+  getSyncQueueTable() {
+    return this.db.syncQueue;
+  }
+
+  /**
    * Re-initialize enrichment services with updated config
    * Called when enrichment settings are changed in the UI
    */

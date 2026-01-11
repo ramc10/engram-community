@@ -46,13 +46,13 @@ export class OperationQueue {
     const existing = await this.findDuplicate(op);
     if (existing) {
       console.log(`[OperationQueue] Duplicate operation detected, replacing: ${existing.id}`);
-      await this.storage.db.syncQueue.delete(existing.id);
+      await this.storage.getSyncQueueTable().delete(existing.id);
     }
 
     // Add to queue
-    await this.storage.db.syncQueue.add(op);
+    await this.storage.getSyncQueueTable().add(op);
 
-    console.log(`[OperationQueue] Enqueued operation: ${op.operationType} ${op.entityType} ${op.entityId}`);
+    console.log(`[OperationQueue] Enqueued operation: ${op.type} on memory ${op.memoryId}`);
 
     // Trigger debounced processing
     this.scheduleProcessing();
@@ -65,16 +65,15 @@ export class OperationQueue {
    */
   private async findDuplicate(operation: SyncOperation): Promise<SyncOperation | null> {
     // Look for operations on the same entity with the same operation type
-    const operations = await this.storage.db.syncQueue
+    const operations = await this.storage.getSyncQueueTable()
       .where('timestamp')
       .above(0)
       .toArray();
 
     const duplicate = operations.find(
       op =>
-        op.entityId === operation.entityId &&
-        op.operationType === operation.operationType &&
-        op.deviceId === operation.deviceId
+        op.memoryId === operation.memoryId &&
+        op.type === operation.type
     );
 
     return duplicate || null;
@@ -124,7 +123,7 @@ export class OperationQueue {
    * Returns up to maxBatchSize operations in FIFO order
    */
   async getBatch(): Promise<SyncOperation[]> {
-    const operations = await this.storage.db.syncQueue
+    const operations = await this.storage.getSyncQueueTable()
       .orderBy('timestamp')
       .limit(this.config.maxBatchSize)
       .toArray();
@@ -138,7 +137,7 @@ export class OperationQueue {
    * Mark operation as processed and remove from queue
    */
   async markProcessed(operationId: string): Promise<void> {
-    await this.storage.db.syncQueue.delete(operationId);
+    await this.storage.getSyncQueueTable().delete(operationId);
     console.log(`[OperationQueue] Marked processed: ${operationId}`);
   }
 
@@ -146,7 +145,7 @@ export class OperationQueue {
    * Mark multiple operations as processed
    */
   async markBatchProcessed(operationIds: string[]): Promise<void> {
-    await this.storage.db.syncQueue.bulkDelete(operationIds);
+    await this.storage.getSyncQueueTable().bulkDelete(operationIds);
     console.log(`[OperationQueue] Marked batch processed: ${operationIds.length} operations`);
   }
 
@@ -154,7 +153,7 @@ export class OperationQueue {
    * Get queue size
    */
   async getSize(): Promise<number> {
-    return await this.storage.db.syncQueue.count();
+    return await this.storage.getSyncQueueTable().count();
   }
 
   /**
@@ -169,22 +168,22 @@ export class OperationQueue {
    * Get all operations (for debugging)
    */
   async getAll(): Promise<SyncOperation[]> {
-    return await this.storage.db.syncQueue.orderBy('timestamp').toArray();
+    return await this.storage.getSyncQueueTable().orderBy('timestamp').toArray();
   }
 
   /**
    * Get operations by entity
    */
   async getByEntity(entityId: string): Promise<SyncOperation[]> {
-    const operations = await this.storage.db.syncQueue.toArray();
-    return operations.filter(op => op.entityId === entityId);
+    const operations = await this.storage.getSyncQueueTable().toArray();
+    return operations.filter(op => op.memoryId === entityId);
   }
 
   /**
    * Clear entire queue (use with caution!)
    */
   async clear(): Promise<void> {
-    await this.storage.db.syncQueue.clear();
+    await this.storage.getSyncQueueTable().clear();
     console.log('[OperationQueue] Cleared all operations');
   }
 
@@ -192,7 +191,7 @@ export class OperationQueue {
    * Remove specific operation
    */
   async remove(operationId: string): Promise<void> {
-    await this.storage.db.syncQueue.delete(operationId);
+    await this.storage.getSyncQueueTable().delete(operationId);
     console.log(`[OperationQueue] Removed operation: ${operationId}`);
   }
 
@@ -206,7 +205,7 @@ export class OperationQueue {
     oldestOperation: number | null;
     newestOperation: number | null;
   }> {
-    const operations = await this.storage.db.syncQueue.toArray();
+    const operations = await this.storage.getSyncQueueTable().toArray();
 
     const operationsByType: Record<string, number> = {};
     const operationsByEntity: Record<string, number> = {};
@@ -215,10 +214,10 @@ export class OperationQueue {
 
     for (const op of operations) {
       // Count by type
-      operationsByType[op.operationType] = (operationsByType[op.operationType] || 0) + 1;
+      operationsByType[op.type] = (operationsByType[op.type] || 0) + 1;
 
-      // Count by entity type
-      operationsByEntity[op.entityType] = (operationsByEntity[op.entityType] || 0) + 1;
+      // Count by entity (memoryId)
+      operationsByEntity[op.memoryId] = (operationsByEntity[op.memoryId] || 0) + 1;
 
       // Track timestamps
       if (oldestTimestamp === null || op.timestamp < oldestTimestamp) {
@@ -243,14 +242,14 @@ export class OperationQueue {
    * Moves operation to front of queue by updating timestamp
    */
   async retry(operationId: string): Promise<void> {
-    const operation = await this.storage.db.syncQueue.get(operationId);
+    const operation = await this.storage.getSyncQueueTable().get(operationId);
 
     if (!operation) {
       throw new Error(`Operation not found: ${operationId}`);
     }
 
     // Update timestamp to move to front
-    await this.storage.db.syncQueue.update(operationId, {
+    await this.storage.getSyncQueueTable().update(operationId, {
       timestamp: Date.now(),
     });
 
@@ -261,7 +260,7 @@ export class OperationQueue {
    * Get operations older than timestamp
    */
   async getOlderThan(timestamp: number): Promise<SyncOperation[]> {
-    return await this.storage.db.syncQueue
+    return await this.storage.getSyncQueueTable()
       .where('timestamp')
       .below(timestamp)
       .toArray();
@@ -275,7 +274,7 @@ export class OperationQueue {
     const oldOperations = await this.getOlderThan(cutoff);
 
     if (oldOperations.length > 0) {
-      await this.storage.db.syncQueue.bulkDelete(oldOperations.map(op => op.id));
+      await this.storage.getSyncQueueTable().bulkDelete(oldOperations.map(op => op.id));
       console.log(`[OperationQueue] Cleaned up ${oldOperations.length} old operations`);
     }
 
@@ -293,7 +292,7 @@ export class OperationQueue {
    * Import operations (for testing/recovery)
    */
   async import(operations: SyncOperation[]): Promise<void> {
-    await this.storage.db.syncQueue.bulkAdd(operations);
+    await this.storage.getSyncQueueTable().bulkAdd(operations);
     console.log(`[OperationQueue] Imported ${operations.length} operations`);
   }
 }

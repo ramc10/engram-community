@@ -10,12 +10,11 @@
  * - Emit events for UI updates
  */
 
-import { SyncState, ISyncManager, SyncOperation } from '@engram/core';
+import { SyncState, ISyncManager, SyncOperation, incrementClock } from '@engram/core';
 import { StorageService } from '../lib/storage';
 import { SyncStateMachine } from './state-machine';
 import { WebSocketClient, DEFAULT_WEBSOCKET_CONFIG } from './ws-client';
 import { OperationQueue } from './operation-queue';
-import { incrementVectorClock } from '@engram/core';
 
 export interface SyncManagerConfig {
   serverUrl: string;
@@ -94,7 +93,7 @@ export class SyncManager implements ISyncManager {
    */
   private setupEventHandlers(): void {
     // WebSocket events
-    this.wsClient.on('connected', (data) => {
+    this.wsClient.on('connected', (data: any) => {
       this.stateMachine.transition('CONNECTED');
       this.vectorClock = data.vectorClock || this.vectorClock;
 
@@ -106,15 +105,15 @@ export class SyncManager implements ISyncManager {
       this.stateMachine.transition('DISCONNECT');
     });
 
-    this.wsClient.on('error', (error) => {
+    this.wsClient.on('error', (error: any) => {
       this.handleError(new Error(error.message || 'WebSocket error'));
     });
 
-    this.wsClient.on('reconnecting', (data) => {
+    this.wsClient.on('reconnecting', (data: any) => {
       console.log(`[SyncManager] Reconnecting... attempt ${data.attempt}`);
     });
 
-    this.wsClient.on('message', (data) => {
+    this.wsClient.on('message', (data: any) => {
       this.handleWebSocketMessage(data);
     });
 
@@ -144,11 +143,18 @@ export class SyncManager implements ISyncManager {
     this.stateMachine.transition('CONNECT');
 
     try {
-      // For now, use a placeholder signature
-      // In production, this would use the device's private key to sign a challenge
-      const signature = await this.generateSignature(this.config.deviceId);
+      // For now, use placeholder values
+      // In production, these would come from device registration and crypto service
+      const deviceName = 'Browser Extension'; // Placeholder
+      const publicKey = 'placeholder-public-key'; // Placeholder
 
-      await this.wsClient.connect(this.config.deviceId, signature);
+      await this.wsClient.connect(
+        this.config.deviceId,
+        deviceName,
+        publicKey,
+        this.vectorClock,
+        this.lastSyncTime
+      );
     } catch (error) {
       this.stateMachine.transition('ERROR', error as Error);
       throw error;
@@ -183,10 +189,10 @@ export class SyncManager implements ISyncManager {
    * Queue operation for sync
    */
   async queueOperation(op: SyncOperation): Promise<void> {
-    console.log(`[SyncManager] Queueing operation: ${op.operationType} ${op.entityType}`);
+    console.log(`[SyncManager] Queueing operation: ${op.type} ${op.memoryId}`);
 
     // Increment vector clock
-    this.vectorClock = incrementVectorClock(this.vectorClock, this.config.deviceId);
+    this.vectorClock = incrementClock(this.vectorClock, this.config.deviceId);
 
     // Add to operation with vector clock
     const operation = {
@@ -271,7 +277,11 @@ export class SyncManager implements ISyncManager {
       try {
         this.wsClient.sendOperation({
           type: 'OPERATION',
-          operation,
+          timestamp: Date.now(),
+          messageId: crypto.randomUUID(),
+          payload: {
+            operation,
+          },
         });
 
         // Wait for ACK (handled in handleWebSocketMessage)
