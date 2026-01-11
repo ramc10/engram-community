@@ -112,9 +112,11 @@ class BackgroundService {
       console.log('[Engram] Background service ready');
     } catch (error) {
       console.error('[Engram] Initialization failed:', error);
-      console.error('[Engram] Error name:', error?.name);
-      console.error('[Engram] Error message:', error?.message);
-      console.error('[Engram] Error stack:', error?.stack);
+      if (error instanceof Error) {
+        console.error('[Engram] Error name:', error.name);
+        console.error('[Engram] Error message:', error.message);
+        console.error('[Engram] Error stack:', error.stack);
+      }
       throw error;
     }
   }
@@ -516,11 +518,13 @@ chrome.runtime.onInstalled.addListener(async (details) => {
     }
   } catch (error) {
     console.error('[Engram] Failed to initialize on install:', error);
-    console.error('[Engram] Install error details:', {
-      name: error?.name,
-      message: error?.message,
-      stack: error?.stack
-    });
+    if (error instanceof Error) {
+      console.error('[Engram] Install error details:', {
+        name: error.name,
+        message: error.message,
+        stack: error.stack
+      });
+    }
   }
 });
 
@@ -534,11 +538,13 @@ chrome.runtime.onStartup.addListener(async () => {
     await backgroundService.initialize();
   } catch (error) {
     console.error('[Engram] Failed to initialize on startup:', error);
-    console.error('[Engram] Startup error details:', {
-      name: error?.name,
-      message: error?.message,
-      stack: error?.stack
-    });
+    if (error instanceof Error) {
+      console.error('[Engram] Startup error details:', {
+        name: error.name,
+        message: error.message,
+        stack: error.stack
+      });
+    }
   }
 });
 
@@ -588,7 +594,8 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
       }
     } catch (error) {
       // Silently fail if tab is closed or invalid
-      if (!error.message?.includes('No tab with id')) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      if (!errorMessage.includes('No tab with id')) {
         console.error('[Engram] Failed to update side panel state:', error);
       }
     }
