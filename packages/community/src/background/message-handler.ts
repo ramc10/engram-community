@@ -34,7 +34,7 @@ import { BackgroundService } from './index';
 import { Memory } from '@engram/core';
 import { generateUUID, getPlatformFromUrl } from '@engram/core';
 import { premiumService } from '../lib/premium-service';
-import { CloudSyncService } from '../lib/cloud-sync';
+
 
 /**
  * Decrypt memories retrieved from storage
