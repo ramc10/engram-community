@@ -218,7 +218,7 @@ export interface EnrichmentConfig {
   enabled: boolean;
 
   /** LLM provider */
-  provider: 'openai' | 'anthropic' | 'local';
+  provider: 'openai' | 'anthropic' | 'local' | 'premium';
 
   /** Model to use */
   model: string;

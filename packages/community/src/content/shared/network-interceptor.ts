@@ -63,7 +63,11 @@ export class NetworkInterceptor {
 
     window.fetch = async function (...args: Parameters<typeof fetch>): Promise<Response> {
       const [resource, config] = args;
-      const url = typeof resource === 'string' ? resource : resource.url;
+      const url = typeof resource === 'string'
+        ? resource
+        : resource instanceof URL
+        ? resource.toString()
+        : resource.url;
 
       // Log all POST requests for debugging
       if (config?.method === 'POST') {

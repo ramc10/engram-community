@@ -7,7 +7,7 @@ declare const chrome: any;
 
 import React, { useState, useEffect } from 'react';
 import { useToast, useTheme, Button } from '../../components/ui';
-import type { MessageType, Theme } from '../../lib/messages';
+import type { MessageType } from '../../lib/messages';
 import type { Memory, EnrichmentConfig } from '@engram/core';
 import { formatDate } from '../../lib/formatters';
 import { encryptApiKey, decryptApiKey, isEncrypted } from '../../lib/api-key-crypto';

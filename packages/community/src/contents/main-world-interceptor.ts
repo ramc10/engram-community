@@ -51,7 +51,11 @@ window.addEventListener('message', (event) => {
 // Override fetch in main world
 window.fetch = async function(...args: Parameters<typeof fetch>): Promise<Response> {
   const [resource, config] = args;
-  const url = typeof resource === 'string' ? resource : resource.url;
+  const url = typeof resource === 'string'
+    ? resource
+    : resource instanceof URL
+    ? resource.toString()
+    : resource.url;
 
   // Log ALL requests for ChatGPT debugging (not just POST)
   if (url.includes('chatgpt.com') || url.includes('openai.com')) {

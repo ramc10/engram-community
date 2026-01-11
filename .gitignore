@@ -43,6 +43,7 @@ yarn-error.log*
 !jest.config.js
 !*.test.js
 !*.config.js
+!global.d.ts
 
 # Keep specific files
 !packages/*/src/**/*.js

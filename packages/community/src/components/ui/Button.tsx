@@ -30,8 +30,15 @@ export const Button: React.FC<ButtonProps> = ({
   style,
   ...props
 }) => {
-  const getVariantStyles = (): CSSProperties => {
-    const variants = {
+  interface VariantStyle {
+    backgroundColor: string;
+    color: string;
+    border: string;
+    hover: CSSProperties;
+  }
+
+  const getVariantStyles = (): VariantStyle => {
+    const variants: Record<ButtonVariant, VariantStyle> = {
       primary: {
         backgroundColor: disabled || isLoading ? '#9ca3af' : '#3b82f6',
         color: '#ffffff',
@@ -95,8 +102,11 @@ export const Button: React.FC<ButtonProps> = ({
   const variantStyles = getVariantStyles();
   const sizeStyles = getSizeStyles();
 
+  // Extract hover styles separately
+  const { hover: hoverStyles, ...variantBaseStyles } = variantStyles;
+
   const baseStyles: CSSProperties = {
-    ...variantStyles,
+    ...variantBaseStyles,
     ...sizeStyles,
     width: fullWidth ? '100%' : 'auto',
     display: 'inline-flex',
@@ -115,7 +125,7 @@ export const Button: React.FC<ButtonProps> = ({
 
   const currentStyles: CSSProperties = {
     ...baseStyles,
-    ...(isHovered && !disabled && !isLoading ? variantStyles.hover : {}),
+    ...(isHovered && !disabled && !isLoading ? hoverStyles : {}),
   };
 
   return (

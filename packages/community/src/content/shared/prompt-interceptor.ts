@@ -156,7 +156,10 @@ export class PromptInterceptor {
       console.log('[Engram Interceptor] Loading memories...');
 
       // Fetch memories from storage
-      const response = await sendMessage({
+      const response = await sendMessage<{
+        type: MessageType.GET_MEMORIES;
+        filter?: { limit: number };
+      }>({
         type: MessageType.GET_MEMORIES,
         filter: {
           limit: 200, // Load recent memories for auto-injection (balanced performance)
@@ -193,7 +196,7 @@ export class PromptInterceptor {
     this.sendButton.addEventListener('click', this.handleSend.bind(this), true);
 
     // Intercept Enter key
-    this.inputElement.addEventListener('keydown', this.handleKeyDown.bind(this), true);
+    this.inputElement.addEventListener('keydown', this.handleKeyDown.bind(this) as unknown as EventListener, true);
   }
 
   /**
