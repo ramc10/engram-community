@@ -4,7 +4,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
-import { EvolutionService } from '../src/lib/evolution-service';
+import { EvolutionService } from '../../../src/lib/evolution-service';
 import type { EnrichmentConfig, MemoryWithMemA } from '@engram/core';
 import { generateUUID, now, createVectorClock } from '@engram/core';
 

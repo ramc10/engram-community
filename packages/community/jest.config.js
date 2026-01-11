@@ -85,8 +85,6 @@ module.exports = {
   // See: TEST_FAILURES_TO_FIX.md for details
   testPathIgnorePatterns: [
     '/node_modules/',
-    'api-key-crypto.test.ts',
-    'cloud-sync-persistence.test.ts',
   ],
 
   // Test categorization via testPathIgnorePatterns

@@ -11,7 +11,7 @@ if (typeof global.TextEncoder === 'undefined') {
 }
 
 import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
-import { encryptApiKey, decryptApiKey, isEncrypted } from '../src/lib/api-key-crypto';
+import { encryptApiKey, decryptApiKey, isEncrypted } from '../../../src/lib/api-key-crypto';
 
 // Mock chrome.storage.local
 const mockStorage: Record<string, any> = {};
@@ -220,7 +220,7 @@ describe('API Key Encryption', () => {
   describe('Error handling', () => {
     it('should handle chrome.storage.local errors gracefully on encrypt', async () => {
       // Mock chrome.storage.local.set to fail
-      (global.chrome.storage.local.set as jest.Mock).mockRejectedValueOnce(
+      (global.chrome.storage.local.set as any).mockRejectedValueOnce(
         new Error('Storage quota exceeded')
       );
 
@@ -234,7 +234,7 @@ describe('API Key Encryption', () => {
       const encrypted = await encryptApiKey(apiKey);
 
       // Mock chrome.storage.local.get to fail
-      (global.chrome.storage.local.get as jest.Mock).mockRejectedValueOnce(
+      (global.chrome.storage.local.get as any).mockRejectedValueOnce(
         new Error('Storage unavailable')
       );
 

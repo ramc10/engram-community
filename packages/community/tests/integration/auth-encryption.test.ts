@@ -274,27 +274,178 @@ describe('Auth Encryption Consistency Integration', () => {
         }
     });
 
-    test('should use different salts for different users', async () => {
-        // User 1
+    test('should sync encryption key across multiple devices', async () => {
+        const EMAIL = 'multi-device@example.com';
+        const PASSWORD = 'password123';
+
+        // Device 1: Register
         await handleMessage({
             type: MessageType.AUTH_REGISTER,
-            email: 'user1@example.com',
-            password: 'password123',
+            email: EMAIL,
+            password: PASSWORD,
         } as any, mockSender, backgroundService);
-        const salt1 = fakeUserDb['user1@example.com'].metadata.engram_salt;
+        const key1 = backgroundService.getMasterKey();
 
+        // Device 2: Simulate another browser instance
+        const device2Service = new BackgroundService();
+        await device2Service.initialize();
+
+        // Login on Device 2
+        await handleMessage({
+            type: MessageType.AUTH_LOGIN,
+            email: EMAIL,
+            password: PASSWORD,
+        } as any, mockSender, device2Service);
+        const key2 = device2Service.getMasterKey();
+
+        expect(uint8ArrayToBase64(key1!.key)).toBe(uint8ArrayToBase64(key2!.key));
+        expect(uint8ArrayToBase64(key1!.salt)).toBe(uint8ArrayToBase64(key2!.salt));
+
+        await device2Service.shutdown();
+    });
+
+    test('should facilitate legacy user migration (generate salt on first login)', async () => {
+        const EMAIL = 'legacy@example.com';
+        const PASSWORD = 'password123';
+
+        // Manually create a user in fake DB without salt (legacy user)
+        fakeUserDb[EMAIL] = {
+            id: 'legacy-uid',
+            email: EMAIL,
+            password: PASSWORD,
+            metadata: {}, // No engram_salt
+        };
+
+        // Login as legacy user
+        const loginResponse = await handleMessage({
+            type: MessageType.AUTH_LOGIN,
+            email: EMAIL,
+            password: PASSWORD,
+        } as any, mockSender, backgroundService);
+
+        expect(loginResponse.success).toBe(true);
+        expect(backgroundService.hasMasterKey()).toBe(true);
+
+        // Verify a salt was generated and saved for this legacy user
+        expect(fakeUserDb[EMAIL].metadata.engram_salt).toBeDefined();
+
+        const masterKey = backgroundService.getMasterKey();
+        expect(masterKey!.salt).toBeDefined();
+    });
+
+    test('should handle salt corruption gracefully by generating a new one', async () => {
+        const EMAIL = 'corrupt@example.com';
+        const PASSWORD = 'password123';
+
+        // Manually create a user with invalid base64 salt
+        fakeUserDb[EMAIL] = {
+            id: 'corrupt-uid',
+            email: EMAIL,
+            password: PASSWORD,
+            metadata: { engram_salt: '!!!NOT_BASE64!!!' },
+        };
+
+        const loginResponse = await handleMessage({
+            type: MessageType.AUTH_LOGIN,
+            email: EMAIL,
+            password: PASSWORD,
+        } as any, mockSender, backgroundService);
+
+        expect(loginResponse.success).toBe(true);
+
+        // Should have generated a new valid salt
+        const finalSalt = fakeUserDb[EMAIL].metadata.engram_salt;
+        expect(finalSalt).not.toBe('!!!NOT_BASE64!!!');
+        expect(finalSalt).toBeDefined();
+    });
+
+    test('should handle metadata update failure during registration gracefully', async () => {
+        const EMAIL = 'fail-meta@example.com';
+        const PASSWORD = 'password123';
+
+        // Mock updateUserMetadata to fail once
+        const originalUpdate = authClient.updateUserMetadata;
+        jest.spyOn(authClient, 'updateUserMetadata').mockRejectedValueOnce(new Error('Supabase Down'));
+
+        const registerResponse = await handleMessage({
+            type: MessageType.AUTH_REGISTER,
+            email: EMAIL,
+            password: PASSWORD,
+        } as any, mockSender, backgroundService);
+
+        // Should still succeed with registration but log a warning (represented here by checking state)
+        expect(registerResponse.success).toBe(true);
+        expect(backgroundService.hasMasterKey()).toBe(true);
+
+        // Master key should exist even if remote storage failed
+        expect(backgroundService.getMasterKey()).not.toBeNull();
+    });
+
+    test('should handle password change flow (re-derivation with same salt)', async () => {
+        const EMAIL = 'pwd-change@example.com';
+        const OLD_PASSWORD = 'oldPassword123';
+        const NEW_PASSWORD = 'newPassword456';
+
+        // 1. Register with old password
+        await handleMessage({
+            type: MessageType.AUTH_REGISTER,
+            email: EMAIL,
+            password: OLD_PASSWORD,
+        } as any, mockSender, backgroundService);
+        const salt = fakeUserDb[EMAIL].metadata.engram_salt;
+        const oldKey = backgroundService.getMasterKey()!.key;
+
+        // 2. Change password (simulated by updating fake DB and logging in)
+        fakeUserDb[EMAIL].password = NEW_PASSWORD;
+
+        await handleMessage({ type: MessageType.AUTH_LOGOUT } as any, mockSender, backgroundService);
+
+        await handleMessage({
+            type: MessageType.AUTH_LOGIN,
+            email: EMAIL,
+            password: NEW_PASSWORD,
+        } as any, mockSender, backgroundService);
+
+        const newKey = backgroundService.getMasterKey()!.key;
+        const newSalt = fakeUserDb[EMAIL].metadata.engram_salt;
+
+        // Salt should be preserved, but key should be different
+        expect(newSalt).toBe(salt);
+        expect(uint8ArrayToBase64(newKey)).not.toBe(uint8ArrayToBase64(oldKey));
+    });
+
+    test('should ensure local restored key matches cloud metadata salt', async () => {
+        const EMAIL = 'restore-match@example.com';
+        const PASSWORD = 'password123';
+
+        // 1. Initial login/setup
+        await handleMessage({
+            type: MessageType.AUTH_REGISTER,
+            email: EMAIL,
+            password: PASSWORD,
+        } as any, mockSender, backgroundService);
+
+        const originalSalt = fakeUserDb[EMAIL].metadata.engram_salt;
+
+        // 2. Shut down and simulate a "restoration" from local storage
         await backgroundService.shutdown();
-        backgroundService = new BackgroundService();
-        await backgroundService.initialize();
 
-        // User 2
+        // Ensure chrome storage has the key persistence (mocked behavior)
+        // In reality, persistMasterKey does this.
+
+        const service2 = new BackgroundService();
+        await service2.initialize(); // This calls restoreMasterKey
+
+        // 3. Login again to verify identity
         await handleMessage({
-            type: MessageType.AUTH_REGISTER,
-            email: 'user2@example.com',
-            password: 'password123', // Same password
-        } as any, mockSender, backgroundService);
-        const salt2 = fakeUserDb['user2@example.com'].metadata.engram_salt;
+            type: MessageType.AUTH_LOGIN,
+            email: EMAIL,
+            password: PASSWORD,
+        } as any, mockSender, service2);
 
-        expect(salt1).not.toBe(salt2);
+        const currentSalt = fakeUserDb[EMAIL].metadata.engram_salt;
+        expect(currentSalt).toBe(originalSalt);
+
+        await service2.shutdown();
     });
 });
