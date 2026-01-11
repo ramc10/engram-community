@@ -5,7 +5,7 @@
  */
 
 import { Memory } from '@engram/core';
-import { sendGetMemories, sendSearchMemories } from '../../lib/messages';
+import { sendGetMemories } from '../../lib/messages';
 
 /**
  * Keyword with weight
@@ -119,7 +119,7 @@ export class ContextMatcher {
 
     // Boost score for code blocks if current context has code
     if (memory.content.metadata?.codeBlocks) {
-      const hasCodeInKeywords = keywords.some(k => 
+      const hasCodeInKeywords = keywords.some(k =>
         ['code', 'function', 'class', 'import', 'def', 'const', 'let', 'var'].includes(k.term)
       );
       if (hasCodeInKeywords) {
@@ -147,7 +147,7 @@ export class ContextMatcher {
     try {
       // Extract keywords from context
       const keywords = this.extractKeywords(contextText);
-      
+
       if (keywords.length === 0) {
         return [];
       }
