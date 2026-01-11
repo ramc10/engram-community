@@ -240,7 +240,7 @@ PLASMO_PUBLIC_PREMIUM_API_URL=https://api.engram.io
 
 ## 🤝 Contributing
 
-We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+We welcome contributions! Please open an issue or pull request to contribute.
 
 ### Development Workflow
 
@@ -305,7 +305,7 @@ See [ROADMAP.md](ROADMAP.md) for full roadmap.
 - **Email:** artha360.live@gmail.com
 - **Website:** [theengram.tech](https://theengram.tech)
 - **Issues:** [GitHub Issues](https://github.com/ramc10/Engram/issues)
-- **Docs:** [/docs](./docs)
+- **Docs:** See architecture documentation in `ARCHITECTURE.md`
 
 ---
 

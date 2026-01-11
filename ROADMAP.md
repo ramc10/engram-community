@@ -1,6 +1,6 @@
 # Engram Community Edition - Roadmap
 
-**Last Updated**: January 10, 2026
+**Last Updated**: January 11, 2026
 
 This document tracks current status, immediate priorities, and future enhancements for Engram.
 
@@ -16,11 +16,11 @@ This document tracks current status, immediate priorities, and future enhancemen
 - **Authentication**: License-based JWT authentication working
 - **Infrastructure**: PostgreSQL + Redis + LM Studio integration
 
-### 🔴 Critical Blocker
+### 🟢 Resolved Blocker
 **Premium API Client Initialization** (Jan 10)
 - **Issue**: Extension doesn't load JWT tokens from storage on startup
 - **Root Cause**: Background service never called `client.initialize()` to restore session
-- **Fix**: Applied to [background/index.ts:343-398](packages/community/src/background/index.ts#L343-L398)
+- **Fix**: Applied to [background/index.ts:343-398](packages/community/src/background/index.ts#L343-L398) (Verified in PR #1)
 - **Next Step**: Rebuild extension, verify in service worker console
 
 ### 📋 Immediate Priorities (This Week)

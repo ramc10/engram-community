@@ -21,7 +21,9 @@ Browser extension for capturing and syncing AI conversations.
    - Add `SUPABASE_URL` and `SUPABASE_ANON_KEY`
 
 3. **Set up Google OAuth** (for "Sign in with Google"):
-   - See [GOOGLE_OAUTH_SETUP.md](./GOOGLE_OAUTH_SETUP.md) for detailed instructions
+   - Create a project in Google Cloud Console
+   - Set up OAuth 2.0 credentials
+   - Add your Client ID to `PLASMO_PUBLIC_GOOGLE_CLIENT_ID` in `.env`
    - Required to enable Google Sign-In functionality
 
 ## Development
