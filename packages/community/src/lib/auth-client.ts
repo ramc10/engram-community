@@ -21,6 +21,7 @@ export interface AuthToken {
     email: string;
     emailVerified: boolean;
     createdAt: number;
+    user_metadata?: any;
   };
 }
 
@@ -92,6 +93,7 @@ export class AuthClient {
         email: data.user.email!,
         emailVerified: !!data.user.email_confirmed_at,
         createdAt: new Date(data.user.created_at).getTime() / 1000,
+        user_metadata: data.user.user_metadata,
       },
     };
   }
@@ -123,6 +125,7 @@ export class AuthClient {
         email: data.user.email!,
         emailVerified: !!data.user.email_confirmed_at,
         createdAt: new Date(data.user.created_at).getTime() / 1000,
+        user_metadata: data.user.user_metadata,
       },
     };
   }
@@ -218,6 +221,7 @@ export class AuthClient {
                 email: sessionData.user.email!,
                 emailVerified: !!sessionData.user.email_confirmed_at,
                 createdAt: new Date(sessionData.user.created_at).getTime() / 1000,
+                user_metadata: sessionData.user.user_metadata,
               },
             });
           } catch (error) {
@@ -294,6 +298,19 @@ export class AuthClient {
 
     if (updateError) {
       throw new Error(updateError.message);
+    }
+  }
+
+  /**
+   * Update user metadata
+   */
+  async updateUserMetadata(metadata: any): Promise<void> {
+    const { error } = await this.supabase.auth.updateUser({
+      data: metadata,
+    });
+
+    if (error) {
+      throw new Error(error.message);
     }
   }
 
