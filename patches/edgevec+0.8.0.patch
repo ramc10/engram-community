@@ -1,0 +1,10 @@
+diff --git a/node_modules/edgevec/snippets/edgevec-78d8c49bd24b079a/src/js/storage.js b/node_modules/edgevec/snippets/edgevec-78d8c49bd24b079a/src/js/storage.js
+new file mode 100644
+index 0000000..417ac74
+--- /dev/null
++++ b/node_modules/edgevec/snippets/edgevec-78d8c49bd24b079a/src/js/storage.js
+@@ -0,0 +1,4 @@
++// Stub for missing wasm-pack snippet
++export class IndexedDbBackend {
++  constructor() {}
++}

@@ -26,7 +26,7 @@ import { LinkDetectionService } from './link-detection-service';
 import { EvolutionService } from './evolution-service';
 import { decryptApiKey, isEncrypted } from './api-key-crypto';
 import { getEmbeddingService } from './embedding-service';
-import { HNSWIndexEntry, HNSWIndexService } from './hnsw-index-service';
+import type { HNSWIndexEntry, HNSWIndexService } from './hnsw-index-service';
 import { createLogger } from './logger';
 
 // Declare chrome for TypeScript
@@ -219,6 +219,8 @@ export class StorageService implements IStorage {
    * Loads existing index from IndexedDB or builds new one from memories
    */
   private async initializeHNSWIndex(): Promise<void> {
+    // Dynamically import HNSW service to avoid build-time edgevec dependency
+    const { HNSWIndexService } = await import('./hnsw-index-service');
     this.hnswIndexService = new HNSWIndexService();
 
     // Try to load existing index from IndexedDB
