@@ -140,7 +140,7 @@ export class ChatGPTAdapter implements IPlatformAdapter {
         return null;
       }
 
-      let content = this.extractTextContent(contentElement as HTMLElement);
+      const content = this.extractTextContent(contentElement as HTMLElement);
       
       // Extract code blocks
       const codeBlocks = this.extractCodeBlocks(element);
