@@ -3,7 +3,7 @@
  * Handles schema migrations for existing v0.1.0 memories
  */
 
-import type { MemoryWithMemA, UUID, Timestamp } from '@engram/core';
+import type { MemoryWithMemA, Timestamp } from '@engram/core';
 import { getStorageService } from './storage';
 
 /**
