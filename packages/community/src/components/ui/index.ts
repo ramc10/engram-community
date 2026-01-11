@@ -9,7 +9,6 @@ export type { ToastType, ToastProps } from './Toast';
 export { ToastProvider, useToast } from './ToastContainer';
 
 export { ThemeProvider, useTheme } from './ThemeProvider';
-export type { Theme } from './ThemeProvider';
 
 export {
   LoadingSpinner,

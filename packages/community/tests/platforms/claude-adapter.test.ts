@@ -4,7 +4,7 @@
 
 import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
 import { claudeAdapter } from '../../src/content/platforms/claude-adapter';
-import { ExtractedMessage } from 'engram-shared/types/platform-adapter';
+import type { ExtractedMessage } from '@engram/core';
 
 describe('ClaudeAdapter', () => {
   beforeEach(() => {

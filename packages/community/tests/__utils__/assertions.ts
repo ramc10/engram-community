@@ -3,6 +3,7 @@
  * Provides domain-specific assertions for memories, encryption, etc.
  */
 
+import { expect } from '@jest/globals';
 import { Memory, MemoryWithMemA } from '@engram/core';
 
 declare global {
@@ -26,18 +27,19 @@ declare global {
 /**
  * Custom matcher: check if memory is encrypted
  */
-function toBeEncrypted(this: jest.MatcherContext, received: Memory) {
+function toBeEncrypted(this: any, received: Memory) {
+  const mem = received as any;
   const pass =
     received.content.text === '[ENCRYPTED]' &&
-    received.encryptedContent !== undefined &&
-    received.encryptedContent !== null;
+    mem.encryptedContent !== undefined &&
+    mem.encryptedContent !== null;
 
   if (pass) {
     return {
       message: () =>
         `Expected memory NOT to be encrypted\n` +
         `  content.text: ${received.content.text}\n` +
-        `  encryptedContent: ${received.encryptedContent ? 'present' : 'missing'}`,
+        `  encryptedContent: ${mem.encryptedContent ? 'present' : 'missing'}`,
       pass: true,
     };
   } else {
@@ -45,7 +47,7 @@ function toBeEncrypted(this: jest.MatcherContext, received: Memory) {
       message: () =>
         `Expected memory to be encrypted\n` +
         `  content.text: ${received.content.text} (expected "[ENCRYPTED]")\n` +
-        `  encryptedContent: ${received.encryptedContent ? 'present' : 'missing'} (expected present)`,
+        `  encryptedContent: ${mem.encryptedContent ? 'present' : 'missing'} (expected present)`,
       pass: false,
     };
   }
@@ -54,8 +56,8 @@ function toBeEncrypted(this: jest.MatcherContext, received: Memory) {
 /**
  * Custom matcher: check if encrypted blob is valid
  */
-function toHaveValidEncryptedBlob(this: jest.MatcherContext, received: Memory) {
-  const blob = received.encryptedContent;
+function toHaveValidEncryptedBlob(this: any, received: Memory) {
+  const blob = (received as any).encryptedContent;
 
   if (!blob) {
     return {
@@ -96,7 +98,7 @@ function toHaveValidEncryptedBlob(this: jest.MatcherContext, received: Memory) {
 /**
  * Custom matcher: check if memory is enriched with all metadata
  */
-function toBeEnriched(this: jest.MatcherContext, received: MemoryWithMemA) {
+function toBeEnriched(this: any, received: MemoryWithMemA) {
   const hasKeywords = received.keywords !== undefined && received.keywords.length > 0;
   const hasTags = received.tags !== undefined && received.tags.length > 0;
   const hasContext = received.context !== undefined && received.context.length > 0;
@@ -126,7 +128,7 @@ function toBeEnriched(this: jest.MatcherContext, received: MemoryWithMemA) {
 /**
  * Custom matcher: check if memory has keywords
  */
-function toHaveKeywords(this: jest.MatcherContext, received: MemoryWithMemA) {
+function toHaveKeywords(this: any, received: MemoryWithMemA) {
   const pass = received.keywords !== undefined && received.keywords.length > 0;
 
   return {
@@ -141,7 +143,7 @@ function toHaveKeywords(this: jest.MatcherContext, received: MemoryWithMemA) {
 /**
  * Custom matcher: check if memory has tags
  */
-function toHaveTags(this: jest.MatcherContext, received: MemoryWithMemA) {
+function toHaveTags(this: any, received: MemoryWithMemA) {
   const pass = received.tags !== undefined && received.tags.length > 0;
 
   return {
@@ -156,7 +158,7 @@ function toHaveTags(this: jest.MatcherContext, received: MemoryWithMemA) {
 /**
  * Custom matcher: check if memory has context
  */
-function toHaveContext(this: jest.MatcherContext, received: MemoryWithMemA) {
+function toHaveContext(this: any, received: MemoryWithMemA) {
   const pass = received.context !== undefined && received.context.length > 0;
 
   return {
@@ -171,7 +173,7 @@ function toHaveContext(this: jest.MatcherContext, received: MemoryWithMemA) {
 /**
  * Custom matcher: check if memory has embedding
  */
-function toHaveEmbedding(this: jest.MatcherContext, received: MemoryWithMemA) {
+function toHaveEmbedding(this: any, received: MemoryWithMemA) {
   const pass =
     received.embedding !== undefined &&
     received.embedding instanceof Float32Array &&
@@ -189,7 +191,7 @@ function toHaveEmbedding(this: jest.MatcherContext, received: MemoryWithMemA) {
 /**
  * Custom matcher: check if memory has links
  */
-function toHaveLinks(this: jest.MatcherContext, received: MemoryWithMemA) {
+function toHaveLinks(this: any, received: MemoryWithMemA) {
   const pass = received.links !== undefined && received.links.length > 0;
 
   return {
@@ -204,7 +206,7 @@ function toHaveLinks(this: jest.MatcherContext, received: MemoryWithMemA) {
 /**
  * Custom matcher: check if memory has evolution history
  */
-function toHaveEvolution(this: jest.MatcherContext, received: MemoryWithMemA) {
+function toHaveEvolution(this: any, received: MemoryWithMemA) {
   const pass =
     received.evolution !== undefined &&
     received.evolution.history !== undefined &&
@@ -222,7 +224,7 @@ function toHaveEvolution(this: jest.MatcherContext, received: MemoryWithMemA) {
 /**
  * Custom matcher: check if object is a valid memory
  */
-function toBeValidMemory(this: jest.MatcherContext, received: any) {
+function toBeValidMemory(this: any, received: any) {
   const hasId = typeof received.id === 'string';
   const hasConversationId = typeof received.conversationId === 'string';
   const hasPlatform = ['chatgpt', 'claude', 'perplexity'].includes(received.platform);
@@ -262,7 +264,7 @@ function toBeValidMemory(this: jest.MatcherContext, received: any) {
 /**
  * Custom matcher: check if memory has plaintext content (not encrypted)
  */
-function toHavePlaintextContent(this: jest.MatcherContext, received: Memory) {
+function toHavePlaintextContent(this: any, received: Memory) {
   const pass =
     received.content.text !== '[ENCRYPTED]' &&
     received.content.text !== undefined &&

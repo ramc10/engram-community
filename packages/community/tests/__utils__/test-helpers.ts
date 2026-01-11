@@ -3,6 +3,7 @@
  * Common helpers used across all test suites
  */
 
+import { jest, expect } from '@jest/globals';
 import Dexie from 'dexie';
 
 /**
@@ -30,7 +31,7 @@ export async function waitFor(
  * Flush all pending promises and timers
  */
 export async function flushPromises(): Promise<void> {
-  return new Promise(resolve => setImmediate(resolve));
+  return new Promise(resolve => setTimeout(resolve, 0));
 }
 
 /**
@@ -48,7 +49,7 @@ export function createMockChromeStorage() {
 
   const mockStorage = {
     storage,
-    get: jest.fn((keys: string | string[] | null) => {
+    get: jest.fn<any>((keys: string | string[] | null) => {
       if (typeof keys === 'string') {
         return Promise.resolve({ [keys]: storage.get(keys) });
       }
@@ -64,13 +65,13 @@ export function createMockChromeStorage() {
       // null or undefined - return all
       return Promise.resolve(Object.fromEntries(storage));
     }),
-    set: jest.fn((items: Record<string, any>) => {
+    set: jest.fn<any>((items: Record<string, any>) => {
       Object.entries(items).forEach(([key, value]) => {
         storage.set(key, value);
       });
       return Promise.resolve();
     }),
-    remove: jest.fn((keys: string | string[]) => {
+    remove: jest.fn<any>((keys: string | string[]) => {
       const keysArray = Array.isArray(keys) ? keys : [keys];
       keysArray.forEach(key => storage.delete(key));
       return Promise.resolve();
@@ -160,15 +161,15 @@ export function spyOnConsole() {
   const errors: string[] = [];
   const warnings: string[] = [];
 
-  console.log = jest.fn((...args) => {
+  console.log = jest.fn<any>((...args: any[]) => {
     logs.push(args.join(' '));
   });
 
-  console.error = jest.fn((...args) => {
+  console.error = jest.fn<any>((...args: any[]) => {
     errors.push(args.join(' '));
   });
 
-  console.warn = jest.fn((...args) => {
+  console.warn = jest.fn<any>((...args: any[]) => {
     warnings.push(args.join(' '));
   });
 
@@ -217,7 +218,7 @@ export async function advanceTimersAndFlush(ms: number): Promise<void> {
 export function createMockSendMessage() {
   const responses = new Map<string, any>();
 
-  const sendMessage = jest.fn((message: any, callback?: (response: any) => void) => {
+  const sendMessage = jest.fn<any>((message: any, callback?: (response: any) => void) => {
     const response = responses.get(message.type) || { success: true };
     if (callback) {
       callback(response);

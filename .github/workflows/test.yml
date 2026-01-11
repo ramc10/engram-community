@@ -18,11 +18,13 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
-          cache: 'npm'
+          node-version: '20'
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Build core package
+        run: npm run build --workspace=packages/core
 
       - name: Run unit tests
         run: npm run test:unit
@@ -46,11 +48,13 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
-          cache: 'npm'
+          node-version: '20'
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Build core package
+        run: npm run build --workspace=packages/core
 
       - name: Run integration tests
         run: npm run test:integration
@@ -74,11 +78,13 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
-          cache: 'npm'
+          node-version: '20'
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Build core package
+        run: npm run build --workspace=packages/core
 
       - name: Run E2E tests
         run: npm run test:e2e
@@ -103,11 +109,13 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
-          cache: 'npm'
+          node-version: '20'
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Build core package
+        run: npm run build --workspace=packages/core
 
       - name: Run type check
         run: npm run typecheck
@@ -124,11 +132,13 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
-          cache: 'npm'
+          node-version: '20'
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Build core package
+        run: npm run build --workspace=packages/core
 
       - name: Run linter
         run: npm run lint
@@ -145,11 +155,13 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
-          cache: 'npm'
+          node-version: '20'
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Build core package
+        run: npm run build --workspace=packages/core
 
       - name: Build extension
         run: npm run build

@@ -116,7 +116,7 @@ export class EvolutionService {
 
     // Check credentials based on provider
     let hasCredentials = false;
-    if (this.config.provider === 'premium') {
+    if ((this.config.provider as string) === 'premium') {
       const client = getPremiumClient();
       hasCredentials = client.isAuthenticated();
     } else if (this.config.provider === 'local') {
@@ -341,7 +341,7 @@ Return valid JSON only:
    * Same pattern as EnrichmentService and LinkDetectionService
    */
   private async callLLM(prompt: string): Promise<EvolutionCheckResponse> {
-    if (this.config.provider === 'premium') {
+    if ((this.config.provider as string) === 'premium') {
       return this.callPremium(prompt);
     } else if (this.config.provider === 'openai') {
       return this.callOpenAI(prompt);
@@ -374,7 +374,7 @@ Return valid JSON only:
         id: this.currentTargetMemory.id,
         content: this.currentTargetMemory.content.text,
         timestamp: this.currentTargetMemory.timestamp,
-      };
+      } as any;
 
       const newInformation = this.currentNewMemory.content.text;
 
@@ -382,9 +382,9 @@ Return valid JSON only:
 
       return {
         shouldEvolve: result.shouldEvolve,
-        keywords: result.updatedContent ? undefined : result.keywords,
-        tags: result.updatedContent ? undefined : result.tags,
-        context: result.updatedContent || result.context,
+        keywords: result.updatedContent ? undefined : (result as any).keywords,
+        tags: result.updatedContent ? undefined : (result as any).tags,
+        context: result.updatedContent || (result as any).context,
         reason: result.reason,
       };
     } catch (error) {

@@ -5,16 +5,20 @@
  * @jest-environment node
  */
 
+import { describe, it, expect, beforeEach, beforeAll, jest } from '@jest/globals';
 import { DeviceKeyManager, EncryptedMasterKey } from '../../src/lib/device-key-manager';
 import { MasterKey } from '@engram/core';
+
+// Declare chrome for TypeScript
+declare const chrome: any;
 
 // Mock chrome.storage.local
 const mockStorage = new Map<string, any>();
 
-global.chrome = {
+(global as any).chrome = {
   storage: {
     local: {
-      get: jest.fn((keys: string | string[] | null) => {
+      get: jest.fn<any>((keys: string | string[] | null) => {
         if (typeof keys === 'string') {
           return Promise.resolve({ [keys]: mockStorage.get(keys) });
         } else if (Array.isArray(keys)) {
@@ -28,13 +32,13 @@ global.chrome = {
         }
         return Promise.resolve(Object.fromEntries(mockStorage));
       }),
-      set: jest.fn((items: Record<string, any>) => {
+      set: jest.fn<any>((items: Record<string, any>) => {
         Object.entries(items).forEach(([key, value]) => {
           mockStorage.set(key, value);
         });
         return Promise.resolve();
       }),
-      remove: jest.fn((keys: string | string[]) => {
+      remove: jest.fn<any>((keys: string | string[]) => {
         const keysArray = Array.isArray(keys) ? keys : [keys];
         keysArray.forEach(key => mockStorage.delete(key));
         return Promise.resolve();
@@ -70,7 +74,7 @@ describe('DeviceKeyManager', () => {
   });
 
   describe('Device Key Management', () => {
-    test('should generate device key on first call', async () => {
+    it('should generate device key on first call', async () => {
       const deviceKey = await deviceKeyManager.getOrCreateDeviceKey();
 
       expect(deviceKey).toBeDefined();
@@ -85,7 +89,7 @@ describe('DeviceKeyManager', () => {
       );
     });
 
-    test('should reuse existing device key', async () => {
+    it('should reuse existing device key', async () => {
       // First call - generates key
       const firstKey = await deviceKeyManager.getOrCreateDeviceKey();
 
@@ -99,7 +103,7 @@ describe('DeviceKeyManager', () => {
       expect(chrome.storage.local.set).not.toHaveBeenCalled();
     });
 
-    test('should load device key from storage', async () => {
+    it('should load device key from storage', async () => {
       // Create and store a device key
       const manager1 = new DeviceKeyManager();
       await manager1.getOrCreateDeviceKey();
@@ -114,7 +118,7 @@ describe('DeviceKeyManager', () => {
   });
 
   describe('Master Key Encryption/Decryption', () => {
-    test('should encrypt master key', async () => {
+    it('should encrypt master key', async () => {
       const encrypted = await deviceKeyManager.encryptMasterKey(testMasterKey);
 
       expect(encrypted).toMatchObject({
@@ -129,7 +133,7 @@ describe('DeviceKeyManager', () => {
       expect(encrypted.ciphertext).not.toBe(btoa(String.fromCharCode(...testMasterKey.key)));
     });
 
-    test('should decrypt master key correctly', async () => {
+    it('should decrypt master key correctly', async () => {
       const encrypted = await deviceKeyManager.encryptMasterKey(testMasterKey);
       const decrypted = await deviceKeyManager.decryptMasterKey(encrypted);
 
@@ -138,7 +142,7 @@ describe('DeviceKeyManager', () => {
       expect(decrypted.derivedAt).toBe(testMasterKey.derivedAt);
     });
 
-    test('should fail to decrypt with corrupted ciphertext', async () => {
+    it('should fail to decrypt with corrupted ciphertext', async () => {
       const encrypted = await deviceKeyManager.encryptMasterKey(testMasterKey);
 
       // Corrupt the ciphertext
@@ -152,7 +156,7 @@ describe('DeviceKeyManager', () => {
       );
     });
 
-    test('should use different nonce for each encryption', async () => {
+    it('should use different nonce for each encryption', async () => {
       const encrypted1 = await deviceKeyManager.encryptMasterKey(testMasterKey);
       const encrypted2 = await deviceKeyManager.encryptMasterKey(testMasterKey);
 
@@ -162,7 +166,7 @@ describe('DeviceKeyManager', () => {
   });
 
   describe('Storage Operations', () => {
-    test('should store encrypted master key', async () => {
+    it('should store encrypted master key', async () => {
       const encrypted = await deviceKeyManager.encryptMasterKey(testMasterKey);
       await deviceKeyManager.storeMasterKey(encrypted);
 
@@ -171,7 +175,7 @@ describe('DeviceKeyManager', () => {
       });
     });
 
-    test('should load encrypted master key from storage', async () => {
+    it('should load encrypted master key from storage', async () => {
       const encrypted = await deviceKeyManager.encryptMasterKey(testMasterKey);
       await deviceKeyManager.storeMasterKey(encrypted);
 
@@ -180,12 +184,12 @@ describe('DeviceKeyManager', () => {
       expect(loaded).toEqual(encrypted);
     });
 
-    test('should return null when no master key stored', async () => {
+    it('should return null when no master key stored', async () => {
       const loaded = await deviceKeyManager.loadMasterKey();
       expect(loaded).toBeNull();
     });
 
-    test('should clear encrypted master key', async () => {
+    it('should clear encrypted master key', async () => {
       const encrypted = await deviceKeyManager.encryptMasterKey(testMasterKey);
       await deviceKeyManager.storeMasterKey(encrypted);
 
@@ -197,7 +201,7 @@ describe('DeviceKeyManager', () => {
       expect(loaded).toBeNull();
     });
 
-    test('should clear device key', async () => {
+    it('should clear device key', async () => {
       await deviceKeyManager.getOrCreateDeviceKey();
 
       await deviceKeyManager.clearDeviceKey();
@@ -207,7 +211,7 @@ describe('DeviceKeyManager', () => {
   });
 
   describe('Full Encryption Flow', () => {
-    test('should persist and restore master key across sessions', async () => {
+    it('should persist and restore master key across sessions', async () => {
       // Session 1: Encrypt and store
       const manager1 = new DeviceKeyManager();
       const encrypted = await manager1.encryptMasterKey(testMasterKey);
@@ -225,7 +229,7 @@ describe('DeviceKeyManager', () => {
       expect(decrypted.derivedAt).toBe(testMasterKey.derivedAt);
     });
 
-    test('should handle master key rotation', async () => {
+    it('should handle master key rotation', async () => {
       // Store first master key
       const encrypted1 = await deviceKeyManager.encryptMasterKey(testMasterKey);
       await deviceKeyManager.storeMasterKey(encrypted1);
@@ -251,16 +255,16 @@ describe('DeviceKeyManager', () => {
   });
 
   describe('Error Handling', () => {
-    test('should handle storage errors gracefully', async () => {
+    it('should handle storage errors gracefully', async () => {
       // Mock storage error
-      (chrome.storage.local.get as jest.Mock).mockRejectedValueOnce(new Error('Storage error'));
+      (chrome.storage.local.get as any).mockRejectedValueOnce(new Error('Storage error'));
 
       // Should generate new key instead of throwing
       const deviceKey = await deviceKeyManager.getOrCreateDeviceKey();
       expect(deviceKey).toBeDefined();
     });
 
-    test('should clear corrupted key on decrypt failure', async () => {
+    it('should clear corrupted key on decrypt failure', async () => {
       const encrypted = await deviceKeyManager.encryptMasterKey(testMasterKey);
       await deviceKeyManager.storeMasterKey(encrypted);
 

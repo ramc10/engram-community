@@ -3,10 +3,12 @@
  * Avoids ESM module resolution issues with @noble packages
  */
 
+import { jest } from '@jest/globals';
+
 /**
  * Mock encrypt function - returns a fake encrypted string
  */
-export const encryptApiKey = jest.fn().mockImplementation(async (apiKey: string): Promise<string> => {
+export const encryptApiKey = jest.fn<any>().mockImplementation(async (apiKey: string): Promise<string> => {
   if (!apiKey || apiKey.trim().length === 0) {
     throw new Error('API key cannot be empty');
   }
@@ -17,7 +19,7 @@ export const encryptApiKey = jest.fn().mockImplementation(async (apiKey: string)
 /**
  * Mock decrypt function - returns the original API key from the mock encrypted format
  */
-export const decryptApiKey = jest.fn().mockImplementation(async (encryptedApiKey: string): Promise<string> => {
+export const decryptApiKey = jest.fn<any>().mockImplementation(async (encryptedApiKey: string): Promise<string> => {
   if (!encryptedApiKey || encryptedApiKey.trim().length === 0) {
     throw new Error('Encrypted API key cannot be empty');
   }
@@ -33,7 +35,7 @@ export const decryptApiKey = jest.fn().mockImplementation(async (encryptedApiKey
 /**
  * Mock isEncrypted function - checks if string matches our mock encrypted format or heuristic
  */
-export const isEncrypted = jest.fn().mockImplementation((value: string): boolean => {
+export const isEncrypted = jest.fn<any>().mockImplementation((value: string): boolean => {
   if (!value || value.length === 0) return false;
 
   // Check for plain-text API key formats

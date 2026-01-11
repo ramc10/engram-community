@@ -5,7 +5,7 @@
 import { jest } from '@jest/globals';
 
 // Mock chrome API with comprehensive coverage
-global.chrome = {
+(global as any).chrome = {
   runtime: {
     id: 'test-extension-id',
     onMessage: {
@@ -21,7 +21,7 @@ global.chrome = {
       addListener: jest.fn(),
       removeListener: jest.fn(),
     },
-    sendMessage: jest.fn((message, callback) => {
+    sendMessage: jest.fn((message: any, callback?: (response: any) => void) => {
       // Default mock behavior - can be overridden in tests
       const response = { success: true };
       if (callback) {

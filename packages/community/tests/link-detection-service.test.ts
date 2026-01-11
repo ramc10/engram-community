@@ -4,12 +4,20 @@
  * Tests link detection, bidirectional linking, and LLM integration
  */
 
+import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
 import { LinkDetectionService } from '../src/lib/link-detection-service';
-import type { EnrichmentConfig, MemoryWithMemA, LinkScore } from '../../shared/src/types/memory';
+import type { EnrichmentConfig, MemoryWithMemA } from '@engram/core';
 import type { MemoryWithEmbedding } from '../src/lib/embedding-service';
 
+interface LinkScore {
+  memoryId: string;
+  score: number;
+  reason: string;
+  createdAt: number;
+}
+
 // Create persistent mock for embedding service
-const mockFindSimilar = jest.fn();
+const mockFindSimilar = jest.fn<any>();
 
 jest.mock('../src/lib/embedding-service', () => ({
   getEmbeddingService: () => ({
@@ -20,7 +28,7 @@ jest.mock('../src/lib/embedding-service', () => ({
 describe('LinkDetectionService', () => {
   let service: LinkDetectionService;
   let mockConfig: EnrichmentConfig;
-  let mockFetch: jest.Mock;
+  let mockFetch: any;
 
   beforeEach(() => {
     // Clear mock call history but keep implementations
@@ -37,8 +45,8 @@ describe('LinkDetectionService', () => {
     };
 
     // Mock fetch API
-    mockFetch = jest.fn();
-    global.fetch = mockFetch;
+    mockFetch = jest.fn<any>();
+    (global as any).fetch = mockFetch;
 
     service = new LinkDetectionService(mockConfig);
   });
@@ -108,7 +116,7 @@ describe('LinkDetectionService', () => {
           }],
           usage: { total_tokens: 200 },
         }),
-      });
+      } as any);
 
       const links = await service.detectLinks(sourceMemory, allMemories);
 
@@ -746,7 +754,7 @@ describe('LinkDetectionService', () => {
           }],
           usage: { total_tokens: 200 },
         }),
-      });
+      } as any);
 
       await service.detectLinks(sourceMemory, allMemories);
 
@@ -792,7 +800,7 @@ describe('LinkDetectionService', () => {
           choices: [{ message: { content: '{"links":[{"memoryId":"memory-2","confidence":0.9,"reason":"Test"}]}' } }],
           usage: { total_tokens: 200 },
         }),
-      });
+      } as any);
 
       await service.detectLinks(sourceMemory, allMemories);
 

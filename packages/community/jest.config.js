@@ -7,7 +7,13 @@ module.exports = {
 
   // Transform configuration
   transform: {
-    '^.+\\.tsx?$': 'ts-jest',
+    '^.+\\.tsx?$': ['ts-jest', {
+      tsconfig: {
+        jsx: 'react',
+        esModuleInterop: true,
+        allowSyntheticDefaultImports: true,
+      },
+    }],
   },
 
   // Coverage configuration
@@ -77,18 +83,6 @@ module.exports = {
     'api-key-crypto.test.ts',
     'cloud-sync-persistence.test.ts',
   ],
-
-  // Globals
-  globals: {
-    'ts-jest': {
-      isolatedModules: true,
-      tsconfig: {
-        jsx: 'react',
-        esModuleInterop: true,
-        allowSyntheticDefaultImports: true,
-      },
-    },
-  },
 
   // Test categorization via testPathIgnorePatterns
   // To run specific test types:

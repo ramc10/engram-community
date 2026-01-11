@@ -1,6 +1,5 @@
 # Dependencies
 node_modules/
-package-lock.json
 
 # Build outputs
 packages/*/build/
@@ -44,6 +43,7 @@ yarn-error.log*
 !jest.config.js
 !*.test.js
 !*.config.js
+!global.d.ts
 
 # Keep specific files
 !packages/*/src/**/*.js

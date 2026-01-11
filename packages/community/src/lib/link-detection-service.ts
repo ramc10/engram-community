@@ -10,11 +10,18 @@
 import type {
   EnrichmentConfig,
   MemoryWithMemA,
-  LinkScore,
   UUID,
-} from '../../../shared/src/types/memory';
+} from '@engram/core';
 import { getEmbeddingService, type MemoryWithEmbedding, type SimilarityResult } from './embedding-service';
 import { getPremiumClient } from './premium-api-client';
+
+// LinkScore interface - extending core type
+export interface LinkScore {
+  memoryId: string;
+  score: number;
+  reason: string;
+  createdAt: number;
+}
 
 /**
  * Rate limiter for API calls
@@ -138,7 +145,7 @@ export class LinkDetectionService {
 
     // Check credentials based on provider
     let hasCredentials = false;
-    if (this.config.provider === 'premium') {
+    if ((this.config.provider as string) === 'premium') {
       const client = getPremiumClient();
       hasCredentials = client.isAuthenticated();
     } else if (this.config.provider === 'local') {
@@ -388,7 +395,7 @@ Return valid JSON only:
    * Handles OpenAI, Anthropic, local, and premium providers
    */
   private async callLLM(prompt: string): Promise<LinkDetectionResponse> {
-    if (this.config.provider === 'premium') {
+    if ((this.config.provider as string) === 'premium') {
       return this.callPremium(prompt);
     } else if (this.config.provider === 'openai') {
       return this.callOpenAI(prompt);
@@ -432,11 +439,11 @@ Return valid JSON only:
         context: candidate.context,
       }));
 
-      const result = await client.detectLinks(newMemory, existingMemories);
+      const result = await client.detectLinks(newMemory as any, existingMemories as any);
 
       // Transform premium API response to LinkDetectionResponse format
       return {
-        links: result.links.map(link => ({
+        links: result.map(link => ({
           memoryId: link.targetId,
           confidence: link.confidence,
           reason: link.reason,

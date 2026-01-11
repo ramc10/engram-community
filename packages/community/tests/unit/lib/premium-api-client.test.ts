@@ -17,7 +17,7 @@ describe('PremiumAPIClient', () => {
   beforeEach(() => {
     // Setup mocks
     mockStorage = createMockChromeStorage();
-    (global.chrome.storage.local as any) = mockStorage;
+    ((global as any).chrome.storage.local as any) = mockStorage;
 
     mockFetch = createMockFetch();
     global.fetch = mockFetch.fetch;

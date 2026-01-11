@@ -26,7 +26,13 @@ import { LinkDetectionService } from './link-detection-service';
 import { EvolutionService } from './evolution-service';
 import { decryptApiKey, isEncrypted } from './api-key-crypto';
 import { getEmbeddingService } from './embedding-service';
-import { HNSWIndexEntry, HNSWIndexService } from './hnsw-index-service';
+import type { HNSWIndexEntry, HNSWIndexService } from './hnsw-index-service';
+import { createLogger } from './logger';
+
+// Declare chrome for TypeScript
+declare const chrome: any;
+
+const logger = createLogger('Storage');
 
 /**
  * Search index entry
@@ -80,10 +86,10 @@ class EngramDatabase extends Dexie {
       searchIndex: 'tag',
       hnswIndex: 'key', // HNSW index persistence (graph, metadata)
     }).upgrade(async (tx) => {
-      console.log('[Storage] Migrating to v2: Adding HNSW index table...');
+      logger.log('Migrating to v2: Adding HNSW index table...');
       // Table is created automatically by Dexie
       // Initial index build will happen in initialize()
-      console.log('[Storage] Migration to v2 complete');
+      logger.log('Migration to v2 complete');
     });
   }
 }
@@ -114,32 +120,32 @@ export class StorageService implements IStorage {
 
     // Initialize enrichment service if configured
     const config = await this.getEnrichmentConfig();
-    console.log('[Storage] Loaded enrichment config:', JSON.stringify(config));
+    logger.log('Loaded enrichment config:', JSON.stringify(config));
 
     const hasCredentials = config.provider === 'local'
       ? !!config.localEndpoint
       : !!config.apiKey;
 
-    console.log(`[Storage] Checking initialization: enabled=${config.enabled}, provider=${config.provider}, hasCredentials=${hasCredentials}`);
+    logger.log(`Checking initialization: enabled=${config.enabled}, provider=${config.provider}, hasCredentials=${hasCredentials}`);
 
     if (config.enabled && hasCredentials) {
       this.enrichmentService = new EnrichmentService(config);
-      console.log(`[Storage] Enrichment service initialized (provider: ${config.provider})`);
+      logger.log(`Enrichment service initialized (provider: ${config.provider})`);
     } else {
-      console.log(`[Storage] Enrichment service NOT initialized: enabled=${config.enabled}, hasCredentials=${hasCredentials}`);
+      logger.log(`Enrichment service NOT initialized: enabled=${config.enabled}, hasCredentials=${hasCredentials}`);
     }
 
     // Initialize link detection service if configured (Phase 2)
     if (config.enabled && config.enableLinkDetection && hasCredentials) {
       this.linkDetectionService = new LinkDetectionService(config);
-      console.log(`[Storage] Link detection service initialized (provider: ${config.provider})`);
+      logger.log(`Link detection service initialized (provider: ${config.provider})`);
     }
 
     // Initialize evolution service if configured (Phase 3)
     // Evolution requires link detection, so only initialize if links are enabled
     if (config.enabled && config.enableLinkDetection && hasCredentials) {
       this.evolutionService = new EvolutionService(config);
-      console.log(`[Storage] Evolution service initialized (provider: ${config.provider})`);
+      logger.log(`Evolution service initialized (provider: ${config.provider})`);
     }
 
     // Initialize HNSW vector index (Phase 4)
@@ -147,8 +153,8 @@ export class StorageService implements IStorage {
     try {
       await this.initializeHNSWIndex();
     } catch (error) {
-      console.warn('[Storage] HNSW index initialization failed (non-critical):', error);
-      console.warn('[Storage] Extension will work with basic search instead of vector search');
+      logger.warn('HNSW index initialization failed (non-critical):', error);
+      logger.warn('Extension will work with basic search instead of vector search');
       // Continue without HNSW - basic search will still work
     }
   }
@@ -161,12 +167,19 @@ export class StorageService implements IStorage {
   }
 
   /**
+   * Get sync queue table (for operation-queue direct access)
+   */
+  getSyncQueueTable() {
+    return this.db.syncQueue;
+  }
+
+  /**
    * Re-initialize enrichment services with updated config
    * Called when enrichment settings are changed in the UI
    */
   async reinitializeEnrichment(): Promise<void> {
     const config = await this.getEnrichmentConfig();
-    console.log('[Storage] Re-initializing enrichment with config:', JSON.stringify(config));
+    logger.log('Re-initializing enrichment with config:', JSON.stringify(config));
 
     // Clear existing services
     this.enrichmentService = null;
@@ -206,13 +219,15 @@ export class StorageService implements IStorage {
    * Loads existing index from IndexedDB or builds new one from memories
    */
   private async initializeHNSWIndex(): Promise<void> {
+    // Dynamically import HNSW service to avoid build-time edgevec dependency
+    const { HNSWIndexService } = await import('./hnsw-index-service');
     this.hnswIndexService = new HNSWIndexService();
 
     // Try to load existing index from IndexedDB
     const loaded = await this.hnswIndexService.load(this.db);
 
     if (loaded) {
-      console.log('[Storage] HNSW index loaded from IndexedDB');
+      logger.log('HNSW index loaded from IndexedDB');
 
       // Connect to embedding service
       const embeddingService = getEmbeddingService();
@@ -228,18 +243,18 @@ export class StorageService implements IStorage {
     ) as MemoryWithMemA[];
 
     if (memoriesWithEmbeddings.length === 0) {
-      console.log('[Storage] No embeddings found, skipping HNSW build');
+      logger.log('No embeddings found, skipping HNSW build');
       return;
     }
 
-    console.log(`[Storage] Building HNSW index for ${memoriesWithEmbeddings.length} memories...`);
+    logger.log(`Building HNSW index for ${memoriesWithEmbeddings.length} memories...`);
 
     // Build index with progress reporting
     await this.hnswIndexService.build(
       memoriesWithEmbeddings,
       (current, total) => {
         if (current % 100 === 0 || current === total) {
-          console.log(`[Storage] HNSW build progress: ${current}/${total}`);
+          logger.log(`HNSW build progress: ${current}/${total}`);
         }
       }
     );
@@ -251,7 +266,7 @@ export class StorageService implements IStorage {
     const embeddingService = getEmbeddingService();
     embeddingService.setHNSWIndex(this.hnswIndexService);
 
-    console.log('[Storage] HNSW index built and persisted');
+    logger.log('HNSW index built and persisted');
   }
 
   /**
@@ -268,9 +283,10 @@ export class StorageService implements IStorage {
 
     // Enrich in background (non-blocking)
     // Skip background enrichment in test environments to avoid database timing issues
-    if (this.enrichmentService && process.env.NODE_ENV !== 'test') {
+    const isTestEnv = typeof (globalThis as any).process !== 'undefined' && (globalThis as any).process.env.NODE_ENV === 'test';
+    if (this.enrichmentService && !isTestEnv) {
       this.enrichInBackground(memoryWithMemA, plaintextContent).catch((err) => {
-        console.error('[Storage] Background enrichment failed:', err);
+        logger.error('Background enrichment failed:', err);
       });
     }
   }
@@ -638,13 +654,13 @@ export class StorageService implements IStorage {
     const memoryForEnrichment = plaintextContent ? {
       ...memory,
       content: {
-        role: plaintextContent.role,
+        role: plaintextContent.role as 'user' | 'assistant' | 'system',
         text: plaintextContent.text,
         metadata: plaintextContent.metadata || {},
       }
     } : memory;
 
-    console.log('[Storage] Enriching memory with content:', memoryForEnrichment.content.text.substring(0, 100) + '...');
+    logger.log('Enriching memory with content:', memoryForEnrichment.content.text.substring(0, 100) + '...');
 
     // Trigger enrichment (non-blocking queue processing)
     await this.enrichmentService.enrichMemory(memoryForEnrichment);
@@ -683,10 +699,10 @@ export class StorageService implements IStorage {
     if (this.linkDetectionService) {
       try {
         const allMemories = await this.db.memories.toArray();
-        const links = await this.linkDetectionService.detectLinks(memory, allMemories);
+        const links = await this.linkDetectionService.detectLinks(memory, allMemories as any);
 
         // Set links on source memory
-        memory.links = links;
+        memory.links = links as any;
 
         // ===== Phase 3: Memory Evolution =====
         // Check if linked memories should evolve based on this new memory
@@ -808,8 +824,9 @@ export class StorageService implements IStorage {
         } catch (err) {
           // Silently handle decryption errors in tests or if crypto not available
           // In production, this would log but not break the flow
-          if (process.env.NODE_ENV !== 'test') {
-            console.error('[Storage] Failed to decrypt API key:', err);
+          const isTestEnv = typeof (globalThis as any).process !== 'undefined' && (globalThis as any).process.env.NODE_ENV === 'test';
+          if (!isTestEnv) {
+            logger.error('Failed to decrypt API key:', err);
           }
           // Don't clear the API key - leave it as is for backward compatibility
         }
@@ -838,7 +855,7 @@ export class StorageService implements IStorage {
       throw new Error('HNSW index service not initialized');
     }
 
-    console.log('[Storage] Rebuilding HNSW index...');
+    logger.log('Rebuilding HNSW index...');
 
     const memories = await this.db.memories.toArray();
     const memoriesWithEmbeddings = memories.filter(
@@ -848,7 +865,7 @@ export class StorageService implements IStorage {
     await this.hnswIndexService.build(memoriesWithEmbeddings, onProgress);
     await this.hnswIndexService.persist(this.db);
 
-    console.log('[Storage] HNSW index rebuilt');
+    logger.log('HNSW index rebuilt');
   }
 
   /**

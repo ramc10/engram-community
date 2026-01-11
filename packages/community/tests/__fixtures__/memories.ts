@@ -63,8 +63,8 @@ export function createMemory(options: MemoryFactoryOptions = {}): Memory {
     conversationId,
     platform,
     content: encrypted
-      ? { role: content.role, text: '[ENCRYPTED]', metadata: {} }
-      : { role: content.role, text: content.text, metadata: content.metadata || {} },
+      ? { role: content.role as 'user' | 'assistant' | 'system', text: '[ENCRYPTED]', metadata: {} }
+      : { role: content.role as 'user' | 'assistant' | 'system', text: content.text, metadata: content.metadata || {} },
     timestamp,
     vectorClock: { [deviceId]: 1 },
     deviceId,
@@ -133,24 +133,21 @@ export function createMemoryWithEvolution(options: MemoryFactoryOptions = {}): M
   const memory = createEnrichedMemory(options);
 
   memory.evolution = {
+    updateCount: 1,
+    lastUpdated: memory.timestamp,
+    triggeredBy: [generateTestUUID()],
     history: [
       {
-        version: 0,
         timestamp: memory.timestamp - 86400000, // 1 day ago
         keywords: ['old', 'keyword'],
         tags: ['old-tag'],
         context: 'Original context before evolution',
-        triggeredBy: generateTestUUID(),
-        reason: 'Initial creation',
       },
       {
-        version: 1,
         timestamp: memory.timestamp,
         keywords: memory.keywords || [],
         tags: memory.tags || [],
         context: memory.context || '',
-        triggeredBy: generateTestUUID(),
-        reason: 'Updated with new information from related memory',
       },
     ],
   };

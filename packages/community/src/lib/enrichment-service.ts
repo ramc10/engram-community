@@ -9,11 +9,29 @@
 
 import type {
   EnrichmentConfig,
-  EnrichmentRequest,
-  EnrichmentResponse,
   MemoryWithMemA,
-} from '../../../shared/src/types/memory';
+} from '@engram/core';
 import { getPremiumClient } from './premium-api-client';
+
+// Declare chrome for TypeScript
+declare const chrome: any;
+
+// Internal types for enrichment
+interface EnrichmentRequest {
+  text: string;
+  context?: string;
+  memoryId?: string;
+  platform?: string;
+  role?: string;
+  timestamp?: number;
+  content?: string;
+}
+
+interface EnrichmentResponse {
+  keywords: string[];
+  tags: string[];
+  context: string;
+}
 
 /**
  * Rate limiter for API calls
@@ -89,7 +107,7 @@ export class EnrichmentService {
 
     // Check credentials based on provider
     let hasCredentials = false;
-    if (this.config.provider === 'premium') {
+    if ((this.config.provider as string) === 'premium') {
       const client = getPremiumClient();
       hasCredentials = client.isAuthenticated();
     } else if (this.config.provider === 'local') {
@@ -152,6 +170,7 @@ export class EnrichmentService {
 
       const request: EnrichmentRequest = {
         memoryId: memory.id,
+        text: memory.content.text,
         content: memory.content.text,
         platform: memory.platform,
         role: memory.content.role,
@@ -202,10 +221,10 @@ export class EnrichmentService {
     return `Analyze this AI conversation message and extract structured metadata.
 
 Message:
-Platform: ${request.platform}
-Role: ${request.role}
-Timestamp: ${new Date(request.timestamp).toISOString()}
-Content: ${request.content}
+Platform: ${request.platform || 'unknown'}
+Role: ${request.role || 'user'}
+Timestamp: ${request.timestamp ? new Date(request.timestamp).toISOString() : 'unknown'}
+Content: ${request.content || request.text}
 
 Extract:
 1. Keywords: 3-7 specific, meaningful terms (nouns, verbs, technical concepts)
@@ -234,7 +253,7 @@ Return valid JSON only:
    * Handles OpenAI, Anthropic, local, and premium providers
    */
   private async callLLM(prompt: string): Promise<EnrichmentResponse> {
-    if (this.config.provider === 'premium') {
+    if ((this.config.provider as string) === 'premium') {
       return this.callPremium(prompt);
     } else if (this.config.provider === 'openai') {
       return this.callOpenAI(prompt);
@@ -488,13 +507,15 @@ Return valid JSON only:
    */
   private async saveCostEstimate(): Promise<void> {
     try {
-      await chrome.storage.local.set({
-        memACosts: {
-          estimatedCost: this.totalCost,
-          totalTokens: this.totalTokens,
-          lastUpdated: Date.now(),
-        },
-      });
+      if (typeof chrome !== 'undefined' && chrome.storage) {
+        await chrome.storage.local.set({
+          memACosts: {
+            estimatedCost: this.totalCost,
+            totalTokens: this.totalTokens,
+            lastUpdated: Date.now(),
+          },
+        });
+      }
     } catch (error) {
       console.error('[Enrichment] Failed to save cost estimate:', error);
     }
@@ -544,7 +565,9 @@ Return valid JSON only:
     this.enrichedCount = 0;
 
     try {
-      await chrome.storage.local.remove('memACosts');
+      if (typeof chrome !== 'undefined' && chrome.storage) {
+        await chrome.storage.local.remove('memACosts');
+      }
     } catch (error) {
       console.error('[Enrichment] Failed to reset stats:', error);
     }
