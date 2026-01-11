@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Button } from './ui';
+
 
 interface UpgradeBannerProps {
   onUpgrade: () => void;
