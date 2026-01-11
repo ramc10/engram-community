@@ -5,6 +5,7 @@ on:
     branches: [main, develop]
   pull_request:
     branches: [main, develop]
+  workflow_dispatch:
 
 jobs:
   unit-tests:
@@ -66,6 +67,33 @@ jobs:
           files: ./packages/community/coverage/lcov.info
           flags: integration
           token: ${{ secrets.CODECOV_TOKEN }}
+
+  encryption-security:
+    name: Encryption & Security
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build core package
+        run: npm run build --workspace=packages/core
+
+      - name: Verify Encryption Consistency
+        run: npm run test:integration -- tests/integration/auth-encryption.test.ts
+        working-directory: packages/community
+
+      - name: Verify Auth Metadata Security
+        run: npm run test:unit -- tests/unit/background/message-handler.test.ts -t "AUTH_REGISTER|AUTH_LOGIN"
+        working-directory: packages/community
 
   e2e-tests:
     name: E2E Tests

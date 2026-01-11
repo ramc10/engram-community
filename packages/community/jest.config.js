@@ -7,7 +7,7 @@ module.exports = {
 
   // Transform configuration
   transform: {
-    '^.+\\.tsx?$': ['ts-jest', {
+    '^.+\\.[tj]sx?$': ['ts-jest', {
       tsconfig: {
         jsx: 'react',
         esModuleInterop: true,
@@ -61,6 +61,11 @@ module.exports = {
     '^dexie$': '<rootDir>/tests/__mocks__/dexie.ts',
     '^edgevec$': '<rootDir>/tests/__mocks__/edgevec.ts',
     '@xenova/transformers': '<rootDir>/tests/__mocks__/@xenova/transformers.ts',
+    '^@noble/ciphers/chacha$': '<rootDir>/../../node_modules/@noble/ciphers/chacha.js',
+    '^@noble/curves/ed25519$': '<rootDir>/../../node_modules/@noble/curves/ed25519.js',
+    '^@noble/hashes/blake2.js$': '<rootDir>/../../node_modules/@noble/hashes/blake2.js',
+    '^@noble/hashes/hmac.js$': '<rootDir>/../../node_modules/@noble/hashes/hmac.js',
+    '^@noble/hashes/sha2.js$': '<rootDir>/../../node_modules/@noble/hashes/sha2.js',
   },
 
   // Setup files

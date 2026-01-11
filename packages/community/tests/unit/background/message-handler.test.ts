@@ -93,6 +93,7 @@ describe('Message Handler', () => {
         email: 'test@example.com',
       }),
       registerDevice: jest.fn<any>().mockResolvedValue(undefined),
+      updateUserMetadata: jest.fn<any>().mockResolvedValue(undefined),
       getSupabaseClient: jest.fn<any>().mockReturnValue({}),
     };
 
@@ -656,7 +657,15 @@ describe('Message Handler', () => {
         email: 'test@example.com',
         password: 'SecurePass123!',
       });
-      expect(mockCrypto.deriveKey).toHaveBeenCalled();
+      // Verify salt generation and usage
+      expect(mockCrypto.generateSalt).toHaveBeenCalled();
+      expect(mockAuthClient.updateUserMetadata).toHaveBeenCalledWith({
+        engram_salt: expect.any(String)
+      });
+      expect(mockCrypto.deriveKey).toHaveBeenCalledWith(
+        'SecurePass123!',
+        expect.any(Uint8Array)
+      );
       expect(mockService.setMasterKey).toHaveBeenCalled();
       expect(mockService.persistMasterKey).toHaveBeenCalled();
     });
@@ -709,6 +718,39 @@ describe('Message Handler', () => {
       });
       expect(mockCrypto.deriveKey).toHaveBeenCalled();
       expect(mockService.setMasterKey).toHaveBeenCalled();
+    });
+
+    it('should use existing salt from metadata on login', async () => {
+      const existingSalt = new Uint8Array([1, 2, 3, 4]);
+      const base64Salt = Buffer.from(existingSalt).toString('base64');
+
+      mockAuthClient.login.mockResolvedValueOnce({
+        token: 'fake-jwt',
+        expiresIn: '3600',
+        user: {
+          id: 'user-123',
+          email: 'test@example.com',
+          user_metadata: { engram_salt: base64Salt }
+        }
+      });
+
+      const message = {
+        type: MessageType.AUTH_LOGIN,
+        email: 'test@example.com',
+        password: 'SecurePass123!',
+      };
+
+      await handleMessage(message as any, mockSender, mockService);
+
+      // Verify it used the existing salt, not generated a new one
+      expect(mockCrypto.generateSalt).not.toHaveBeenCalled();
+      expect(mockCrypto.deriveKey).toHaveBeenCalledWith(
+        'SecurePass123!',
+        expect.any(Uint8Array)
+      );
+
+      const saltArg = mockCrypto.deriveKey.mock.calls[0][1];
+      expect(Buffer.from(saltArg)).toEqual(Buffer.from(existingSalt));
     });
 
     it('should require email and password', async () => {
