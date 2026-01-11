@@ -32,7 +32,7 @@ import {
 } from '../lib/messages';
 import { BackgroundService } from './index';
 import { Memory } from '@engram/core';
-import { generateUUID, getPlatformFromUrl } from '@engram/core';
+import { generateUUID, getPlatformFromUrl, base64ToUint8Array, uint8ArrayToBase64 } from '@engram/core';
 import { premiumService } from '../lib/premium-service';
 
 
@@ -464,7 +464,21 @@ async function handleAuthRegister(
     console.log('[Engram] User registered, userId:', authToken.user.id);
 
     // 2. Derive master key from password (client-side only)
-    const masterKey = await crypto.deriveKey(password);
+    // Generate a fixed salt for this user and store it in metadata
+    // This ensures we can derive the same key on other devices/logins
+    const salt = crypto.generateSalt();
+
+    // Attempt to save salt to user metadata
+    try {
+      await authClient.updateUserMetadata({ engram_salt: uint8ArrayToBase64(salt) });
+      console.log('[Engram] User salt generated and stored');
+    } catch (metadataError) {
+      console.warn('[Engram] Failed to store user salt:', metadataError);
+      // We continue, but this user might have issues logging in on other devices
+      // until we successfully save the salt
+    }
+
+    const masterKey = await crypto.deriveKey(password, salt);
     service.setMasterKey(masterKey);
 
     console.log('[Engram] Master key derived and stored in memory');
@@ -536,7 +550,32 @@ async function handleAuthLogin(
     console.log('[Engram] User logged in, userId:', authToken.user.id);
 
     // 2. Derive master key from password (client-side only)
-    const masterKey = await crypto.deriveKey(password);
+    // Check if we have a stored salt for this user
+    let salt: Uint8Array;
+    const saltB64 = authToken.user.user_metadata?.engram_salt;
+
+    if (saltB64) {
+      try {
+        salt = base64ToUint8Array(saltB64);
+        console.log('[Engram] Found existing user salt');
+      } catch (e) {
+        console.warn('[Engram] Failed to decode user salt, generating new one');
+        salt = crypto.generateSalt();
+      }
+    } else {
+      console.log('[Engram] No user salt found, generating new one');
+      salt = crypto.generateSalt();
+
+      // Save it for next time
+      try {
+        await authClient.updateUserMetadata({ engram_salt: uint8ArrayToBase64(salt) });
+        console.log('[Engram] New user salt saved');
+      } catch (metadataError) {
+        console.warn('[Engram] Failed to store new user salt:', metadataError);
+      }
+    }
+
+    const masterKey = await crypto.deriveKey(password, salt);
     service.setMasterKey(masterKey);
 
     console.log('[Engram] Master key derived and stored in memory');

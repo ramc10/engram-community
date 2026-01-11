@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.2] - 2026-01-11
+
+### Fixed
+- Fixed critical issue where re-login would prevent decryption of previous memories (added persistent salt storage)
+- Ensuring consistent encryption key derivation across sessions
+
 ## [0.1.1] - 2026-01-11
 
 ### Fixed
