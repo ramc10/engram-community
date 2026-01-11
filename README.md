@@ -16,28 +16,13 @@ Engram is a browser extension that captures AI conversations from ChatGPT, Claud
 
 ---
 
-## 📋 What's New in Community Edition
-
-This is the **open source** version of Engram, restructured with:
-
-- ✅ **Dual Licensing:** MIT (core) + AGPL-3.0 (community)
-- ✅ **Modular Architecture:** Workspace-based monorepo
-- ✅ **Premium API Integration:** Optional server-side AI features
-- ✅ **Full Local Functionality:** Works completely offline
-
-### Open Source vs Premium
-
-| Feature | Community (Free) | Premium ($10/mo) |
-|---------|------------------|------------------|
-| **Multi-platform capture** | ✅ ChatGPT, Claude, Perplexity | ✅ Same |
-| **End-to-end encryption** | ✅ XChaCha20-Poly1305 | ✅ Same |
-| **Local semantic search** | ✅ BGE-Small embeddings | ✅ Enhanced |
-| **Memory injection** | ✅ Automatic context | ✅ Same |
-| **Cloud sync** | ✅ Optional | ✅ Same |
-| **AI-powered enrichment** | ⚠️ Bring your own API key | ✅ Included |
-| **Smart memory linking** | ⚠️ Bring your own API key | ✅ Included |
-| **Memory evolution** | ⚠️ Bring your own API key | ✅ Included |
-| **Cost** | Free (pay for your own API) | $10/month (we handle API) |
+## ✨ Features
+- ✅ **Multi-platform capture**: ChatGPT, Claude, Perplexity
+- ✅ **End-to-end encryption**: XChaCha20-Poly1305
+- ✅ **Local semantic search**: BGE-Small embeddings + HNSW
+- ✅ **Memory injection**: Automatic context in chat
+- ✅ **Cloud sync**: Optional Supabase integration
+- ✅ **Portable**: Full offline functionality
 
 ---
 
@@ -167,44 +152,26 @@ packages/community/src/
 
 ---
 
-## 🔐 Premium Features
+## 🤖 AI Features
 
-Engram offers **optional premium features** that use AI to enhance your memories:
+Engram uses AI to enhance your memories:
 
-### 1. AI-Powered Enrichment
+### 1. Enrichment
 Automatically extract keywords, tags, and context summaries from conversations.
 
-**Community (Free):** Provide your own OpenAI/Anthropic API key
-**Premium:** Uses our servers, no API key needed
-
-### 2. Smart Memory Linking
+### 2. Memory Linking
 Discovers semantic relationships between memories automatically.
-
-**Community (Free):** Provide your own API key
-**Premium:** Included, no setup required
 
 ### 3. Memory Evolution
 Updates historical memories based on new information.
-
-**Community (Free):** Provide your own API key
-**Premium:** Included, automatic
-
-### How to Activate Premium
-
-1. Go to Settings in the extension
-2. Click "Upgrade to Premium"
-3. Enter your license key
-4. Premium features activate automatically
-
-**Get a license:** [theengram.tech/pricing](https://theengram.tech/pricing)
 
 ---
 
 ## 🔧 Configuration
 
-### Using Your Own API Keys (Free Tier)
+### AI Service Configuration
 
-If you prefer not to subscribe to premium, you can use your own API keys:
+You can use your own API keys or local models:
 
 1. **Get an API key**
    - OpenAI: [platform.openai.com/api-keys](https://platform.openai.com/api-keys)
