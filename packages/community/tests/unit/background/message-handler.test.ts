@@ -47,8 +47,10 @@ describe('Message Handler', () => {
     mockStorage = {
       saveMemory: jest.fn<any>().mockResolvedValue(undefined),
       getMemories: jest.fn<any>().mockResolvedValue([]),
+      searchMemories: jest.fn<any>().mockResolvedValue([]),
       getMemory: jest.fn<any>().mockResolvedValue(null),
       getMetadata: jest.fn<any>().mockResolvedValue(null),
+      setMetadata: jest.fn<any>().mockResolvedValue(undefined),
       reinitializeEnrichment: jest.fn<any>().mockResolvedValue(undefined),
     };
 
@@ -460,7 +462,7 @@ describe('Message Handler', () => {
           } as any,
         },
       ];
-      mockStorage.getMemories.mockResolvedValue(memories);
+      mockStorage.searchMemories.mockResolvedValue(memories);
 
       const message = {
         type: MessageType.SEARCH_MEMORIES,
@@ -501,7 +503,7 @@ describe('Message Handler', () => {
           } as any,
         },
       ];
-      mockStorage.getMemories.mockResolvedValue(memories);
+      mockStorage.searchMemories.mockResolvedValue([memories[0]]);
 
       const message = {
         type: MessageType.SEARCH_MEMORIES,
@@ -528,7 +530,7 @@ describe('Message Handler', () => {
           originalText: 'Match content',
         } as any,
       }));
-      mockStorage.getMemories.mockResolvedValue(memories);
+      mockStorage.searchMemories.mockResolvedValue(memories);
 
       const message = {
         type: MessageType.SEARCH_MEMORIES,
@@ -570,7 +572,7 @@ describe('Message Handler', () => {
           } as any,
         },
       ];
-      mockStorage.getMemories.mockResolvedValue(memories);
+      mockStorage.searchMemories.mockResolvedValue(memories);
 
       const message = {
         type: MessageType.SEARCH_MEMORIES,
@@ -598,7 +600,7 @@ describe('Message Handler', () => {
           } as any,
         },
       ];
-      mockStorage.getMemories.mockResolvedValue(memories);
+      mockStorage.searchMemories.mockResolvedValue(memories);
 
       const message = {
         type: MessageType.SEARCH_MEMORIES,

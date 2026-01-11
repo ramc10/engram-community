@@ -536,11 +536,13 @@ export class StorageService implements IStorage {
     });
 
     // Sort by relevance (simple: more occurrences = more relevant)
+    const escapedQuery = normalizedQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const queryRegExp = new RegExp(escapedQuery, 'g');
     results.sort((a, b) => {
       const aText = a.content?.text?.toLowerCase() || "";
       const bText = b.content?.text?.toLowerCase() || "";
-      const aOccurrences = (aText.match(new RegExp(normalizedQuery, 'g')) || []).length;
-      const bOccurrences = (bText.match(new RegExp(normalizedQuery, 'g')) || []).length;
+      const aOccurrences = (aText.match(queryRegExp) || []).length;
+      const bOccurrences = (bText.match(queryRegExp) || []).length;
       return bOccurrences - aOccurrences;
     });
 
