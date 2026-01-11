@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.3] - 2026-01-11
+
+### Added
+- Automated CI testing for encryption and security
+- Multi-device encryption key synchronization
+- Legacy user migration path (salt generation on first login)
+- Salt corruption recovery and robust metadata handling
+
+### Fixed
+- Improved legal documentation to reflect open-source licensing
+- Fixed repository links and unified copyright information
+
 ## [0.1.2] - 2026-01-11
 
 ### Fixed
