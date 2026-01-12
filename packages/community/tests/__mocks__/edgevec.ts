@@ -2,6 +2,14 @@
  * Mock for EdgeVec HNSW library
  */
 
+/**
+ * Mock init function for WASM initialization
+ */
+export async function init(): Promise<void> {
+  // Mock init - no-op
+  return Promise.resolve();
+}
+
 export class EdgeVecConfig {
   dimensions: number;
   metric: string = 'cosine';

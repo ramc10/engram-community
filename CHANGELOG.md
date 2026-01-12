@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased] - 2026-01-12
+
+### Fixed
+- Fixed HNSW vector index WASM loading in Chrome extension service worker
+- Added proper WASM module initialization for EdgeVec in service worker context
+- Implemented fallback initialization mechanism for robustness
+
 ## [0.1.3] - 2026-01-11
 
 ### Added
