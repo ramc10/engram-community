@@ -88,6 +88,10 @@ export class EnrichmentService {
   private totalTokens = 0;
   private enrichedCount = 0;
 
+  // Callback for persistence after enrichment completes
+  // StorageService will set this to persist enriched memory to IndexedDB
+  public onEnrichmentComplete?: (memory: MemoryWithMemA) => Promise<void>;
+
   constructor(private config: EnrichmentConfig) {
     // 60 calls per minute (conservative)
     this.rateLimiter = new RateLimiter(60, 60000);
@@ -194,6 +198,17 @@ export class EnrichmentService {
         tags: memory.tags,
         context: memory.context,
       });
+
+      // Persist enriched memory via callback (if set by StorageService)
+      if (this.onEnrichmentComplete) {
+        try {
+          await this.onEnrichmentComplete(memory);
+          console.log(`[Enrichment] Persisted enriched memory ${memory.id}`);
+        } catch (persistError) {
+          console.error(`[Enrichment] Failed to persist memory ${memory.id}:`, persistError);
+          // Don't fail enrichment if persistence fails - memory object still has enriched data
+        }
+      }
 
     } catch (error) {
       console.error(`[Enrichment] Error enriching memory ${memory.id}:`, error);

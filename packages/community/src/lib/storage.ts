@@ -131,6 +131,35 @@ export class StorageService implements IStorage {
 
     if (config.enabled && hasCredentials) {
       this.enrichmentService = new EnrichmentService(config);
+
+      // Set callback to persist enriched memories to IndexedDB
+      // This fixes the race condition where enrichment completes but data isn't persisted
+      this.enrichmentService.onEnrichmentComplete = async (memory: MemoryWithMemA) => {
+        try {
+          // Check if a newer version exists before persisting (avoid overwriting with stale enrichment)
+          const existing = await this.db.memories.get(memory.id);
+          if (existing) {
+            const existingWithMemA = existing as MemoryWithMemA;
+            const isNewer = this.isVersionNewer(
+              memory.vectorClock || {},
+              memory.timestamp,
+              existingWithMemA.vectorClock || {},
+              existingWithMemA.timestamp
+            );
+
+            if (!isNewer) {
+              logger.log(`[Storage] Skipping persist for enriched memory ${memory.id} - existing version is newer`);
+              return;
+            }
+          }
+
+          await this.db.memories.put(memory);
+          logger.log(`[Storage] Persisted enriched memory: ${memory.id}`);
+        } catch (error) {
+          logger.error(`[Storage] Failed to persist enriched memory:`, error);
+        }
+      };
+
       logger.log(`Enrichment service initialized (provider: ${config.provider})`);
     } else {
       logger.log(`Enrichment service NOT initialized: enabled=${config.enabled}, hasCredentials=${hasCredentials}`);
@@ -197,6 +226,34 @@ export class StorageService implements IStorage {
     // Re-initialize enrichment service if enabled
     if (config.enabled && hasCredentials) {
       this.enrichmentService = new EnrichmentService(config);
+
+      // Set callback to persist enriched memories to IndexedDB
+      this.enrichmentService.onEnrichmentComplete = async (memory: MemoryWithMemA) => {
+        try {
+          // Check if a newer version exists before persisting (avoid overwriting with stale enrichment)
+          const existing = await this.db.memories.get(memory.id);
+          if (existing) {
+            const existingWithMemA = existing as MemoryWithMemA;
+            const isNewer = this.isVersionNewer(
+              memory.vectorClock || {},
+              memory.timestamp,
+              existingWithMemA.vectorClock || {},
+              existingWithMemA.timestamp
+            );
+
+            if (!isNewer) {
+              console.log(`[Storage] Skipping persist for enriched memory ${memory.id} - existing version is newer`);
+              return;
+            }
+          }
+
+          await this.db.memories.put(memory);
+          console.log(`[Storage] Persisted enriched memory: ${memory.id}`);
+        } catch (error) {
+          console.error(`[Storage] Failed to persist enriched memory:`, error);
+        }
+      };
+
       console.log(`[Storage] Enrichment service re-initialized (provider: ${config.provider})`);
     } else {
       console.log(`[Storage] Enrichment service NOT re-initialized: enabled=${config.enabled}, hasCredentials=${hasCredentials}`);
@@ -751,19 +808,12 @@ export class StorageService implements IStorage {
     logger.log('Enriching memory with content:', memoryForEnrichment.content.text.substring(0, 100) + '...');
 
     // Trigger enrichment (non-blocking queue processing)
+    // The onEnrichmentComplete callback will handle persistence after enrichment completes
     await this.enrichmentService.enrichMemory(memoryForEnrichment);
 
-    // Copy back the enrichment data if we used a temporary object
-    if (memoryForEnrichment !== memory) {
-      memory.keywords = memoryForEnrichment.keywords;
-      memory.tags = memoryForEnrichment.tags;
-      memory.context = memoryForEnrichment.context;
-      // @ts-ignore
-      memory.memAVersion = memoryForEnrichment.memAVersion;
-    }
-
-    // Persist the enriched metadata to DB (bypass saveMemory hooks to avoid recursion)
-    await this.db.memories.put(memory);
+    // NOTE: We don't persist here anymore because enrichment is async (queued)
+    // The callback (onEnrichmentComplete) will persist after enrichment actually completes
+    // This fixes the race condition where unenriched data was being persisted
 
     // Regenerate embedding with enhanced metadata (keywords + context + tags)
     try {
@@ -890,6 +940,23 @@ export class StorageService implements IStorage {
 
     // Save updated memory with enrichment, embedding, and links
     try {
+      // Check if a newer version exists before persisting (avoid overwriting with stale background work)
+      const existing = await this.db.memories.get(memory.id);
+      if (existing) {
+        const existingWithMemA = existing as MemoryWithMemA;
+        const isNewer = this.isVersionNewer(
+          memory.vectorClock || {},
+          memory.timestamp,
+          existingWithMemA.vectorClock || {},
+          existingWithMemA.timestamp
+        );
+
+        if (!isNewer) {
+          console.log(`[Storage] Skipping save for enriched memory ${memory.id} - existing version is newer`);
+          return;
+        }
+      }
+
       await this.db.memories.put(memory);
       console.log(`[Storage] Enriched memory ${memory.id}`);
     } catch (err: any) {
