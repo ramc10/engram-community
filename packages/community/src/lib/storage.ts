@@ -136,6 +136,23 @@ export class StorageService implements IStorage {
       // This fixes the race condition where enrichment completes but data isn't persisted
       this.enrichmentService.onEnrichmentComplete = async (memory: MemoryWithMemA) => {
         try {
+          // Check if a newer version exists before persisting (avoid overwriting with stale enrichment)
+          const existing = await this.db.memories.get(memory.id);
+          if (existing) {
+            const existingWithMemA = existing as MemoryWithMemA;
+            const isNewer = this.isVersionNewer(
+              memory.vectorClock || {},
+              memory.timestamp,
+              existingWithMemA.vectorClock || {},
+              existingWithMemA.timestamp
+            );
+
+            if (!isNewer) {
+              logger.log(`[Storage] Skipping persist for enriched memory ${memory.id} - existing version is newer`);
+              return;
+            }
+          }
+
           await this.db.memories.put(memory);
           logger.log(`[Storage] Persisted enriched memory: ${memory.id}`);
         } catch (error) {
@@ -213,6 +230,23 @@ export class StorageService implements IStorage {
       // Set callback to persist enriched memories to IndexedDB
       this.enrichmentService.onEnrichmentComplete = async (memory: MemoryWithMemA) => {
         try {
+          // Check if a newer version exists before persisting (avoid overwriting with stale enrichment)
+          const existing = await this.db.memories.get(memory.id);
+          if (existing) {
+            const existingWithMemA = existing as MemoryWithMemA;
+            const isNewer = this.isVersionNewer(
+              memory.vectorClock || {},
+              memory.timestamp,
+              existingWithMemA.vectorClock || {},
+              existingWithMemA.timestamp
+            );
+
+            if (!isNewer) {
+              console.log(`[Storage] Skipping persist for enriched memory ${memory.id} - existing version is newer`);
+              return;
+            }
+          }
+
           await this.db.memories.put(memory);
           console.log(`[Storage] Persisted enriched memory: ${memory.id}`);
         } catch (error) {
@@ -906,6 +940,23 @@ export class StorageService implements IStorage {
 
     // Save updated memory with enrichment, embedding, and links
     try {
+      // Check if a newer version exists before persisting (avoid overwriting with stale background work)
+      const existing = await this.db.memories.get(memory.id);
+      if (existing) {
+        const existingWithMemA = existing as MemoryWithMemA;
+        const isNewer = this.isVersionNewer(
+          memory.vectorClock || {},
+          memory.timestamp,
+          existingWithMemA.vectorClock || {},
+          existingWithMemA.timestamp
+        );
+
+        if (!isNewer) {
+          console.log(`[Storage] Skipping save for enriched memory ${memory.id} - existing version is newer`);
+          return;
+        }
+      }
+
       await this.db.memories.put(memory);
       console.log(`[Storage] Enriched memory ${memory.id}`);
     } catch (err: any) {
