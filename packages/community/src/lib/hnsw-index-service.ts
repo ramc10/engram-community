@@ -12,7 +12,7 @@
  */
 
 // @ts-ignore - edgevec types not fully compatible
-import { EdgeVec, EdgeVecConfig, init as initEdgeVec } from 'edgevec';
+import { EdgeVec, EdgeVecConfig } from 'edgevec';
 import type { UUID, Timestamp, Memory } from '@engram/core';
 import type { EngramDatabase } from './storage';
 
@@ -85,19 +85,33 @@ export class HNSWIndexService {
       try {
         console.log('[HNSW] Initializing EdgeVec WASM module...');
 
-        // Check if init function exists (it may not in all versions)
-        if (typeof initEdgeVec === 'function') {
-          await initEdgeVec();
-          console.log('[HNSW] EdgeVec WASM module initialized via init()');
-        } else {
-          // If init doesn't exist, try to initialize by creating a test instance
-          console.log('[HNSW] No init() function found, attempting fallback initialization...');
+        // Try to dynamically import the init function (may not exist in all versions)
+        try {
+          const edgevecModule = await import('edgevec');
+          // @ts-ignore - init may not be exported
+          if (typeof edgevecModule.init === 'function') {
+            // @ts-ignore
+            await edgevecModule.init();
+            console.log('[HNSW] EdgeVec WASM module initialized via init()');
+          } else {
+            // If init doesn't exist, initialize by creating a test instance
+            console.log('[HNSW] No init() function found, attempting fallback initialization...');
+            const testConfig = new EdgeVecConfig(384);
+            testConfig.metric = 'cosine';
+            testConfig.m = 16;
+            testConfig.ef_construction = 200;
+            const testInstance = new EdgeVec(testConfig);
+            console.log('[HNSW] EdgeVec WASM module initialized via test instance');
+          }
+        } catch (importError) {
+          // Fallback: initialize by creating a test instance
+          console.log('[HNSW] Dynamic import failed, using fallback initialization...');
           const testConfig = new EdgeVecConfig(384);
           testConfig.metric = 'cosine';
           testConfig.m = 16;
           testConfig.ef_construction = 200;
           const testInstance = new EdgeVec(testConfig);
-          console.log('[HNSW] EdgeVec WASM module initialized via test instance');
+          console.log('[HNSW] EdgeVec WASM module initialized via test instance (fallback)');
         }
 
         HNSWIndexService.wasmInitialized = true;
