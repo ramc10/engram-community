@@ -68,6 +68,66 @@ jobs:
           flags: integration
           token: ${{ secrets.CODECOV_TOKEN }}
 
+  platform-tests:
+    name: Platform Adapter Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build core package
+        run: npm run build --workspace=packages/core
+
+      - name: Run platform adapter tests
+        run: jest --testPathPattern=tests/platforms
+        working-directory: packages/community
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./packages/community/coverage/lcov.info
+          flags: platform
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+  lib-tests:
+    name: Library Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build core package
+        run: npm run build --workspace=packages/core
+
+      - name: Run library tests
+        run: jest --testPathPattern=tests/lib
+        working-directory: packages/community
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./packages/community/coverage/lcov.info
+          flags: lib
+          token: ${{ secrets.CODECOV_TOKEN }}
+
   encryption-security:
     name: Encryption & Security
     runs-on: ubuntu-latest
