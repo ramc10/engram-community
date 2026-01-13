@@ -54,6 +54,10 @@ export class HNSWIndexService {
   private isBuilding: boolean = false;
   private readonly dbName = 'engram-hnsw-index'; // IndexedDB name for EdgeVec persistence
 
+  // Static WASM initialization state (shared across all instances)
+  private static wasmInitialized: boolean = false;
+  private static wasmInitPromise: Promise<void> | null = null;
+
   // HNSW configuration for 384-dim BGE-Small embeddings
   private readonly config = {
     dimensions: 384,      // BGE-Small embedding size
@@ -61,6 +65,66 @@ export class HNSWIndexService {
     m: 16,                // Connections per node (balanced for 384 dims)
     efConstruction: 200,  // Build quality (higher = better recall, slower build)
   };
+
+  /**
+   * Initialize EdgeVec WASM module
+   * This must be called before creating any EdgeVec instances in service worker context
+   */
+  private static async initializeWasm(): Promise<void> {
+    if (HNSWIndexService.wasmInitialized) {
+      return;
+    }
+
+    // If initialization is in progress, wait for it
+    if (HNSWIndexService.wasmInitPromise) {
+      return HNSWIndexService.wasmInitPromise;
+    }
+
+    // Start initialization
+    HNSWIndexService.wasmInitPromise = (async () => {
+      try {
+        console.log('[HNSW] Initializing EdgeVec WASM module...');
+
+        // Try to dynamically import the init function (may not exist in all versions)
+        try {
+          const edgevecModule = await import('edgevec');
+          // @ts-ignore - init may not be exported
+          if (typeof edgevecModule.init === 'function') {
+            // @ts-ignore
+            await edgevecModule.init();
+            console.log('[HNSW] EdgeVec WASM module initialized via init()');
+          } else {
+            // If init doesn't exist, initialize by creating a test instance
+            console.log('[HNSW] No init() function found, attempting fallback initialization...');
+            const testConfig = new EdgeVecConfig(384);
+            testConfig.metric = 'cosine';
+            testConfig.m = 16;
+            testConfig.ef_construction = 200;
+            const testInstance = new EdgeVec(testConfig);
+            console.log('[HNSW] EdgeVec WASM module initialized via test instance');
+          }
+        } catch (importError) {
+          // Fallback: initialize by creating a test instance
+          console.log('[HNSW] Dynamic import failed, using fallback initialization...');
+          const testConfig = new EdgeVecConfig(384);
+          testConfig.metric = 'cosine';
+          testConfig.m = 16;
+          testConfig.ef_construction = 200;
+          const testInstance = new EdgeVec(testConfig);
+          console.log('[HNSW] EdgeVec WASM module initialized via test instance (fallback)');
+        }
+
+        HNSWIndexService.wasmInitialized = true;
+        console.log('[HNSW] EdgeVec WASM module initialized successfully');
+      } catch (error) {
+        console.error('[HNSW] Failed to initialize EdgeVec WASM:', error);
+        HNSWIndexService.wasmInitPromise = null; // Reset to allow retry
+        throw new Error(`EdgeVec WASM initialization failed: ${error}`);
+      }
+    })();
+
+    return HNSWIndexService.wasmInitPromise;
+  }
 
   /**
    * Build HNSW index from existing memories
@@ -81,6 +145,9 @@ export class HNSWIndexService {
 
     try {
       console.log(`[HNSW] Building index for ${memories.length} vectors...`);
+
+      // Initialize WASM module first (required in service worker context)
+      await HNSWIndexService.initializeWasm();
 
       // Reset state
       this.index = null;
@@ -140,6 +207,9 @@ export class HNSWIndexService {
    * @param embedding - 384-dim embedding vector
    */
   async add(memoryId: UUID, embedding: Float32Array): Promise<void> {
+    // Initialize WASM module if not already done
+    await HNSWIndexService.initializeWasm();
+
     if (!this.index) {
       console.log('[HNSW] Index not initialized, creating new index');
       const config = new EdgeVecConfig(this.config.dimensions);
@@ -341,6 +411,9 @@ export class HNSWIndexService {
   async load(db: EngramDatabase): Promise<boolean> {
     try {
       console.log('[HNSW] Loading index from IndexedDB...');
+
+      // Initialize WASM module first (required before loading)
+      await HNSWIndexService.initializeWasm();
 
       // Try to load EdgeVec index from its own IndexedDB storage
       try {
