@@ -1,0 +1,5 @@
+# CODEOWNERS file
+# Every PR requires approval from @ramc10
+
+# All files require review from the repository owner
+* @ramc10
