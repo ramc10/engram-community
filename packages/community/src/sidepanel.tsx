@@ -923,7 +923,7 @@ function SidePanelContent() {
                 ⏳ Upgrade Request Pending
               </div>
               <div style={{ fontSize: '12px', opacity: 0.9 }}>
-                Your premium upgrade request has been submitted. You'll be notified once approved.
+                Your premium upgrade request has been submitted. You&apos;ll be notified once approved.
               </div>
             </div>
           )}
