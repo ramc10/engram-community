@@ -310,7 +310,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
       {/* Switch to Signup */}
       <div style={{ marginTop: '24px', textAlign: 'center' }}>
         <span style={{ fontSize: '13px', color: colors.text.secondary }}>
-          Don't have an account?{' '}
+          Don&apos;t have an account?{' '}
         </span>
         <Button
           variant="ghost"
