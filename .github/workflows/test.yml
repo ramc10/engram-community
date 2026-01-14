@@ -22,7 +22,7 @@ jobs:
           node-version: '20'
 
       - name: Install dependencies
-        run: npm install --ignore-scripts
+        run: npm ci
 
       - name: Build core package
         run: npm run build --workspace=packages/core
@@ -52,7 +52,7 @@ jobs:
           node-version: '20'
 
       - name: Install dependencies
-        run: npm install --ignore-scripts
+        run: npm ci
 
       - name: Build core package
         run: npm run build --workspace=packages/core
@@ -82,7 +82,7 @@ jobs:
           node-version: '20'
 
       - name: Install dependencies
-        run: npm install --ignore-scripts
+        run: npm ci
 
       - name: Build core package
         run: npm run build --workspace=packages/core
@@ -112,7 +112,7 @@ jobs:
           node-version: '20'
 
       - name: Install dependencies
-        run: npm install --ignore-scripts
+        run: npm ci
 
       - name: Build core package
         run: npm run build --workspace=packages/core
@@ -142,7 +142,7 @@ jobs:
           node-version: '20'
 
       - name: Install dependencies
-        run: npm install --ignore-scripts
+        run: npm ci
 
       - name: Build core package
         run: npm run build --workspace=packages/core
@@ -169,7 +169,7 @@ jobs:
           node-version: '20'
 
       - name: Install dependencies
-        run: npm install --ignore-scripts
+        run: npm ci
 
       - name: Build core package
         run: npm run build --workspace=packages/core
@@ -200,7 +200,7 @@ jobs:
           node-version: '20'
 
       - name: Install dependencies
-        run: npm install --ignore-scripts
+        run: npm ci
 
       - name: Build core package
         run: npm run build --workspace=packages/core
@@ -223,7 +223,7 @@ jobs:
           node-version: '20'
 
       - name: Install dependencies
-        run: npm install --ignore-scripts
+        run: npm ci
 
       - name: Build core package
         run: npm run build --workspace=packages/core
@@ -246,7 +246,7 @@ jobs:
           node-version: '20'
 
       - name: Install dependencies
-        run: npm install --ignore-scripts
+        run: npm ci
 
       - name: Build core package
         run: npm run build --workspace=packages/core
