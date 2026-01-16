@@ -44,6 +44,20 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
   const [isUpdatingEnrichment, setIsUpdatingEnrichment] = useState(false);
   const [showApiKey, setShowApiKey] = useState(false);
 
+  // Error reporter state
+  const [errorReporterConfig, setErrorReporterConfig] = useState({
+    enabled: false,
+    githubToken: '',
+    repositoryOwner: '',
+    repositoryName: '',
+    includeStackTrace: true,
+    rateLimitMinutes: 5,
+    maxIssuesPerDay: 10
+  });
+  const [isUpdatingErrorReporter, setIsUpdatingErrorReporter] = useState(false);
+  const [showGithubToken, setShowGithubToken] = useState(false);
+  const [testingConfig, setTestingConfig] = useState(false);
+
   const { success, error: showError, info } = useToast();
   const { colors } = useTheme();
 
@@ -52,6 +66,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
     loadMemories();
     loadSyncStatus();
     loadEnrichmentConfig();
+    loadErrorReporterConfig();
   }, []);
 
   const loadSyncStatus = async () => {
@@ -227,6 +242,61 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
       }
     }
     updateEnrichmentConfig({ enabled: !enrichmentConfig.enabled });
+  };
+
+  const loadErrorReporterConfig = async () => {
+    try {
+      const result = await chrome.storage.local.get('github-reporter-config');
+      if (result['github-reporter-config']) {
+        setErrorReporterConfig(result['github-reporter-config']);
+      }
+    } catch (err) {
+      console.error('Failed to load error reporter config:', err);
+    }
+  };
+
+  const updateErrorReporterConfig = async (updates: Partial<typeof errorReporterConfig>) => {
+    setIsUpdatingErrorReporter(true);
+    try {
+      const newConfig = { ...errorReporterConfig, ...updates };
+      await chrome.storage.local.set({ 'github-reporter-config': newConfig });
+      setErrorReporterConfig(newConfig);
+      success('Error reporting settings updated');
+    } catch (err) {
+      console.error('Failed to update error reporter config:', err);
+      showError('Failed to update settings');
+    } finally {
+      setIsUpdatingErrorReporter(false);
+    }
+  };
+
+  const testErrorReporterConfig = async () => {
+    setTestingConfig(true);
+    try {
+      // Create a test error
+      const testError = new Error('Test error from settings configuration');
+
+      // Import and use the reporter directly
+      const { getGitHubReporter } = await import('../../lib/github-reporter');
+      const reporter = getGitHubReporter();
+
+      // Save current config first
+      await updateErrorReporterConfig(errorReporterConfig);
+
+      // Test the configuration
+      const result = await reporter.testConfiguration();
+
+      if (result.success) {
+        success('Configuration test successful! GitHub API access verified.');
+      } else {
+        showError(`Configuration test failed: ${result.message}`);
+      }
+    } catch (err) {
+      console.error('Failed to test configuration:', err);
+      showError(`Test failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    } finally {
+      setTestingConfig(false);
+    }
   };
 
   const estimateMonthlyCost = () => {
@@ -1008,6 +1078,216 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
             Based on 100 memories per month with {enrichmentConfig.model}
           </div>
         </div>
+      </div>
+
+      {/* Error Reporting Section */}
+      <div
+        style={{
+          marginBottom: '24px',
+          padding: '16px',
+          backgroundColor: colors.surface,
+          borderRadius: '8px',
+          border: `1px solid ${colors.border}`,
+        }}
+      >
+        <h2
+          style={{
+            fontSize: '16px',
+            fontWeight: 600,
+            color: colors.text.primary,
+            marginBottom: '12px',
+          }}
+        >
+          Error Reporting
+        </h2>
+
+        <div style={{ fontSize: '12px', color: colors.text.secondary, marginBottom: '16px' }}>
+          Automatically create GitHub issues when errors occur in the extension. This helps improve Engram by reporting bugs automatically.
+        </div>
+
+        {/* Enable/Disable Toggle */}
+        <div style={{ marginBottom: '16px' }}>
+          <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={errorReporterConfig.enabled}
+              onChange={(e) => updateErrorReporterConfig({ enabled: e.target.checked })}
+              style={{ marginRight: '8px' }}
+            />
+            <span style={{ fontSize: '14px', color: colors.text.primary }}>
+              Enable automatic error reporting
+            </span>
+          </label>
+        </div>
+
+        {errorReporterConfig.enabled && (
+          <>
+            {/* GitHub Repository Owner */}
+            <div style={{ marginBottom: '12px' }}>
+              <div style={{ fontSize: '12px', color: colors.text.secondary, marginBottom: '6px' }}>
+                GitHub Repository Owner
+              </div>
+              <input
+                type="text"
+                value={errorReporterConfig.repositoryOwner}
+                onChange={(e) => updateErrorReporterConfig({ repositoryOwner: e.target.value })}
+                placeholder="e.g., ramc10"
+                style={{
+                  width: '100%',
+                  padding: '8px',
+                  fontSize: '14px',
+                  backgroundColor: colors.background,
+                  color: colors.text.primary,
+                  border: `1px solid ${colors.border}`,
+                  borderRadius: '4px',
+                  fontFamily: 'monospace',
+                }}
+              />
+            </div>
+
+            {/* GitHub Repository Name */}
+            <div style={{ marginBottom: '12px' }}>
+              <div style={{ fontSize: '12px', color: colors.text.secondary, marginBottom: '6px' }}>
+                GitHub Repository Name
+              </div>
+              <input
+                type="text"
+                value={errorReporterConfig.repositoryName}
+                onChange={(e) => updateErrorReporterConfig({ repositoryName: e.target.value })}
+                placeholder="e.g., engram-community"
+                style={{
+                  width: '100%',
+                  padding: '8px',
+                  fontSize: '14px',
+                  backgroundColor: colors.background,
+                  color: colors.text.primary,
+                  border: `1px solid ${colors.border}`,
+                  borderRadius: '4px',
+                  fontFamily: 'monospace',
+                }}
+              />
+            </div>
+
+            {/* GitHub Token */}
+            <div style={{ marginBottom: '12px' }}>
+              <div style={{ fontSize: '12px', color: colors.text.secondary, marginBottom: '6px' }}>
+                GitHub Personal Access Token
+              </div>
+              <div style={{ position: 'relative' }}>
+                <input
+                  type={showGithubToken ? 'text' : 'password'}
+                  value={errorReporterConfig.githubToken}
+                  onChange={(e) => updateErrorReporterConfig({ githubToken: e.target.value })}
+                  placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
+                  style={{
+                    width: '100%',
+                    padding: '8px',
+                    paddingRight: '60px',
+                    fontSize: '14px',
+                    backgroundColor: colors.background,
+                    color: colors.text.primary,
+                    border: `1px solid ${colors.border}`,
+                    borderRadius: '4px',
+                    fontFamily: 'monospace',
+                  }}
+                />
+                <button
+                  onClick={() => setShowGithubToken(!showGithubToken)}
+                  style={{
+                    position: 'absolute',
+                    right: '8px',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    fontSize: '11px',
+                    color: colors.text.tertiary,
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    padding: '4px',
+                  }}
+                >
+                  {showGithubToken ? 'Hide' : 'Show'}
+                </button>
+              </div>
+              <div style={{ fontSize: '11px', color: colors.text.tertiary, marginTop: '4px' }}>
+                Create a token with 'repo' scope at <a href="https://github.com/settings/tokens" target="_blank" style={{ color: colors.text.tertiary }}>github.com/settings/tokens</a>
+              </div>
+            </div>
+
+            {/* Include Stack Trace */}
+            <div style={{ marginBottom: '12px' }}>
+              <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={errorReporterConfig.includeStackTrace}
+                  onChange={(e) => updateErrorReporterConfig({ includeStackTrace: e.target.checked })}
+                  style={{ marginRight: '8px' }}
+                />
+                <span style={{ fontSize: '14px', color: colors.text.primary }}>
+                  Include stack traces in reports
+                </span>
+              </label>
+            </div>
+
+            {/* Rate Limiting */}
+            <div style={{ marginBottom: '12px' }}>
+              <div style={{ fontSize: '12px', color: colors.text.secondary, marginBottom: '6px' }}>
+                Rate Limit (minutes between same error)
+              </div>
+              <input
+                type="number"
+                min="1"
+                max="60"
+                value={errorReporterConfig.rateLimitMinutes}
+                onChange={(e) => updateErrorReporterConfig({ rateLimitMinutes: parseInt(e.target.value) || 5 })}
+                style={{
+                  width: '100%',
+                  padding: '8px',
+                  fontSize: '14px',
+                  backgroundColor: colors.background,
+                  color: colors.text.primary,
+                  border: `1px solid ${colors.border}`,
+                  borderRadius: '4px',
+                }}
+              />
+            </div>
+
+            {/* Daily Limit */}
+            <div style={{ marginBottom: '16px' }}>
+              <div style={{ fontSize: '12px', color: colors.text.secondary, marginBottom: '6px' }}>
+                Maximum Issues Per Day
+              </div>
+              <input
+                type="number"
+                min="1"
+                max="50"
+                value={errorReporterConfig.maxIssuesPerDay}
+                onChange={(e) => updateErrorReporterConfig({ maxIssuesPerDay: parseInt(e.target.value) || 10 })}
+                style={{
+                  width: '100%',
+                  padding: '8px',
+                  fontSize: '14px',
+                  backgroundColor: colors.background,
+                  color: colors.text.primary,
+                  border: `1px solid ${colors.border}`,
+                  borderRadius: '4px',
+                }}
+              />
+            </div>
+
+            {/* Test Configuration Button */}
+            <Button
+              variant="secondary"
+              size="sm"
+              fullWidth
+              onClick={testErrorReporterConfig}
+              isLoading={testingConfig}
+              disabled={testingConfig || !errorReporterConfig.githubToken || !errorReporterConfig.repositoryOwner || !errorReporterConfig.repositoryName}
+            >
+              {testingConfig ? 'Testing Configuration...' : 'Test Configuration'}
+            </Button>
+          </>
+        )}
       </div>
 
       {/* Privacy Information */}

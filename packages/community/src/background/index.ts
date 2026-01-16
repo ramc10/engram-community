@@ -24,6 +24,10 @@ import { premiumService } from '../lib/premium-service';
 import { getPremiumClient } from '../lib/premium-api-client';
 import type { EnrichmentConfig } from '@engram/core';
 import { decryptApiKey, isEncrypted } from '../lib/api-key-crypto';
+import { createLogger } from '../lib/logger';
+import { ErrorSeverity } from '../lib/github-reporter';
+
+const logger = createLogger('Background');
 
 /**
  * Background service state
@@ -116,6 +120,15 @@ class BackgroundService {
         console.error('[Engram] Error name:', error.name);
         console.error('[Engram] Error message:', error.message);
         console.error('[Engram] Error stack:', error.stack);
+
+        // Report critical initialization error to GitHub
+        logger.reportError(error, {
+          operation: 'initialize',
+          severity: ErrorSeverity.CRITICAL,
+          userAction: 'Extension startup'
+        }).catch(err => {
+          console.error('[Engram] Failed to report initialization error:', err);
+        });
       }
       throw error;
     }
@@ -667,6 +680,21 @@ chrome.runtime.onMessage.addListener((message: any, sender, sendResponse) => {
       sendResponse(response);
     } catch (error) {
       console.error('[Engram] Message handler error:', error);
+
+      // Report message handler errors to GitHub
+      if (error instanceof Error) {
+        logger.reportError(error, {
+          operation: 'handleMessage',
+          severity: ErrorSeverity.HIGH,
+          userAction: `Processing message: ${message.type}`,
+          additionalData: {
+            messageType: message.type
+          }
+        }).catch(err => {
+          console.error('[Engram] Failed to report message handler error:', err);
+        });
+      }
+
       sendResponse(createErrorResponse(error as Error, message.type));
     }
   })();
@@ -674,6 +702,46 @@ chrome.runtime.onMessage.addListener((message: any, sender, sendResponse) => {
   // Return true to indicate async response
   return true;
 });
+
+/**
+ * Global error handlers for unhandled errors and promise rejections
+ */
+if (typeof self !== 'undefined') {
+  // Handle unhandled promise rejections
+  self.addEventListener('unhandledrejection', (event: PromiseRejectionEvent) => {
+    console.error('[Engram] Unhandled promise rejection:', event.reason);
+
+    if (event.reason instanceof Error) {
+      logger.reportError(event.reason, {
+        operation: 'unhandledRejection',
+        severity: ErrorSeverity.HIGH,
+        userAction: 'Background process'
+      }).catch(err => {
+        console.error('[Engram] Failed to report unhandled rejection:', err);
+      });
+    }
+  });
+
+  // Handle global errors
+  self.addEventListener('error', (event: ErrorEvent) => {
+    console.error('[Engram] Global error:', event.error || event.message);
+
+    if (event.error instanceof Error) {
+      logger.reportError(event.error, {
+        operation: 'globalError',
+        severity: ErrorSeverity.HIGH,
+        userAction: 'Background process',
+        additionalData: {
+          filename: event.filename,
+          lineno: event.lineno,
+          colno: event.colno
+        }
+      }).catch(err => {
+        console.error('[Engram] Failed to report global error:', err);
+      });
+    }
+  });
+}
 
 /**
  * Export for access in message handler
