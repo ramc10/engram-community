@@ -238,13 +238,14 @@ export class EnrichmentService {
       // Add to persistent retry queue
       await this.retryQueue.add(memory, err, errorType);
 
+      // Increment failed count
+      this.failedCount++;
+
       // Check if permanently failed
-      const stats = await this.retryQueue.getStats();
       const permanentlyFailed = await this.retryQueue.getPermanentlyFailed();
       const thisMemoryFailed = permanentlyFailed.find(item => item.memory.id === memory.id);
 
       if (thisMemoryFailed) {
-        this.failedCount++;
         console.error(
           `[Enrichment] Memory ${memory.id} permanently failed after max retries`
         );
@@ -254,13 +255,12 @@ export class EnrichmentService {
           this.onEnrichmentFailed(memory.id, err.message);
         }
       } else {
+        const stats = await this.retryQueue.getStats();
         console.log(
           `[Enrichment] Memory ${memory.id} added to retry queue ` +
           `(${stats.pendingRetries} pending retries)`
         );
       }
-
-      this.failedCount++;
     }
   }
 
