@@ -99,12 +99,18 @@ export class EnrichmentService {
   // Callback for notifying user of permanent failures
   public onEnrichmentFailed?: (memoryId: string, error: string) => void;
 
+  private retryProcessorInterval: NodeJS.Timeout | null = null;
+  private retryProcessorTimeout: NodeJS.Timeout | null = null;
+
   constructor(private config: EnrichmentConfig) {
     // 60 calls per minute (conservative)
     this.rateLimiter = new RateLimiter(60, 60000);
 
-    // Start retry processor
-    this.startRetryProcessor();
+    // Start retry processor only if chrome.storage is available
+    // This prevents issues in test environments
+    if (typeof chrome !== 'undefined' && chrome.storage) {
+      this.startRetryProcessor();
+    }
   }
 
   /**
@@ -298,15 +304,34 @@ export class EnrichmentService {
    * Checks retry queue every 30 seconds
    */
   private startRetryProcessor(): void {
+    // Stop any existing processor
+    this.stopRetryProcessor();
+
     // Process retries every 30 seconds
-    setInterval(async () => {
+    this.retryProcessorInterval = setInterval(async () => {
       await this.processRetries();
     }, 30000);
 
     // Initial process after 5 seconds
-    setTimeout(async () => {
+    this.retryProcessorTimeout = setTimeout(async () => {
       await this.processRetries();
     }, 5000);
+  }
+
+  /**
+   * Stop background retry processor
+   * Useful for cleanup and testing
+   */
+  stopRetryProcessor(): void {
+    if (this.retryProcessorInterval) {
+      clearInterval(this.retryProcessorInterval);
+      this.retryProcessorInterval = null;
+    }
+
+    if (this.retryProcessorTimeout) {
+      clearTimeout(this.retryProcessorTimeout);
+      this.retryProcessorTimeout = null;
+    }
   }
 
   /**

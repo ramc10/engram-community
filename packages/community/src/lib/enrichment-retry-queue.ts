@@ -55,6 +55,13 @@ export class EnrichmentRetryQueue {
     }
 
     try {
+      // Check if chrome.storage is available
+      if (typeof chrome === 'undefined' || !chrome.storage) {
+        console.warn('[EnrichmentRetryQueue] chrome.storage not available, using in-memory queue');
+        this.isLoaded = true;
+        return;
+      }
+
       const result = await chrome.storage.local.get(STORAGE_KEY);
       const stored = result[STORAGE_KEY] as EnrichmentRetryItem[] | undefined;
 
@@ -76,6 +83,12 @@ export class EnrichmentRetryQueue {
    */
   async save(): Promise<void> {
     try {
+      // Check if chrome.storage is available
+      if (typeof chrome === 'undefined' || !chrome.storage) {
+        // Queue remains in memory only
+        return;
+      }
+
       const items = Array.from(this.queue.values());
 
       // Limit queue size
@@ -206,7 +219,11 @@ export class EnrichmentRetryQueue {
    */
   async clear(): Promise<void> {
     this.queue.clear();
-    await chrome.storage.local.remove(STORAGE_KEY);
+
+    if (typeof chrome !== 'undefined' && chrome.storage) {
+      await chrome.storage.local.remove(STORAGE_KEY);
+    }
+
     console.log('[EnrichmentRetryQueue] Cleared all items from queue');
   }
 
