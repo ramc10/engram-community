@@ -23,15 +23,16 @@ export interface GitHubReporterConfig {
 }
 
 /**
- * Hardcoded GitHub configuration for error reporting
- * This is set by the developer and users don't need to configure it
+ * Get GitHub configuration for error reporting
+ * This is evaluated at runtime to allow for testing and env var changes
  */
-const GITHUB_CONFIG = {
-  // TODO: Set these values or use environment variables
-  token: process.env.PLASMO_PUBLIC_GITHUB_REPORTER_TOKEN || '',
-  owner: process.env.PLASMO_PUBLIC_GITHUB_REPO_OWNER || 'ramc10',
-  repo: process.env.PLASMO_PUBLIC_GITHUB_REPO_NAME || 'engram-community',
-};
+function getGitHubConfig() {
+  return {
+    token: process.env.PLASMO_PUBLIC_GITHUB_REPORTER_TOKEN || '',
+    owner: process.env.PLASMO_PUBLIC_GITHUB_REPO_OWNER || 'ramc10',
+    repo: process.env.PLASMO_PUBLIC_GITHUB_REPO_NAME || 'engram-community',
+  };
+}
 
 /**
  * Error severity levels mapped to GitHub labels
@@ -170,7 +171,8 @@ export class GitHubReporter {
       }
 
       // Validate hardcoded configuration
-      if (!GITHUB_CONFIG.token || !GITHUB_CONFIG.owner || !GITHUB_CONFIG.repo) {
+      const githubConfig = getGitHubConfig();
+      if (!githubConfig.token || !githubConfig.owner || !githubConfig.repo) {
         logger.warn('GitHub reporter not configured with token/repo. Set PLASMO_PUBLIC_GITHUB_REPORTER_TOKEN env var.');
         return { success: false, reason: 'GitHub reporter not configured' };
       }
@@ -334,11 +336,12 @@ export class GitHubReporter {
    */
   private async isIssueOpen(issueNumber: number): Promise<boolean> {
     try {
+      const githubConfig = getGitHubConfig();
       const response = await fetch(
-        `https://api.github.com/repos/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}/issues/${issueNumber}`,
+        `https://api.github.com/repos/${githubConfig.owner}/${githubConfig.repo}/issues/${issueNumber}`,
         {
           headers: {
-            'Authorization': `Bearer ${GITHUB_CONFIG.token}`,
+            'Authorization': `Bearer ${githubConfig.token}`,
             'Accept': 'application/vnd.github.v3+json'
           }
         }
@@ -368,12 +371,13 @@ export class GitHubReporter {
     const body = this.generateIssueBody(sanitizedData, fingerprint, context);
     const labels = this.generateLabels(context);
 
+    const githubConfig = getGitHubConfig();
     const response = await fetch(
-      `https://api.github.com/repos/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}/issues`,
+      `https://api.github.com/repos/${githubConfig.owner}/${githubConfig.repo}/issues`,
       {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${GITHUB_CONFIG.token}`,
+          'Authorization': `Bearer ${githubConfig.token}`,
           'Accept': 'application/vnd.github.v3+json',
           'Content-Type': 'application/json'
         },
@@ -615,7 +619,8 @@ export class GitHubReporter {
    */
   async testConfiguration(): Promise<{ success: boolean; message: string }> {
     try {
-      if (!GITHUB_CONFIG.token || !GITHUB_CONFIG.owner || !GITHUB_CONFIG.repo) {
+      const githubConfig = getGitHubConfig();
+      if (!githubConfig.token || !githubConfig.owner || !githubConfig.repo) {
         return {
           success: false,
           message: 'GitHub configuration missing. Set PLASMO_PUBLIC_GITHUB_REPORTER_TOKEN environment variable.'
@@ -624,10 +629,10 @@ export class GitHubReporter {
 
       // Test GitHub API access
       const response = await fetch(
-        `https://api.github.com/repos/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}`,
+        `https://api.github.com/repos/${githubConfig.owner}/${githubConfig.repo}`,
         {
           headers: {
-            'Authorization': `Bearer ${GITHUB_CONFIG.token}`,
+            'Authorization': `Bearer ${githubConfig.token}`,
             'Accept': 'application/vnd.github.v3+json'
           }
         }
