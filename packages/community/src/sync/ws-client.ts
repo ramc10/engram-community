@@ -52,7 +52,7 @@ export class WebSocketClient {
   private retryManager: RetryManager;
   private heartbeatTimer: NodeJS.Timeout | null = null;
   private messageQueue: WebSocketMessage[] = [];
-  private eventHandlers: Map<WebSocketClientEvent, Set<Function>> = new Map();
+  private eventHandlers: Map<WebSocketClientEvent, Set<(data: any) => void>> = new Map();
 
   constructor(private config: WebSocketClientConfig = DEFAULT_WEBSOCKET_CONFIG) {
     this.retryManager = new RetryManager();
@@ -343,7 +343,7 @@ export class WebSocketClient {
   /**
    * Register event handler
    */
-  on(event: WebSocketClientEvent, handler: Function): () => void {
+  on(event: WebSocketClientEvent, handler: (data: any) => void): () => void {
     if (!this.eventHandlers.has(event)) {
       this.eventHandlers.set(event, new Set());
     }

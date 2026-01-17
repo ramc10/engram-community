@@ -59,9 +59,9 @@ export class NetworkInterceptor {
    * Intercept fetch API
    */
   private interceptFetch(): void {
-    const self = this;
+    const originalFetch = this.originalFetch;
 
-    window.fetch = async function (...args: Parameters<typeof fetch>): Promise<Response> {
+    window.fetch = async (...args: Parameters<typeof fetch>): Promise<Response> => {
       const [resource, config] = args;
       const url = typeof resource === 'string'
         ? resource
@@ -92,8 +92,8 @@ export class NetworkInterceptor {
         console.log('[Network Interceptor] Intercepted Claude API request:', url);
 
         // Check if we have a message to inject
-        if (self.messageToInject) {
-          const injection = self.messageToInject;
+        if (this.messageToInject) {
+          const injection = this.messageToInject;
 
           // Check if injection is still fresh (within 2 seconds)
           const age = Date.now() - injection.timestamp;
@@ -105,7 +105,7 @@ export class NetworkInterceptor {
               const bodyText = config.body as string;
               if (!bodyText) {
                 console.warn('[Network Interceptor] No request body found');
-                return self.originalFetch.call(window, ...args);
+                return originalFetch.call(window, ...args);
               }
 
               console.log('[Network Interceptor] Request body (first 200 chars):', bodyText.substring(0, 200));
@@ -127,10 +127,10 @@ export class NetworkInterceptor {
                   };
 
                   // Clear the injection
-                  self.clearInjection();
+                  this.clearInjection();
 
                   // Send modified request
-                  return self.originalFetch.call(window, resource, modifiedConfig);
+                  return originalFetch.call(window, resource, modifiedConfig);
                 } else {
                   console.log('[Network Interceptor] Prompt mismatch, not injecting');
                   console.log('[Network Interceptor] Expected:', injection.originalPrompt.substring(0, 50));
@@ -165,10 +165,10 @@ export class NetworkInterceptor {
                     };
 
                     // Clear the injection
-                    self.clearInjection();
+                    this.clearInjection();
 
                     // Send modified request
-                    return self.originalFetch.call(window, resource, modifiedConfig);
+                    return originalFetch.call(window, resource, modifiedConfig);
                   }
                 }
               }
@@ -177,13 +177,13 @@ export class NetworkInterceptor {
             }
           } else {
             console.log('[Network Interceptor] Injection expired (age:', age, 'ms)');
-            self.clearInjection();
+            this.clearInjection();
           }
         }
       }
 
       // Default: pass through unmodified
-      return self.originalFetch.call(window, ...args);
+      return originalFetch.call(window, ...args);
     };
   }
 

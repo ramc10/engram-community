@@ -5,7 +5,7 @@
 
 declare const chrome: any;
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useToast, useTheme, Button } from '../../components/ui';
 import type { MessageType } from '../../lib/messages';
 import type { Memory, EnrichmentConfig } from '@engram/core';
@@ -51,15 +51,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
   const { success, error: showError, info } = useToast();
   const { colors } = useTheme();
 
-  // Load memories on mount
-  useEffect(() => {
-    loadMemories();
-    loadSyncStatus();
-    loadEnrichmentConfig();
-    loadErrorReporterConfig();
-  }, []);
-
-  const loadSyncStatus = async () => {
+  const loadSyncStatus = useCallback(async () => {
     try {
       const response = await chrome.runtime.sendMessage({
         type: 'GET_PREMIUM_STATUS' as MessageType,
@@ -71,9 +63,9 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
     } catch (err) {
       console.error('Failed to load sync status:', err);
     }
-  };
+  }, []);
 
-  const loadMemories = async () => {
+  const loadMemories = useCallback(async () => {
     setIsLoadingMemories(true);
     try {
       const response = await chrome.runtime.sendMessage({
@@ -92,9 +84,9 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
     } finally {
       setIsLoadingMemories(false);
     }
-  };
+  }, [showError]);
 
-  const loadEnrichmentConfig = async () => {
+  const loadEnrichmentConfig = useCallback(async () => {
     try {
       const result = await chrome.storage.local.get('enrichmentConfig');
       if (result.enrichmentConfig) {
@@ -116,7 +108,26 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
     } catch (err) {
       console.error('Failed to load enrichment config:', err);
     }
-  };
+  }, []);
+
+  const loadErrorReporterConfig = useCallback(async () => {
+    try {
+      const result = await chrome.storage.local.get('github-reporter-config');
+      if (result['github-reporter-config']) {
+        setErrorReportingEnabled(result['github-reporter-config'].enabled || false);
+      }
+    } catch (err) {
+      console.error('Failed to load error reporter config:', err);
+    }
+  }, []);
+
+  // Load memories on mount
+  useEffect(() => {
+    loadMemories();
+    loadSyncStatus();
+    loadEnrichmentConfig();
+    loadErrorReporterConfig();
+  }, [loadMemories, loadSyncStatus, loadEnrichmentConfig, loadErrorReporterConfig]);
 
   const handleLogout = async () => {
     if (!confirm('Are you sure you want to logout?')) {
@@ -232,17 +243,6 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
       }
     }
     updateEnrichmentConfig({ enabled: !enrichmentConfig.enabled });
-  };
-
-  const loadErrorReporterConfig = async () => {
-    try {
-      const result = await chrome.storage.local.get('github-reporter-config');
-      if (result['github-reporter-config']) {
-        setErrorReportingEnabled(result['github-reporter-config'].enabled || false);
-      }
-    } catch (err) {
-      console.error('Failed to load error reporter config:', err);
-    }
   };
 
   const toggleErrorReporting = async (enabled: boolean) => {

@@ -3,7 +3,7 @@
  * Native Chrome side panel for memory management
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { ThemeProvider, ToastProvider, useToast, useTheme, Button, Logo } from './components/ui';
 import { PremiumBadge, UpgradeBanner } from './components';
 import type { MessageType } from './lib/messages';
@@ -387,34 +387,7 @@ function SidePanelContent() {
     return colors.text.tertiary;                      // Gray for <70%
   };
 
-  // Check auth state on mount
-  useEffect(() => {
-    checkAuthState();
-  }, []);
-
-  // Load memories when authenticated
-  useEffect(() => {
-    if (isAuthenticated) {
-      loadMemories();
-      checkPremiumStatus();
-      loadEnrichmentConfig();
-    }
-  }, [isAuthenticated]);
-
-  // Auto-refresh memories every 10 seconds
-  useEffect(() => {
-    if (!isAuthenticated || activeTab !== 'memories') {
-      return;
-    }
-
-    const intervalId = setInterval(() => {
-      loadMemories();
-    }, 10000); // 10 seconds
-
-    return () => clearInterval(intervalId);
-  }, [isAuthenticated, activeTab]);
-
-  const checkAuthState = async () => {
+  const checkAuthState = useCallback(async () => {
     try {
       const response = await chrome.runtime.sendMessage({
         type: 'GET_AUTH_STATE' as MessageType,
@@ -428,9 +401,9 @@ function SidePanelContent() {
     } catch (err) {
       console.error('[Engram Side Panel] Failed to check auth state:', err);
     }
-  };
+  }, []);
 
-  const checkPremiumStatus = async () => {
+  const checkPremiumStatus = useCallback(async () => {
     try {
       const response = await chrome.runtime.sendMessage({
         type: 'GET_PREMIUM_STATUS' as MessageType,
@@ -444,9 +417,9 @@ function SidePanelContent() {
     } catch (err) {
       console.error('[Engram Side Panel] Failed to check premium status:', err);
     }
-  };
+  }, []);
 
-  const loadEnrichmentConfig = async () => {
+  const loadEnrichmentConfig = useCallback(async () => {
     try {
       const result = await chrome.storage.local.get('enrichmentConfig');
       if (result.enrichmentConfig) {
@@ -467,7 +440,89 @@ function SidePanelContent() {
     } catch (err) {
       console.error('[Engram Side Panel] Failed to load enrichment config:', err);
     }
-  };
+  }, []);
+
+  // Pre-compute embeddings for all memories
+  const precomputeEmbeddings = useCallback(async (memoriesToEmbed: Memory[]) => {
+    if (memoriesToEmbed.length === 0) return;
+
+    setIsPreparingEmbeddings(true);
+    setEmbeddingProgress({ current: 0, total: memoriesToEmbed.length });
+    console.log('[Engram Sidepanel] Pre-computing embeddings for', memoriesToEmbed.length, 'memories...');
+
+    try {
+      // Initialize embedding service
+      await embeddingService.initialize();
+
+      // Generate embeddings for all memories with progress tracking
+      const embedded = await embeddingService.embedMemories(
+        memoriesToEmbed,
+        (current, total) => {
+          setEmbeddingProgress({ current, total });
+        }
+      );
+      setMemoriesWithEmbeddings(embedded);
+
+      console.log('[Engram Sidepanel] Embeddings ready!');
+    } catch (error) {
+      console.error('[Engram Sidepanel] Failed to pre-compute embeddings:', error);
+    } finally {
+      setIsPreparingEmbeddings(false);
+      setEmbeddingProgress(null);
+    }
+  }, [embeddingService]);
+
+  const loadMemories = useCallback(async () => {
+    setIsLoadingMemories(true);
+    try {
+      const response = await chrome.runtime.sendMessage({
+        type: 'GET_MEMORIES' as MessageType,
+        filter: {
+          limit: 1000, // Load up to 1000 memories - all your conversations available
+        },
+      });
+
+      if (response.success && response.memories) {
+        setMemories(response.memories);
+        setLastRefreshTime(new Date());
+
+        // Pre-compute embeddings in background for better search performance
+        precomputeEmbeddings(response.memories);
+      }
+    } catch (err) {
+      console.error('[Engram Side Panel] Failed to load memories:', err);
+      showError('Failed to load memories');
+    } finally {
+      setIsLoadingMemories(false);
+    }
+  }, [showError, precomputeEmbeddings]);
+
+  // Check auth state on mount
+  useEffect(() => {
+    checkAuthState();
+  }, [checkAuthState]);
+
+  // Load memories when authenticated
+  useEffect(() => {
+    if (isAuthenticated) {
+      loadMemories();
+      checkPremiumStatus();
+      loadEnrichmentConfig();
+    }
+  }, [isAuthenticated, loadMemories, checkPremiumStatus, loadEnrichmentConfig]);
+
+  // Auto-refresh memories every 10 seconds
+  useEffect(() => {
+    if (!isAuthenticated || activeTab !== 'memories') {
+      return;
+    }
+
+    const intervalId = setInterval(() => {
+      loadMemories();
+    }, 10000); // 10 seconds
+
+    return () => clearInterval(intervalId);
+  }, [isAuthenticated, activeTab, loadMemories]);
 
   const updateEnrichmentConfig = async (updates: Partial<EnrichmentConfig>) => {
     setIsUpdatingEnrichment(true);
@@ -609,61 +664,6 @@ function SidePanelContent() {
       showError('Failed to toggle sync');
     } finally {
       setIsTogglingSync(false);
-    }
-  };
-
-  const loadMemories = async () => {
-    setIsLoadingMemories(true);
-    try {
-      const response = await chrome.runtime.sendMessage({
-        type: 'GET_MEMORIES' as MessageType,
-        filter: {
-          limit: 1000, // Load up to 1000 memories - all your conversations available
-        },
-      });
-
-      if (response.success && response.memories) {
-        setMemories(response.memories);
-        setLastRefreshTime(new Date());
-
-        // Pre-compute embeddings in background for better search performance
-        precomputeEmbeddings(response.memories);
-      }
-    } catch (err) {
-      console.error('[Engram Side Panel] Failed to load memories:', err);
-      showError('Failed to load memories');
-    } finally {
-      setIsLoadingMemories(false);
-    }
-  };
-
-  // Pre-compute embeddings for all memories
-  const precomputeEmbeddings = async (memoriesToEmbed: Memory[]) => {
-    if (memoriesToEmbed.length === 0) return;
-
-    setIsPreparingEmbeddings(true);
-    setEmbeddingProgress({ current: 0, total: memoriesToEmbed.length });
-    console.log('[Engram Sidepanel] Pre-computing embeddings for', memoriesToEmbed.length, 'memories...');
-
-    try {
-      // Initialize embedding service
-      await embeddingService.initialize();
-
-      // Generate embeddings for all memories with progress tracking
-      const embedded = await embeddingService.embedMemories(
-        memoriesToEmbed,
-        (current, total) => {
-          setEmbeddingProgress({ current, total });
-        }
-      );
-      setMemoriesWithEmbeddings(embedded);
-
-      console.log('[Engram Sidepanel] Embeddings ready!');
-    } catch (error) {
-      console.error('[Engram Sidepanel] Failed to pre-compute embeddings:', error);
-    } finally {
-      setIsPreparingEmbeddings(false);
-      setEmbeddingProgress(null);
     }
   };
 
