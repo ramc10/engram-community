@@ -46,9 +46,6 @@ describe('GitHubReporter', () => {
     it('should save configuration', async () => {
       const config = {
         enabled: true,
-        githubToken: 'ghp_test_token',
-        repositoryOwner: 'testowner',
-        repositoryName: 'testrepo',
         rateLimitMinutes: 5,
         maxIssuesPerDay: 10,
         includeStackTrace: true,
@@ -60,9 +57,9 @@ describe('GitHubReporter', () => {
       expect(mockChromeStorage.local.set).toHaveBeenCalledWith({
         'github-reporter-config': expect.objectContaining({
           enabled: true,
-          githubToken: 'ghp_test_token',
-          repositoryOwner: 'testowner',
-          repositoryName: 'testrepo'
+          rateLimitMinutes: 5,
+          maxIssuesPerDay: 10,
+          includeStackTrace: true
         })
       });
     });
@@ -70,9 +67,6 @@ describe('GitHubReporter', () => {
     it('should load configuration', async () => {
       const savedConfig = {
         enabled: true,
-        githubToken: 'test_token',
-        repositoryOwner: 'owner',
-        repositoryName: 'repo',
         rateLimitMinutes: 5,
         maxIssuesPerDay: 10,
         includeStackTrace: true,
@@ -99,12 +93,9 @@ describe('GitHubReporter', () => {
 
   describe('Error Reporting', () => {
     beforeEach(async () => {
-      // Set up valid configuration
+      // Set up valid configuration (enabled by default)
       await reporter.saveConfig({
         enabled: true,
-        githubToken: 'ghp_test_token',
-        repositoryOwner: 'testowner',
-        repositoryName: 'testrepo',
         rateLimitMinutes: 5,
         maxIssuesPerDay: 10,
         includeStackTrace: true,
@@ -112,10 +103,11 @@ describe('GitHubReporter', () => {
       });
 
       // Mock successful GitHub API response
+      // Note: Uses hardcoded GitHub config from environment variables
       mockFetch.mockResolvedValue({
         ok: true,
         json: async () => ({
-          html_url: 'https://github.com/testowner/testrepo/issues/1',
+          html_url: 'https://github.com/ramc10/engram-community/issues/1',
           number: 1
         })
       });
@@ -126,9 +118,6 @@ describe('GitHubReporter', () => {
           return Promise.resolve({
             'github-reporter-config': {
               enabled: true,
-              githubToken: 'ghp_test_token',
-              repositoryOwner: 'testowner',
-              repositoryName: 'testrepo',
               rateLimitMinutes: 5,
               maxIssuesPerDay: 10,
               includeStackTrace: true,
@@ -138,14 +127,16 @@ describe('GitHubReporter', () => {
         }
         return Promise.resolve({});
       });
+
+      // Mock environment variables for hardcoded GitHub config
+      (process.env as any).PLASMO_PUBLIC_GITHUB_REPORTER_TOKEN = 'ghp_test_token';
+      (process.env as any).PLASMO_PUBLIC_GITHUB_REPO_OWNER = 'ramc10';
+      (process.env as any).PLASMO_PUBLIC_GITHUB_REPO_NAME = 'engram-community';
     });
 
     it('should not report when disabled', async () => {
       await reporter.saveConfig({
         enabled: false,
-        githubToken: '',
-        repositoryOwner: '',
-        repositoryName: '',
         rateLimitMinutes: 5,
         maxIssuesPerDay: 10,
         includeStackTrace: true,
@@ -160,17 +151,9 @@ describe('GitHubReporter', () => {
       expect(mockFetch).not.toHaveBeenCalled();
     });
 
-    it('should not report when configuration is incomplete', async () => {
-      await reporter.saveConfig({
-        enabled: true,
-        githubToken: '',
-        repositoryOwner: '',
-        repositoryName: '',
-        rateLimitMinutes: 5,
-        maxIssuesPerDay: 10,
-        includeStackTrace: true,
-        excludePatterns: []
-      });
+    it('should not report when GitHub config is missing', async () => {
+      // Clear environment variables
+      delete (process.env as any).PLASMO_PUBLIC_GITHUB_REPORTER_TOKEN;
 
       const error = new Error('Test error');
       const result = await reporter.reportError(error);
@@ -178,6 +161,9 @@ describe('GitHubReporter', () => {
       expect(result.success).toBe(false);
       expect(result.reason).toBe('GitHub reporter not configured');
       expect(mockFetch).not.toHaveBeenCalled();
+
+      // Restore for other tests
+      (process.env as any).PLASMO_PUBLIC_GITHUB_REPORTER_TOKEN = 'ghp_test_token';
     });
 
     it('should create GitHub issue for new error', async () => {
@@ -189,9 +175,9 @@ describe('GitHubReporter', () => {
       });
 
       expect(result.success).toBe(true);
-      expect(result.issueUrl).toBe('https://github.com/testowner/testrepo/issues/1');
+      expect(result.issueUrl).toBe('https://github.com/ramc10/engram-community/issues/1');
       expect(mockFetch).toHaveBeenCalledWith(
-        'https://api.github.com/repos/testowner/testrepo/issues',
+        'https://api.github.com/repos/ramc10/engram-community/issues',
         expect.objectContaining({
           method: 'POST',
           headers: expect.objectContaining({
@@ -226,9 +212,6 @@ describe('GitHubReporter', () => {
     it('should exclude errors matching exclusion patterns', async () => {
       await reporter.saveConfig({
         enabled: true,
-        githubToken: 'ghp_test_token',
-        repositoryOwner: 'testowner',
-        repositoryName: 'testrepo',
         rateLimitMinutes: 5,
         maxIssuesPerDay: 10,
         includeStackTrace: true,
@@ -245,21 +228,17 @@ describe('GitHubReporter', () => {
   });
 
   describe('Configuration Testing', () => {
-    it('should validate valid configuration', async () => {
-      await reporter.saveConfig({
-        enabled: true,
-        githubToken: 'ghp_test_token',
-        repositoryOwner: 'testowner',
-        repositoryName: 'testrepo',
-        rateLimitMinutes: 5,
-        maxIssuesPerDay: 10,
-        includeStackTrace: true,
-        excludePatterns: []
-      });
+    beforeEach(() => {
+      // Set up environment variables
+      (process.env as any).PLASMO_PUBLIC_GITHUB_REPORTER_TOKEN = 'ghp_test_token';
+      (process.env as any).PLASMO_PUBLIC_GITHUB_REPO_OWNER = 'ramc10';
+      (process.env as any).PLASMO_PUBLIC_GITHUB_REPO_NAME = 'engram-community';
+    });
 
+    it('should validate valid GitHub configuration', async () => {
       mockFetch.mockResolvedValue({
         ok: true,
-        json: async () => ({ name: 'testrepo' })
+        json: async () => ({ name: 'engram-community' })
       });
 
       const result = await reporter.testConfiguration();
@@ -267,23 +246,12 @@ describe('GitHubReporter', () => {
       expect(result.success).toBe(true);
       expect(result.message).toBe('Configuration valid');
       expect(mockFetch).toHaveBeenCalledWith(
-        'https://api.github.com/repos/testowner/testrepo',
+        'https://api.github.com/repos/ramc10/engram-community',
         expect.any(Object)
       );
     });
 
-    it('should detect invalid configuration', async () => {
-      await reporter.saveConfig({
-        enabled: true,
-        githubToken: 'invalid_token',
-        repositoryOwner: 'testowner',
-        repositoryName: 'testrepo',
-        rateLimitMinutes: 5,
-        maxIssuesPerDay: 10,
-        includeStackTrace: true,
-        excludePatterns: []
-      });
-
+    it('should detect invalid GitHub token', async () => {
       mockFetch.mockResolvedValue({
         ok: false,
         status: 401
@@ -295,22 +263,16 @@ describe('GitHubReporter', () => {
       expect(result.message).toContain('401');
     });
 
-    it('should detect incomplete configuration', async () => {
-      await reporter.saveConfig({
-        enabled: true,
-        githubToken: '',
-        repositoryOwner: '',
-        repositoryName: '',
-        rateLimitMinutes: 5,
-        maxIssuesPerDay: 10,
-        includeStackTrace: true,
-        excludePatterns: []
-      });
+    it('should detect missing GitHub configuration', async () => {
+      // Clear environment variables
+      delete (process.env as any).PLASMO_PUBLIC_GITHUB_REPORTER_TOKEN;
+      delete (process.env as any).PLASMO_PUBLIC_GITHUB_REPO_OWNER;
+      delete (process.env as any).PLASMO_PUBLIC_GITHUB_REPO_NAME;
 
       const result = await reporter.testConfiguration();
 
       expect(result.success).toBe(false);
-      expect(result.message).toBe('Configuration incomplete');
+      expect(result.message).toContain('GitHub configuration missing');
     });
   });
 });
