@@ -28,6 +28,9 @@ const mockChromeStorage = {
 const mockFetch = jest.fn();
 (global as any).fetch = mockFetch;
 
+// Save original process.env
+const originalEnv = { ...process.env };
+
 describe('GitHubReporter', () => {
   let reporter: GitHubReporter;
 
@@ -35,11 +38,24 @@ describe('GitHubReporter', () => {
     // Reset mocks
     jest.clearAllMocks();
 
+    // Reset environment variables to original state
+    process.env = { ...originalEnv };
+
+    // Set default test environment variables
+    process.env.PLASMO_PUBLIC_GITHUB_REPORTER_TOKEN = 'ghp_test_token';
+    process.env.PLASMO_PUBLIC_GITHUB_REPO_OWNER = 'ramc10';
+    process.env.PLASMO_PUBLIC_GITHUB_REPO_NAME = 'engram-community';
+
     // Default mock implementations
     mockChromeStorage.local.get.mockResolvedValue({});
     mockChromeStorage.local.set.mockResolvedValue(undefined);
 
     reporter = new GitHubReporter();
+  });
+
+  afterEach(() => {
+    // Restore original environment variables
+    process.env = { ...originalEnv };
   });
 
   describe('Configuration', () => {
@@ -127,11 +143,6 @@ describe('GitHubReporter', () => {
         }
         return Promise.resolve({});
       });
-
-      // Mock environment variables for hardcoded GitHub config
-      (process.env as any).PLASMO_PUBLIC_GITHUB_REPORTER_TOKEN = 'ghp_test_token';
-      (process.env as any).PLASMO_PUBLIC_GITHUB_REPO_OWNER = 'ramc10';
-      (process.env as any).PLASMO_PUBLIC_GITHUB_REPO_NAME = 'engram-community';
     });
 
     it('should not report when disabled', async () => {
@@ -153,7 +164,7 @@ describe('GitHubReporter', () => {
 
     it('should not report when GitHub config is missing', async () => {
       // Clear environment variables
-      delete (process.env as any).PLASMO_PUBLIC_GITHUB_REPORTER_TOKEN;
+      delete process.env.PLASMO_PUBLIC_GITHUB_REPORTER_TOKEN;
 
       const error = new Error('Test error');
       const result = await reporter.reportError(error);
@@ -162,8 +173,7 @@ describe('GitHubReporter', () => {
       expect(result.reason).toBe('GitHub reporter not configured');
       expect(mockFetch).not.toHaveBeenCalled();
 
-      // Restore for other tests
-      (process.env as any).PLASMO_PUBLIC_GITHUB_REPORTER_TOKEN = 'ghp_test_token';
+      // Note: Environment will be restored by afterEach
     });
 
     it('should create GitHub issue for new error', async () => {
@@ -228,13 +238,6 @@ describe('GitHubReporter', () => {
   });
 
   describe('Configuration Testing', () => {
-    beforeEach(() => {
-      // Set up environment variables
-      (process.env as any).PLASMO_PUBLIC_GITHUB_REPORTER_TOKEN = 'ghp_test_token';
-      (process.env as any).PLASMO_PUBLIC_GITHUB_REPO_OWNER = 'ramc10';
-      (process.env as any).PLASMO_PUBLIC_GITHUB_REPO_NAME = 'engram-community';
-    });
-
     it('should validate valid GitHub configuration', async () => {
       mockFetch.mockResolvedValue({
         ok: true,
@@ -265,14 +268,16 @@ describe('GitHubReporter', () => {
 
     it('should detect missing GitHub configuration', async () => {
       // Clear environment variables
-      delete (process.env as any).PLASMO_PUBLIC_GITHUB_REPORTER_TOKEN;
-      delete (process.env as any).PLASMO_PUBLIC_GITHUB_REPO_OWNER;
-      delete (process.env as any).PLASMO_PUBLIC_GITHUB_REPO_NAME;
+      delete process.env.PLASMO_PUBLIC_GITHUB_REPORTER_TOKEN;
+      delete process.env.PLASMO_PUBLIC_GITHUB_REPO_OWNER;
+      delete process.env.PLASMO_PUBLIC_GITHUB_REPO_NAME;
 
       const result = await reporter.testConfiguration();
 
       expect(result.success).toBe(false);
       expect(result.message).toContain('GitHub configuration missing');
+
+      // Note: Environment will be restored by afterEach
     });
   });
 });
