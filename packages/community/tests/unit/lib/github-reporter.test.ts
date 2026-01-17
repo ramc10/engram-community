@@ -8,14 +8,16 @@
  * - Deduplication
  */
 
-import { describe, it, expect, beforeEach, jest } from '@jest/globals';
+import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
 import { GitHubReporter, ErrorSeverity } from '../../../src/lib/github-reporter';
 
 // Mock chrome API
 const mockChromeStorage = {
-  local: {
-    get: jest.fn(),
-    set: jest.fn(),
+  storage: {
+    local: {
+      get: jest.fn<any>(),
+      set: jest.fn<any>(),
+    },
   },
   runtime: {
     getManifest: jest.fn(() => ({ version: '0.1.3' })),
@@ -25,7 +27,7 @@ const mockChromeStorage = {
 (global as any).chrome = mockChromeStorage;
 
 // Mock fetch
-const mockFetch = jest.fn();
+const mockFetch = jest.fn<any>();
 (global as any).fetch = mockFetch;
 
 describe('GitHubReporter', () => {
@@ -49,8 +51,8 @@ describe('GitHubReporter', () => {
     process.env.PLASMO_PUBLIC_GITHUB_REPO_NAME = 'engram-community';
 
     // Default mock implementations
-    mockChromeStorage.local.get.mockResolvedValue({});
-    mockChromeStorage.local.set.mockResolvedValue(undefined);
+    mockChromeStorage.storage.local.get.mockResolvedValue({});
+    mockChromeStorage.storage.local.set.mockResolvedValue(undefined);
 
     reporter = new GitHubReporter();
   });
@@ -88,7 +90,7 @@ describe('GitHubReporter', () => {
 
       await reporter.saveConfig(config);
 
-      expect(mockChromeStorage.local.set).toHaveBeenCalledWith({
+      expect(mockChromeStorage.storage.local.set).toHaveBeenCalledWith({
         'github-reporter-config': expect.objectContaining({
           enabled: true,
           rateLimitMinutes: 5,
@@ -107,7 +109,7 @@ describe('GitHubReporter', () => {
         excludePatterns: []
       };
 
-      mockChromeStorage.local.get.mockResolvedValue({
+      mockChromeStorage.storage.local.get.mockResolvedValue({
         'github-reporter-config': savedConfig
       });
 
@@ -117,7 +119,7 @@ describe('GitHubReporter', () => {
     });
 
     it('should return null for missing configuration', async () => {
-      mockChromeStorage.local.get.mockResolvedValue({});
+      mockChromeStorage.storage.local.get.mockResolvedValue({});
 
       const config = await reporter.getConfig();
 
@@ -147,7 +149,7 @@ describe('GitHubReporter', () => {
       });
 
       // Mock empty metadata (no previous reports)
-      mockChromeStorage.local.get.mockImplementation((key) => {
+      mockChromeStorage.storage.local.get.mockImplementation((key: any) => {
         if (key === 'github-reporter-config') {
           return Promise.resolve({
             'github-reporter-config': {

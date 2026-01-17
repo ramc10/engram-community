@@ -19,7 +19,9 @@ const SENSITIVE_PATTERNS = [
   // Bearer tokens
   /Bearer\s+[\w\-._~+/]+/gi,
   // GitHub tokens
-  /gh[ps]_[a-zA-Z0-9]{36}/gi,
+  /gh[ps]_[a-zA-Z0-9]{20,}/gi,
+  // Stripe API keys
+  /[sp]k_(test|live)_[\w]+/gi,
   // Supabase keys
   /eyJ[\w-]+\.eyJ[\w-]+\.[\w-]+/gi,
   // Email addresses
@@ -38,26 +40,26 @@ const SENSITIVE_FIELDS = new Set([
   'passwd',
   'pwd',
   'token',
-  'apiKey',
+  'apikey',
   'api_key',
   'secret',
-  'privateKey',
+  'privatekey',
   'private_key',
-  'masterKey',
+  'masterkey',
   'master_key',
-  'encryptionKey',
+  'encryptionkey',
   'encryption_key',
-  'supabaseKey',
+  'supabasekey',
   'supabase_key',
-  'githubToken',
+  'githubtoken',
   'github_token',
-  'sessionToken',
+  'sessiontoken',
   'session_token',
-  'authToken',
+  'authtoken',
   'auth_token',
-  'accessToken',
+  'accesstoken',
   'access_token',
-  'refreshToken',
+  'refreshtoken',
   'refresh_token',
 ]);
 
@@ -105,19 +107,22 @@ function sanitizeStackTrace(stack: string): string {
   const sanitizedLines: string[] = [];
 
   for (const line of lines) {
-    let sanitized = sanitizeString(line);
+    let sanitized = line;
 
-    // Remove chrome extension IDs from paths
+    // Remove chrome extension IDs from paths (do this BEFORE sanitizeString)
     sanitized = sanitized.replace(
-      /chrome-extension:\/\/[a-z]{32}\//gi,
+      /chrome-extension:\/\/[a-z0-9]{32}\//gi,
       'chrome-extension://<EXTENSION_ID>/'
     );
 
-    // Remove absolute file paths, keep relative paths
+    // Remove absolute file paths, keep relative paths (do this BEFORE sanitizeString)
     sanitized = sanitized.replace(
       /\/(Users|home|mnt)\/[^\s:)]+/gi,
       '<USER_PATH>'
     );
+
+    // Apply general sanitization
+    sanitized = sanitizeString(sanitized);
 
     sanitizedLines.push(sanitized);
   }
@@ -184,7 +189,7 @@ export function validateSanitization(data: SanitizedErrorData): {
   // Check for sensitive field names
   const dataStr = JSON.stringify(data).toLowerCase();
   for (const field of SENSITIVE_FIELDS) {
-    if (dataStr.includes(field) && !dataStr.includes(`"${field}":"<REDACTED>"`)) {
+    if (dataStr.includes(field) && !dataStr.includes(`"${field}":"<redacted>"`)) {
       warnings.push(`Sensitive field name detected: ${field}`);
     }
   }

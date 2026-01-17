@@ -42,8 +42,16 @@ describe('Error Fingerprinting', () => {
     });
 
     it('should normalize UUIDs in error messages', () => {
-      const error1 = new Error('Failed to save memory 123e4567-e89b-12d3-a456-426614174000');
-      const error2 = new Error('Failed to save memory 987e6543-e21b-43d2-b654-123456789abc');
+      // Create errors with the same stack trace for consistent fingerprinting
+      const createTestError = (message: string) => {
+        const err = new Error(message);
+        // Set a consistent stack trace
+        err.stack = `Error: ${message}\n    at testFunction (test.ts:100:10)`;
+        return err;
+      };
+
+      const error1 = createTestError('Failed to save memory 123e4567-e89b-12d3-a456-426614174000');
+      const error2 = createTestError('Failed to save memory 987e6543-e21b-43d2-b654-123456789abc');
 
       const fp1 = generateErrorFingerprint(error1);
       const fp2 = generateErrorFingerprint(error2);
@@ -55,8 +63,15 @@ describe('Error Fingerprinting', () => {
     });
 
     it('should normalize timestamps in error messages', () => {
-      const error1 = new Error('Error at 2025-01-15T10:30:00');
-      const error2 = new Error('Error at 2025-01-16T15:45:30');
+      // Create errors with the same stack trace for consistent fingerprinting
+      const createTestError = (message: string) => {
+        const err = new Error(message);
+        err.stack = `Error: ${message}\n    at testFunction (test.ts:100:10)`;
+        return err;
+      };
+
+      const error1 = createTestError('Error at 2025-01-15T10:30:00');
+      const error2 = createTestError('Error at 2025-01-16T15:45:30');
 
       const fp1 = generateErrorFingerprint(error1);
       const fp2 = generateErrorFingerprint(error2);
@@ -67,8 +82,15 @@ describe('Error Fingerprinting', () => {
     });
 
     it('should normalize numeric IDs in error messages', () => {
-      const error1 = new Error('Failed to fetch record 123456');
-      const error2 = new Error('Failed to fetch record 789012');
+      // Create errors with the same stack trace for consistent fingerprinting
+      const createTestError = (message: string) => {
+        const err = new Error(message);
+        err.stack = `Error: ${message}\n    at testFunction (test.ts:100:10)`;
+        return err;
+      };
+
+      const error1 = createTestError('Failed to fetch record 123456');
+      const error2 = createTestError('Failed to fetch record 789012');
 
       const fp1 = generateErrorFingerprint(error1);
       const fp2 = generateErrorFingerprint(error2);

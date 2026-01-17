@@ -525,16 +525,18 @@ async function showErrorReportingConsent(): Promise<void> {
     }
 
     // Create notification
-    const notificationId = await chrome.notifications.create({
-      type: 'basic',
-      iconUrl: chrome.runtime.getURL('assets/icon.png'),
-      title: 'Help Improve Engram',
-      message: 'Automatic error reporting is enabled to help us fix bugs. No personal data is collected. You can disable it in Settings anytime.',
-      priority: 1,
-      buttons: [
-        { title: 'Disable' },
-        { title: 'Keep Enabled' }
-      ]
+    const notificationId: string = await new Promise((resolve) => {
+      chrome.notifications.create({
+        type: 'basic',
+        iconUrl: chrome.runtime.getURL('assets/icon.png'),
+        title: 'Help Improve Engram',
+        message: 'Automatic error reporting is enabled to help us fix bugs. No personal data is collected. You can disable it in Settings anytime.',
+        priority: 1,
+        buttons: [
+          { title: 'Disable' },
+          { title: 'Keep Enabled' }
+        ]
+      }, resolve);
     });
 
     // Mark as shown
