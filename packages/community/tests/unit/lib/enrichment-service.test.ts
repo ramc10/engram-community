@@ -3,7 +3,7 @@
  * Covers LLM integration, rate limiting, retries, and cost tracking
  */
 
-import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
+import { describe, it, expect, beforeEach, afterEach, beforeAll, afterAll, jest } from '@jest/globals';
 import { EnrichmentService } from '../../../src/lib/enrichment-service';
 import type { EnrichmentConfig, MemoryWithMemA } from '@engram/core';
 import { generateUUID, now, createVectorClock } from '@engram/core';
