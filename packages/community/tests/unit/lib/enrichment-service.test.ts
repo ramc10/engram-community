@@ -11,40 +11,53 @@ import { generateUUID, now, createVectorClock } from '@engram/core';
 // Mock fetch globally
 global.fetch = jest.fn() as jest.MockedFunction<typeof fetch>;
 
-// Mock chrome.storage for retry queue
+// Mock chrome.storage for retry queue - scoped to this test suite only
 const mockStorage: Record<string, any> = {};
-(global as any).chrome = {
-  storage: {
-    local: {
-      get: jest.fn((keys) => {
-        if (typeof keys === 'string') {
-          return Promise.resolve({ [keys]: mockStorage[keys] });
-        } else if (Array.isArray(keys)) {
-          const result: Record<string, any> = {};
-          keys.forEach((key) => {
-            result[key] = mockStorage[key];
-          });
-          return Promise.resolve(result);
-        }
-        return Promise.resolve(mockStorage);
-      }),
-      set: jest.fn((items) => {
-        Object.assign(mockStorage, items);
-        return Promise.resolve();
-      }),
-      remove: jest.fn((keys) => {
-        if (typeof keys === 'string') {
-          delete mockStorage[keys];
-        } else if (Array.isArray(keys)) {
-          keys.forEach((key) => delete mockStorage[key]);
-        }
-        return Promise.resolve();
-      }),
-    },
-  },
-};
+const originalChrome = (global as any).chrome;
 
 describe('EnrichmentService', () => {
+  // Set up chrome mock for this test suite only
+  beforeAll(() => {
+    (global as any).chrome = {
+      storage: {
+        local: {
+          get: jest.fn((keys) => {
+            if (typeof keys === 'string') {
+              return Promise.resolve({ [keys]: mockStorage[keys] });
+            } else if (Array.isArray(keys)) {
+              const result: Record<string, any> = {};
+              keys.forEach((key) => {
+                result[key] = mockStorage[key];
+              });
+              return Promise.resolve(result);
+            }
+            return Promise.resolve(mockStorage);
+          }),
+          set: jest.fn((items) => {
+            Object.assign(mockStorage, items);
+            return Promise.resolve();
+          }),
+          remove: jest.fn((keys) => {
+            if (typeof keys === 'string') {
+              delete mockStorage[keys];
+            } else if (Array.isArray(keys)) {
+              keys.forEach((key) => delete mockStorage[key]);
+            }
+            return Promise.resolve();
+          }),
+        },
+      },
+    };
+  });
+
+  // Restore original chrome state after this test suite
+  afterAll(() => {
+    if (originalChrome === undefined) {
+      delete (global as any).chrome;
+    } else {
+      (global as any).chrome = originalChrome;
+    }
+  });
   let service: EnrichmentService;
   let mockConfig: EnrichmentConfig;
 
