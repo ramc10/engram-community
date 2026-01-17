@@ -27,6 +27,12 @@ Thumbs.db
 # Test coverage
 coverage/
 
+# Playwright
+playwright-report/
+test-results/
+packages/community/tests/e2e/test-results/
+packages/community/playwright-report/
+
 # Logs
 *.log
 npm-debug.log*
