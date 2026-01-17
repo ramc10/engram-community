@@ -156,14 +156,9 @@ export class RetryManager {
     await this.delay(delay);
 
     // Execute operation
-    try {
-      const result = await operation();
-      this.reset(); // Reset on success
-      return result;
-    } catch (error) {
-      // If operation fails, caller can decide to retry again
-      throw error;
-    }
+    const result = await operation();
+    this.reset(); // Reset on success
+    return result;
   }
 
   /**
