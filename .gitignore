@@ -5,6 +5,7 @@ node_modules/
 packages/*/build/
 packages/*/dist/
 packages/*/.plasmo/
+.plasmo/
 *.js.map
 *.d.ts.map
 
