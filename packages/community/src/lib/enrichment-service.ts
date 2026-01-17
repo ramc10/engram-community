@@ -12,8 +12,7 @@ import type {
   MemoryWithMemA,
 } from '@engram/core';
 import { getPremiumClient } from './premium-api-client';
-import { getEnrichmentRetryQueue, type EnrichmentRetryItem } from './enrichment-retry-queue';
-import { RetryManager } from '../sync/retry-manager';
+import { getEnrichmentRetryQueue } from './enrichment-retry-queue';
 
 // Declare chrome for TypeScript
 declare const chrome: any;
