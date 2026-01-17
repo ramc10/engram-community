@@ -442,6 +442,61 @@ function SidePanelContent() {
     }
   }, []);
 
+  // Pre-compute embeddings for all memories
+  const precomputeEmbeddings = useCallback(async (memoriesToEmbed: Memory[]) => {
+    if (memoriesToEmbed.length === 0) return;
+
+    setIsPreparingEmbeddings(true);
+    setEmbeddingProgress({ current: 0, total: memoriesToEmbed.length });
+    console.log('[Engram Sidepanel] Pre-computing embeddings for', memoriesToEmbed.length, 'memories...');
+
+    try {
+      // Initialize embedding service
+      await embeddingService.initialize();
+
+      // Generate embeddings for all memories with progress tracking
+      const embedded = await embeddingService.embedMemories(
+        memoriesToEmbed,
+        (current, total) => {
+          setEmbeddingProgress({ current, total });
+        }
+      );
+      setMemoriesWithEmbeddings(embedded);
+
+      console.log('[Engram Sidepanel] Embeddings ready!');
+    } catch (error) {
+      console.error('[Engram Sidepanel] Failed to pre-compute embeddings:', error);
+    } finally {
+      setIsPreparingEmbeddings(false);
+      setEmbeddingProgress(null);
+    }
+  }, [embeddingService]);
+
+  const loadMemories = useCallback(async () => {
+    setIsLoadingMemories(true);
+    try {
+      const response = await chrome.runtime.sendMessage({
+        type: 'GET_MEMORIES' as MessageType,
+        filter: {
+          limit: 1000, // Load up to 1000 memories - all your conversations available
+        },
+      });
+
+      if (response.success && response.memories) {
+        setMemories(response.memories);
+        setLastRefreshTime(new Date());
+
+        // Pre-compute embeddings in background for better search performance
+        precomputeEmbeddings(response.memories);
+      }
+    } catch (err) {
+      console.error('[Engram Side Panel] Failed to load memories:', err);
+      showError('Failed to load memories');
+    } finally {
+      setIsLoadingMemories(false);
+    }
+  }, [showError, precomputeEmbeddings]);
+
   // Check auth state on mount
   useEffect(() => {
     checkAuthState();
@@ -611,61 +666,6 @@ function SidePanelContent() {
       setIsTogglingSync(false);
     }
   };
-
-  // Pre-compute embeddings for all memories
-  const precomputeEmbeddings = useCallback(async (memoriesToEmbed: Memory[]) => {
-    if (memoriesToEmbed.length === 0) return;
-
-    setIsPreparingEmbeddings(true);
-    setEmbeddingProgress({ current: 0, total: memoriesToEmbed.length });
-    console.log('[Engram Sidepanel] Pre-computing embeddings for', memoriesToEmbed.length, 'memories...');
-
-    try {
-      // Initialize embedding service
-      await embeddingService.initialize();
-
-      // Generate embeddings for all memories with progress tracking
-      const embedded = await embeddingService.embedMemories(
-        memoriesToEmbed,
-        (current, total) => {
-          setEmbeddingProgress({ current, total });
-        }
-      );
-      setMemoriesWithEmbeddings(embedded);
-
-      console.log('[Engram Sidepanel] Embeddings ready!');
-    } catch (error) {
-      console.error('[Engram Sidepanel] Failed to pre-compute embeddings:', error);
-    } finally {
-      setIsPreparingEmbeddings(false);
-      setEmbeddingProgress(null);
-    }
-  }, [embeddingService]);
-
-  const loadMemories = useCallback(async () => {
-    setIsLoadingMemories(true);
-    try {
-      const response = await chrome.runtime.sendMessage({
-        type: 'GET_MEMORIES' as MessageType,
-        filter: {
-          limit: 1000, // Load up to 1000 memories - all your conversations available
-        },
-      });
-
-      if (response.success && response.memories) {
-        setMemories(response.memories);
-        setLastRefreshTime(new Date());
-
-        // Pre-compute embeddings in background for better search performance
-        precomputeEmbeddings(response.memories);
-      }
-    } catch (err) {
-      console.error('[Engram Side Panel] Failed to load memories:', err);
-      showError('Failed to load memories');
-    } finally {
-      setIsLoadingMemories(false);
-    }
-  }, [showError, precomputeEmbeddings]);
 
   const handleLogout = async () => {
     if (!confirm('Are you sure you want to logout?')) {
