@@ -28,20 +28,22 @@ const mockChromeStorage = {
 const mockFetch = jest.fn();
 (global as any).fetch = mockFetch;
 
-// Save original process.env
-const originalEnv = { ...process.env };
-
 describe('GitHubReporter', () => {
   let reporter: GitHubReporter;
+  let originalToken: string | undefined;
+  let originalOwner: string | undefined;
+  let originalRepo: string | undefined;
 
   beforeEach(() => {
     // Reset mocks
     jest.clearAllMocks();
 
-    // Reset environment variables to original state
-    process.env = { ...originalEnv };
+    // Save original environment variables
+    originalToken = process.env.PLASMO_PUBLIC_GITHUB_REPORTER_TOKEN;
+    originalOwner = process.env.PLASMO_PUBLIC_GITHUB_REPO_OWNER;
+    originalRepo = process.env.PLASMO_PUBLIC_GITHUB_REPO_NAME;
 
-    // Set default test environment variables
+    // Set test environment variables
     process.env.PLASMO_PUBLIC_GITHUB_REPORTER_TOKEN = 'ghp_test_token';
     process.env.PLASMO_PUBLIC_GITHUB_REPO_OWNER = 'ramc10';
     process.env.PLASMO_PUBLIC_GITHUB_REPO_NAME = 'engram-community';
@@ -55,7 +57,23 @@ describe('GitHubReporter', () => {
 
   afterEach(() => {
     // Restore original environment variables
-    process.env = { ...originalEnv };
+    if (originalToken !== undefined) {
+      process.env.PLASMO_PUBLIC_GITHUB_REPORTER_TOKEN = originalToken;
+    } else {
+      delete process.env.PLASMO_PUBLIC_GITHUB_REPORTER_TOKEN;
+    }
+
+    if (originalOwner !== undefined) {
+      process.env.PLASMO_PUBLIC_GITHUB_REPO_OWNER = originalOwner;
+    } else {
+      delete process.env.PLASMO_PUBLIC_GITHUB_REPO_OWNER;
+    }
+
+    if (originalRepo !== undefined) {
+      process.env.PLASMO_PUBLIC_GITHUB_REPO_NAME = originalRepo;
+    } else {
+      delete process.env.PLASMO_PUBLIC_GITHUB_REPO_NAME;
+    }
   });
 
   describe('Configuration', () => {
