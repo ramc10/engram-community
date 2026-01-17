@@ -5,6 +5,7 @@
 
 import React from 'react';
 import { Logo, Button, useTheme } from '../../components/ui';
+import { withErrorBoundary } from '../../components';
 
 interface WelcomeProps {
   onContinueOffline: () => void;
@@ -12,7 +13,7 @@ interface WelcomeProps {
   onSignIn: () => void;
 }
 
-export const Welcome: React.FC<WelcomeProps> = ({
+const WelcomeComponent: React.FC<WelcomeProps> = ({
   onContinueOffline,
   onSignUp,
   onSignIn,
@@ -162,3 +163,9 @@ export const Welcome: React.FC<WelcomeProps> = ({
     </div>
   );
 };
+
+// Wrap with error boundary for automatic error handling
+export const Welcome = withErrorBoundary(WelcomeComponent, {
+  componentName: "Welcome",
+  fallbackComponent: "detailed",
+});
