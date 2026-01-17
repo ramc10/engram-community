@@ -7,6 +7,7 @@ declare const chrome: any;
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useToast, useTheme, Button } from '../../components/ui';
+import { withErrorBoundary } from '../../components';
 import type { MessageType } from '../../lib/messages';
 import type { Memory, EnrichmentConfig } from '@engram/core';
 import { formatDate } from '../../lib/formatters';
@@ -19,7 +20,7 @@ interface SettingsPageProps {
   onLogout: () => void;
 }
 
-export const SettingsPage: React.FC<SettingsPageProps> = ({
+const SettingsPageComponent: React.FC<SettingsPageProps> = ({
   userId,
   email,
   isPremium,
@@ -1200,3 +1201,9 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
     </div>
   );
 };
+
+// Wrap with error boundary for automatic error handling
+export const SettingsPage = withErrorBoundary(SettingsPageComponent, {
+  componentName: 'SettingsPage',
+  fallbackComponent: 'detailed',
+});

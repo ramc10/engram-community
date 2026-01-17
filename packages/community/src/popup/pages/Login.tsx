@@ -5,6 +5,7 @@
 
 import React, { useState } from 'react';
 import { useToast, useTheme, Button, useKeyboardShortcuts, commonShortcuts } from '../../components/ui';
+import { withErrorBoundary } from '../../components';
 import type { MessageType } from '../../lib/messages';
 
 interface LoginPageProps {
@@ -12,7 +13,7 @@ interface LoginPageProps {
   onSwitchToSignup: () => void;
 }
 
-export const LoginPage: React.FC<LoginPageProps> = ({
+const LoginPageComponent: React.FC<LoginPageProps> = ({
   onSuccess,
   onSwitchToSignup,
 }) => {
@@ -348,3 +349,9 @@ export const LoginPage: React.FC<LoginPageProps> = ({
     </div>
   );
 };
+
+// Wrap with error boundary for automatic error handling
+export const LoginPage = withErrorBoundary(LoginPageComponent, {
+  componentName: 'LoginPage',
+  fallbackComponent: 'detailed',
+});
