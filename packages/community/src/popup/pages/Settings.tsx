@@ -44,6 +44,10 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
   const [isUpdatingEnrichment, setIsUpdatingEnrichment] = useState(false);
   const [showApiKey, setShowApiKey] = useState(false);
 
+  // Error reporter state
+  const [errorReportingEnabled, setErrorReportingEnabled] = useState(false);
+  const [isUpdatingErrorReporter, setIsUpdatingErrorReporter] = useState(false);
+
   const { success, error: showError, info } = useToast();
   const { colors } = useTheme();
 
@@ -52,6 +56,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
     loadMemories();
     loadSyncStatus();
     loadEnrichmentConfig();
+    loadErrorReporterConfig();
   }, []);
 
   const loadSyncStatus = async () => {
@@ -227,6 +232,47 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
       }
     }
     updateEnrichmentConfig({ enabled: !enrichmentConfig.enabled });
+  };
+
+  const loadErrorReporterConfig = async () => {
+    try {
+      const result = await chrome.storage.local.get('github-reporter-config');
+      if (result['github-reporter-config']) {
+        setErrorReportingEnabled(result['github-reporter-config'].enabled || false);
+      }
+    } catch (err) {
+      console.error('Failed to load error reporter config:', err);
+    }
+  };
+
+  const toggleErrorReporting = async (enabled: boolean) => {
+    setIsUpdatingErrorReporter(true);
+    try {
+      // Get existing config
+      const result = await chrome.storage.local.get('github-reporter-config');
+      const existingConfig = result['github-reporter-config'] || {
+        rateLimitMinutes: 5,
+        maxIssuesPerDay: 10,
+        includeStackTrace: true,
+        excludePatterns: []
+      };
+
+      // Update only the enabled flag
+      const newConfig = { ...existingConfig, enabled };
+      await chrome.storage.local.set({ 'github-reporter-config': newConfig });
+      setErrorReportingEnabled(enabled);
+
+      if (enabled) {
+        success('Error reporting enabled');
+      } else {
+        success('Error reporting disabled');
+      }
+    } catch (err) {
+      console.error('Failed to update error reporter config:', err);
+      showError('Failed to update settings');
+    } finally {
+      setIsUpdatingErrorReporter(false);
+    }
   };
 
   const estimateMonthlyCost = () => {
@@ -1007,6 +1053,101 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
           <div style={{ fontSize: '11px', color: colors.text.tertiary, marginTop: '4px' }}>
             Based on 100 memories per month with {enrichmentConfig.model}
           </div>
+        </div>
+      </div>
+
+      {/* Error Reporting Section */}
+      <div
+        style={{
+          marginBottom: '24px',
+          padding: '16px',
+          backgroundColor: colors.surface,
+          borderRadius: '8px',
+          border: `1px solid ${colors.border}`,
+        }}
+      >
+        <h2
+          style={{
+            fontSize: '16px',
+            fontWeight: 600,
+            color: colors.text.primary,
+            marginBottom: '12px',
+          }}
+        >
+          Help Improve Engram
+        </h2>
+
+        <div style={{ fontSize: '12px', color: colors.text.secondary, marginBottom: '16px', lineHeight: '1.6' }}>
+          Automatic error reporting helps us identify and fix bugs faster. When enabled, Engram will send error reports to our team when something goes wrong.
+        </div>
+
+        {/* What's Collected */}
+        <div style={{
+          marginBottom: '16px',
+          padding: '12px',
+          backgroundColor: colors.background,
+          borderRadius: '6px',
+          border: `1px solid ${colors.border}`
+        }}>
+          <div style={{ fontSize: '12px', fontWeight: 600, color: colors.text.primary, marginBottom: '8px' }}>
+            What's collected:
+          </div>
+          <ul style={{ fontSize: '11px', color: colors.text.secondary, margin: '0', paddingLeft: '20px', lineHeight: '1.8' }}>
+            <li>Error messages (sanitized)</li>
+            <li>Extension version</li>
+            <li>Browser type</li>
+            <li>When the error occurred</li>
+          </ul>
+        </div>
+
+        {/* What's NOT Collected */}
+        <div style={{
+          marginBottom: '16px',
+          padding: '12px',
+          backgroundColor: colors.background,
+          borderRadius: '6px',
+          border: `1px solid ${colors.border}`
+        }}>
+          <div style={{ fontSize: '12px', fontWeight: 600, color: colors.text.primary, marginBottom: '8px' }}>
+            What's NOT collected:
+          </div>
+          <ul style={{ fontSize: '11px', color: colors.text.secondary, margin: '0', paddingLeft: '20px', lineHeight: '1.8' }}>
+            <li>Your conversations</li>
+            <li>Personal information</li>
+            <li>API keys or passwords</li>
+            <li>Browsing history</li>
+          </ul>
+        </div>
+
+        {/* Enable/Disable Toggle */}
+        <label style={{
+          display: 'flex',
+          alignItems: 'center',
+          cursor: 'pointer',
+          padding: '12px',
+          backgroundColor: errorReportingEnabled ? colors.status.successBg : colors.background,
+          borderRadius: '6px',
+          border: `1px solid ${errorReportingEnabled ? colors.status.success + '33' : colors.border}`,
+          transition: 'all 0.2s'
+        }}>
+          <input
+            type="checkbox"
+            checked={errorReportingEnabled}
+            onChange={(e) => toggleErrorReporting(e.target.checked)}
+            disabled={isUpdatingErrorReporter}
+            style={{ marginRight: '12px', cursor: 'pointer' }}
+          />
+          <span style={{
+            fontSize: '14px',
+            fontWeight: 500,
+            color: colors.text.primary
+          }}>
+            {errorReportingEnabled ? 'Error reporting is enabled' : 'Enable error reporting'}
+          </span>
+        </label>
+
+        <div style={{ fontSize: '11px', color: colors.text.tertiary, marginTop: '12px' }}>
+          You can change this setting at any time. Reports are rate-limited and sanitized to protect your privacy.
         </div>
       </div>
 

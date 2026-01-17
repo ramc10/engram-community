@@ -24,6 +24,10 @@ import { premiumService } from '../lib/premium-service';
 import { getPremiumClient } from '../lib/premium-api-client';
 import type { EnrichmentConfig } from '@engram/core';
 import { decryptApiKey, isEncrypted } from '../lib/api-key-crypto';
+import { createLogger } from '../lib/logger';
+import { ErrorSeverity } from '../lib/github-reporter';
+
+const logger = createLogger('Background');
 
 /**
  * Background service state
@@ -116,6 +120,15 @@ class BackgroundService {
         console.error('[Engram] Error name:', error.name);
         console.error('[Engram] Error message:', error.message);
         console.error('[Engram] Error stack:', error.stack);
+
+        // Report critical initialization error to GitHub
+        logger.reportError(error, {
+          operation: 'initialize',
+          severity: ErrorSeverity.CRITICAL,
+          userAction: 'Extension startup'
+        }).catch(err => {
+          console.error('[Engram] Failed to report initialization error:', err);
+        });
       }
       throw error;
     }
@@ -501,6 +514,77 @@ class BackgroundService {
 const backgroundService = new BackgroundService();
 
 /**
+ * Show error reporting consent notification
+ */
+async function showErrorReportingConsent(): Promise<void> {
+  try {
+    // Check if user has already been asked
+    const result = await chrome.storage.local.get('error-reporting-consent-shown');
+    if (result['error-reporting-consent-shown']) {
+      return; // Already asked
+    }
+
+    // Create notification
+    const notificationId: string = await new Promise((resolve) => {
+      chrome.notifications.create({
+        type: 'basic',
+        iconUrl: chrome.runtime.getURL('assets/icon.png'),
+        title: 'Help Improve Engram',
+        message: 'Automatic error reporting is enabled to help us fix bugs. No personal data is collected. You can disable it in Settings anytime.',
+        priority: 1,
+        buttons: [
+          { title: 'Disable' },
+          { title: 'Keep Enabled' }
+        ]
+      }, resolve);
+    });
+
+    // Mark as shown
+    await chrome.storage.local.set({ 'error-reporting-consent-shown': true });
+
+    // Set default config (enabled by default with opt-out)
+    const existingConfig = await chrome.storage.local.get('github-reporter-config');
+    if (!existingConfig['github-reporter-config']) {
+      await chrome.storage.local.set({
+        'github-reporter-config': {
+          enabled: true, // Enabled by default (opt-out)
+          rateLimitMinutes: 5,
+          maxIssuesPerDay: 10,
+          includeStackTrace: true,
+          excludePatterns: []
+        }
+      });
+      console.log('[Engram] Error reporting enabled by default');
+    }
+
+    // Handle notification button clicks
+    chrome.notifications.onButtonClicked.addListener((notifId, buttonIndex) => {
+      if (notifId === notificationId) {
+        if (buttonIndex === 0) {
+          // User clicked "Disable"
+          chrome.storage.local.set({
+            'github-reporter-config': {
+              enabled: false,
+              rateLimitMinutes: 5,
+              maxIssuesPerDay: 10,
+              includeStackTrace: true,
+              excludePatterns: []
+            }
+          });
+          console.log('[Engram] User disabled error reporting');
+        } else {
+          // User clicked "Keep Enabled"
+          console.log('[Engram] User accepted error reporting');
+        }
+        chrome.notifications.clear(notificationId);
+      }
+    });
+  } catch (error) {
+    console.error('[Engram] Failed to show error reporting consent:', error);
+  }
+}
+
+/**
  * Extension installation handler
  */
 chrome.runtime.onInstalled.addListener(async (details) => {
@@ -511,9 +595,13 @@ chrome.runtime.onInstalled.addListener(async (details) => {
 
     if (details.reason === 'install') {
       console.log('[Engram] First-time installation');
+      // Show error reporting consent notification
+      await showErrorReportingConsent();
       // TODO: Open onboarding page
     } else if (details.reason === 'update') {
       console.log('[Engram] Extension updated');
+      // Show consent if not shown before (for existing users)
+      await showErrorReportingConsent();
       // TODO: Handle migrations if needed
     }
   } catch (error) {
@@ -667,6 +755,21 @@ chrome.runtime.onMessage.addListener((message: any, sender, sendResponse) => {
       sendResponse(response);
     } catch (error) {
       console.error('[Engram] Message handler error:', error);
+
+      // Report message handler errors to GitHub
+      if (error instanceof Error) {
+        logger.reportError(error, {
+          operation: 'handleMessage',
+          severity: ErrorSeverity.HIGH,
+          userAction: `Processing message: ${message.type}`,
+          additionalData: {
+            messageType: message.type
+          }
+        }).catch(err => {
+          console.error('[Engram] Failed to report message handler error:', err);
+        });
+      }
+
       sendResponse(createErrorResponse(error as Error, message.type));
     }
   })();
@@ -674,6 +777,46 @@ chrome.runtime.onMessage.addListener((message: any, sender, sendResponse) => {
   // Return true to indicate async response
   return true;
 });
+
+/**
+ * Global error handlers for unhandled errors and promise rejections
+ */
+if (typeof self !== 'undefined') {
+  // Handle unhandled promise rejections
+  self.addEventListener('unhandledrejection', (event: PromiseRejectionEvent) => {
+    console.error('[Engram] Unhandled promise rejection:', event.reason);
+
+    if (event.reason instanceof Error) {
+      logger.reportError(event.reason, {
+        operation: 'unhandledRejection',
+        severity: ErrorSeverity.HIGH,
+        userAction: 'Background process'
+      }).catch(err => {
+        console.error('[Engram] Failed to report unhandled rejection:', err);
+      });
+    }
+  });
+
+  // Handle global errors
+  self.addEventListener('error', (event: ErrorEvent) => {
+    console.error('[Engram] Global error:', event.error || event.message);
+
+    if (event.error instanceof Error) {
+      logger.reportError(event.error, {
+        operation: 'globalError',
+        severity: ErrorSeverity.HIGH,
+        userAction: 'Background process',
+        additionalData: {
+          filename: event.filename,
+          lineno: event.lineno,
+          colno: event.colno
+        }
+      }).catch(err => {
+        console.error('[Engram] Failed to report global error:', err);
+      });
+    }
+  });
+}
 
 /**
  * Export for access in message handler
