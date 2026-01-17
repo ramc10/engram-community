@@ -6,7 +6,8 @@
   "permissions": [
     "storage",
     "unlimitedStorage",
-    "identity"
+    "identity",
+    "notifications"
   ],
   "host_permissions": [
     "https://chatgpt.com/*",

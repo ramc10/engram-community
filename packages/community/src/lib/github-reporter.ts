@@ -16,14 +16,22 @@ declare const chrome: any;
  */
 export interface GitHubReporterConfig {
   enabled: boolean;
-  githubToken: string;
-  repositoryOwner: string;
-  repositoryName: string;
   rateLimitMinutes: number;
   maxIssuesPerDay: number;
   includeStackTrace: boolean;
   excludePatterns: string[];
 }
+
+/**
+ * Hardcoded GitHub configuration for error reporting
+ * This is set by the developer and users don't need to configure it
+ */
+const GITHUB_CONFIG = {
+  // TODO: Set these values or use environment variables
+  token: process.env.PLASMO_PUBLIC_GITHUB_REPORTER_TOKEN || '',
+  owner: process.env.PLASMO_PUBLIC_GITHUB_REPO_OWNER || 'ramc10',
+  repo: process.env.PLASMO_PUBLIC_GITHUB_REPO_NAME || 'engram-community',
+};
 
 /**
  * Error severity levels mapped to GitHub labels
@@ -121,9 +129,6 @@ export class GitHubReporter {
     try {
       this.config = {
         enabled: config.enabled ?? false,
-        githubToken: config.githubToken || '',
-        repositoryOwner: config.repositoryOwner || '',
-        repositoryName: config.repositoryName || '',
         rateLimitMinutes: config.rateLimitMinutes ?? DEFAULT_RATE_LIMIT_MINUTES,
         maxIssuesPerDay: config.maxIssuesPerDay ?? DEFAULT_MAX_ISSUES_PER_DAY,
         includeStackTrace: config.includeStackTrace ?? true,
@@ -164,8 +169,9 @@ export class GitHubReporter {
         return { success: false, reason: 'GitHub reporter is disabled' };
       }
 
-      // Validate configuration
-      if (!this.config.githubToken || !this.config.repositoryOwner || !this.config.repositoryName) {
+      // Validate hardcoded configuration
+      if (!GITHUB_CONFIG.token || !GITHUB_CONFIG.owner || !GITHUB_CONFIG.repo) {
+        logger.warn('GitHub reporter not configured with token/repo. Set PLASMO_PUBLIC_GITHUB_REPORTER_TOKEN env var.');
         return { success: false, reason: 'GitHub reporter not configured' };
       }
 
@@ -329,10 +335,10 @@ export class GitHubReporter {
   private async isIssueOpen(issueNumber: number): Promise<boolean> {
     try {
       const response = await fetch(
-        `https://api.github.com/repos/${this.config!.repositoryOwner}/${this.config!.repositoryName}/issues/${issueNumber}`,
+        `https://api.github.com/repos/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}/issues/${issueNumber}`,
         {
           headers: {
-            'Authorization': `Bearer ${this.config!.githubToken}`,
+            'Authorization': `Bearer ${GITHUB_CONFIG.token}`,
             'Accept': 'application/vnd.github.v3+json'
           }
         }
@@ -363,11 +369,11 @@ export class GitHubReporter {
     const labels = this.generateLabels(context);
 
     const response = await fetch(
-      `https://api.github.com/repos/${this.config!.repositoryOwner}/${this.config!.repositoryName}/issues`,
+      `https://api.github.com/repos/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}/issues`,
       {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${this.config!.githubToken}`,
+          'Authorization': `Bearer ${GITHUB_CONFIG.token}`,
           'Accept': 'application/vnd.github.v3+json',
           'Content-Type': 'application/json'
         },
@@ -609,19 +615,19 @@ export class GitHubReporter {
    */
   async testConfiguration(): Promise<{ success: boolean; message: string }> {
     try {
-      if (!this.config?.githubToken || !this.config.repositoryOwner || !this.config.repositoryName) {
+      if (!GITHUB_CONFIG.token || !GITHUB_CONFIG.owner || !GITHUB_CONFIG.repo) {
         return {
           success: false,
-          message: 'Configuration incomplete'
+          message: 'GitHub configuration missing. Set PLASMO_PUBLIC_GITHUB_REPORTER_TOKEN environment variable.'
         };
       }
 
       // Test GitHub API access
       const response = await fetch(
-        `https://api.github.com/repos/${this.config.repositoryOwner}/${this.config.repositoryName}`,
+        `https://api.github.com/repos/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}`,
         {
           headers: {
-            'Authorization': `Bearer ${this.config.githubToken}`,
+            'Authorization': `Bearer ${GITHUB_CONFIG.token}`,
             'Accept': 'application/vnd.github.v3+json'
           }
         }

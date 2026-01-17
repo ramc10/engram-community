@@ -514,6 +514,75 @@ class BackgroundService {
 const backgroundService = new BackgroundService();
 
 /**
+ * Show error reporting consent notification
+ */
+async function showErrorReportingConsent(): Promise<void> {
+  try {
+    // Check if user has already been asked
+    const result = await chrome.storage.local.get('error-reporting-consent-shown');
+    if (result['error-reporting-consent-shown']) {
+      return; // Already asked
+    }
+
+    // Create notification
+    const notificationId = await chrome.notifications.create({
+      type: 'basic',
+      iconUrl: chrome.runtime.getURL('assets/icon.png'),
+      title: 'Help Improve Engram',
+      message: 'Automatic error reporting is enabled to help us fix bugs. No personal data is collected. You can disable it in Settings anytime.',
+      priority: 1,
+      buttons: [
+        { title: 'Disable' },
+        { title: 'Keep Enabled' }
+      ]
+    });
+
+    // Mark as shown
+    await chrome.storage.local.set({ 'error-reporting-consent-shown': true });
+
+    // Set default config (enabled by default with opt-out)
+    const existingConfig = await chrome.storage.local.get('github-reporter-config');
+    if (!existingConfig['github-reporter-config']) {
+      await chrome.storage.local.set({
+        'github-reporter-config': {
+          enabled: true, // Enabled by default (opt-out)
+          rateLimitMinutes: 5,
+          maxIssuesPerDay: 10,
+          includeStackTrace: true,
+          excludePatterns: []
+        }
+      });
+      console.log('[Engram] Error reporting enabled by default');
+    }
+
+    // Handle notification button clicks
+    chrome.notifications.onButtonClicked.addListener((notifId, buttonIndex) => {
+      if (notifId === notificationId) {
+        if (buttonIndex === 0) {
+          // User clicked "Disable"
+          chrome.storage.local.set({
+            'github-reporter-config': {
+              enabled: false,
+              rateLimitMinutes: 5,
+              maxIssuesPerDay: 10,
+              includeStackTrace: true,
+              excludePatterns: []
+            }
+          });
+          console.log('[Engram] User disabled error reporting');
+        } else {
+          // User clicked "Keep Enabled"
+          console.log('[Engram] User accepted error reporting');
+        }
+        chrome.notifications.clear(notificationId);
+      }
+    });
+  } catch (error) {
+    console.error('[Engram] Failed to show error reporting consent:', error);
+  }
+}
+
+/**
  * Extension installation handler
  */
 chrome.runtime.onInstalled.addListener(async (details) => {
@@ -524,9 +593,13 @@ chrome.runtime.onInstalled.addListener(async (details) => {
 
     if (details.reason === 'install') {
       console.log('[Engram] First-time installation');
+      // Show error reporting consent notification
+      await showErrorReportingConsent();
       // TODO: Open onboarding page
     } else if (details.reason === 'update') {
       console.log('[Engram] Extension updated');
+      // Show consent if not shown before (for existing users)
+      await showErrorReportingConsent();
       // TODO: Handle migrations if needed
     }
   } catch (error) {
