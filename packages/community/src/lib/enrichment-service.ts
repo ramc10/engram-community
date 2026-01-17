@@ -12,6 +12,8 @@ import type {
   MemoryWithMemA,
 } from '@engram/core';
 import { getPremiumClient } from './premium-api-client';
+import { getEnrichmentRetryQueue, type EnrichmentRetryItem } from './enrichment-retry-queue';
+import { RetryManager } from '../sync/retry-manager';
 
 // Declare chrome for TypeScript
 declare const chrome: any;
@@ -84,17 +86,25 @@ export class EnrichmentService {
   private queue: MemoryWithMemA[] = [];
   private processing = false;
   private rateLimiter: RateLimiter;
+  private retryQueue = getEnrichmentRetryQueue();
   private totalCost = 0;
   private totalTokens = 0;
   private enrichedCount = 0;
+  private failedCount = 0;
 
   // Callback for persistence after enrichment completes
   // StorageService will set this to persist enriched memory to IndexedDB
   public onEnrichmentComplete?: (memory: MemoryWithMemA) => Promise<void>;
 
+  // Callback for notifying user of permanent failures
+  public onEnrichmentFailed?: (memoryId: string, error: string) => void;
+
   constructor(private config: EnrichmentConfig) {
     // 60 calls per minute (conservative)
     this.rateLimiter = new RateLimiter(60, 60000);
+
+    // Start retry processor
+    this.startRetryProcessor();
   }
 
   /**
@@ -166,9 +176,9 @@ export class EnrichmentService {
 
   /**
    * Enrich a single memory
-   * Retries up to 3 times with exponential backoff
+   * On failure, adds to persistent retry queue
    */
-  private async enrichSingle(memory: MemoryWithMemA, attempt = 1): Promise<void> {
+  private async enrichSingle(memory: MemoryWithMemA): Promise<void> {
     try {
       await this.rateLimiter.acquire();
 
@@ -199,6 +209,9 @@ export class EnrichmentService {
         context: memory.context,
       });
 
+      // Remove from retry queue if it was there
+      await this.retryQueue.remove(memory.id);
+
       // Persist enriched memory via callback (if set by StorageService)
       if (this.onEnrichmentComplete) {
         try {
@@ -211,19 +224,114 @@ export class EnrichmentService {
       }
 
     } catch (error) {
-      console.error(`[Enrichment] Error enriching memory ${memory.id}:`, error);
+      const err = error as Error;
+      console.error(`[Enrichment] Error enriching memory ${memory.id}:`, err);
 
-      // Retry with exponential backoff
-      if (attempt < 3) {
-        const backoffMs = Math.pow(2, attempt) * 1000;
-        console.log(`[Enrichment] Retrying in ${backoffMs}ms (attempt ${attempt + 1}/3)`);
+      // Classify error type
+      const errorType = this.classifyError(err);
 
-        await new Promise(resolve => setTimeout(resolve, backoffMs));
-        return this.enrichSingle(memory, attempt + 1);
+      // Add to persistent retry queue
+      await this.retryQueue.add(memory, err, errorType);
+
+      // Check if permanently failed
+      const stats = await this.retryQueue.getStats();
+      const permanentlyFailed = await this.retryQueue.getPermanentlyFailed();
+      const thisMemoryFailed = permanentlyFailed.find(item => item.memory.id === memory.id);
+
+      if (thisMemoryFailed) {
+        this.failedCount++;
+        console.error(
+          `[Enrichment] Memory ${memory.id} permanently failed after max retries`
+        );
+
+        // Notify user of permanent failure
+        if (this.onEnrichmentFailed) {
+          this.onEnrichmentFailed(memory.id, err.message);
+        }
       } else {
-        console.error(`[Enrichment] Failed after 3 attempts for memory ${memory.id}`);
-        // Memory is saved without enrichment (graceful degradation)
+        console.log(
+          `[Enrichment] Memory ${memory.id} added to retry queue ` +
+          `(${stats.pendingRetries} pending retries)`
+        );
       }
+
+      this.failedCount++;
+    }
+  }
+
+  /**
+   * Classify error type for better retry logic
+   */
+  private classifyError(error: Error): 'network' | 'authentication' | 'server' | 'timeout' | 'unknown' {
+    const message = error.message.toLowerCase();
+
+    // Rate limit errors
+    if (message.includes('rate limit') || message.includes('429') || message.includes('too many requests')) {
+      return 'server';
+    }
+
+    // Network errors
+    if (message.includes('network') || message.includes('fetch') || message.includes('econnrefused')) {
+      return 'network';
+    }
+
+    // Authentication errors
+    if (message.includes('auth') || message.includes('401') || message.includes('403') || message.includes('api key')) {
+      return 'authentication';
+    }
+
+    // Timeout errors
+    if (message.includes('timeout') || message.includes('timed out')) {
+      return 'timeout';
+    }
+
+    // Server errors (500, 503, etc.)
+    if (message.includes('500') || message.includes('502') || message.includes('503') || message.includes('504')) {
+      return 'server';
+    }
+
+    return 'unknown';
+  }
+
+  /**
+   * Start background retry processor
+   * Checks retry queue every 30 seconds
+   */
+  private startRetryProcessor(): void {
+    // Process retries every 30 seconds
+    setInterval(async () => {
+      await this.processRetries();
+    }, 30000);
+
+    // Initial process after 5 seconds
+    setTimeout(async () => {
+      await this.processRetries();
+    }, 5000);
+  }
+
+  /**
+   * Process items in retry queue that are ready for retry
+   */
+  private async processRetries(): Promise<void> {
+    if (!this.config.enabled) {
+      return;
+    }
+
+    try {
+      const readyForRetry = await this.retryQueue.getReadyForRetry();
+
+      if (readyForRetry.length === 0) {
+        return;
+      }
+
+      console.log(`[Enrichment] Processing ${readyForRetry.length} items from retry queue`);
+
+      // Process retries with rate limiting
+      for (const item of readyForRetry) {
+        await this.enrichSingle(item.memory);
+      }
+    } catch (error) {
+      console.error('[Enrichment] Error processing retry queue:', error);
     }
   }
 
@@ -563,12 +671,33 @@ Return valid JSON only:
     totalTokens: number;
     totalCost: number;
     enrichedCount: number;
+    failedCount: number;
+    retryQueue: {
+      totalItems: number;
+      pendingRetries: number;
+      failedPermanently: number;
+    };
   }> {
+    const retryStats = await this.retryQueue.getStats();
+
     return {
       totalTokens: this.totalTokens,
       totalCost: this.totalCost,
       enrichedCount: this.enrichedCount,
+      failedCount: this.failedCount,
+      retryQueue: {
+        totalItems: retryStats.totalItems,
+        pendingRetries: retryStats.pendingRetries,
+        failedPermanently: retryStats.failedPermanently,
+      },
     };
+  }
+
+  /**
+   * Get retry queue for manual inspection/management
+   */
+  getRetryQueue() {
+    return this.retryQueue;
   }
 
   /**
