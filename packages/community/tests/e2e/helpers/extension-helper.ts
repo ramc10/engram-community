@@ -1,5 +1,7 @@
 import { BrowserContext, chromium, Page } from '@playwright/test';
 import path from 'path';
+import fs from 'fs';
+import os from 'os';
 
 /**
  * Helper utilities for testing Chrome extensions with Playwright
@@ -14,7 +16,10 @@ export async function launchBrowserWithExtension(): Promise<BrowserContext> {
   // In CI, use headless mode. Locally, use headed mode for easier debugging
   const isCI = !!process.env.CI;
 
-  const context = await chromium.launchPersistentContext('', {
+  // Create a temporary directory for user data
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'playwright-extension-'));
+
+  const context = await chromium.launchPersistentContext(tempDir, {
     // Use headed mode locally, headless in CI (with Xvfb from --with-deps)
     headless: isCI,
     args: [
@@ -24,9 +29,10 @@ export async function launchBrowserWithExtension(): Promise<BrowserContext> {
       '--disable-dev-shm-usage',
       '--disable-gpu',
     ],
-    // Use a temporary profile for each test
-    // This ensures clean state between tests
   });
+
+  // Wait a moment for the extension to initialize
+  await new Promise(resolve => setTimeout(resolve, 2000));
 
   return context;
 }
@@ -35,22 +41,55 @@ export async function launchBrowserWithExtension(): Promise<BrowserContext> {
  * Get the extension ID from the browser context
  */
 export async function getExtensionId(context: BrowserContext): Promise<string> {
-  // Extension pages are available as background pages or service workers
-  const pages = context.pages();
-
-  for (const page of pages) {
-    const url = page.url();
+  // Method 1: Check service workers (for MV3 extensions)
+  let serviceWorkers = context.serviceWorkers();
+  if (serviceWorkers.length > 0) {
+    const url = serviceWorkers[0].url();
     if (url.startsWith('chrome-extension://')) {
-      const extensionId = url.split('/')[2];
-      return extensionId;
+      return url.split('/')[2];
     }
   }
 
-  // Alternative: try to find extension ID via chrome.runtime
-  const page = await context.newPage();
-  await page.goto('chrome://extensions/');
+  // Method 2: Check background pages (for MV2 or if service worker not ready)
+  let backgroundPages = context.backgroundPages();
+  if (backgroundPages.length > 0) {
+    const url = backgroundPages[0].url();
+    if (url.startsWith('chrome-extension://')) {
+      return url.split('/')[2];
+    }
+  }
 
-  throw new Error('Could not determine extension ID');
+  // Method 3: Check all pages
+  const pages = context.pages();
+  for (const page of pages) {
+    const url = page.url();
+    if (url.startsWith('chrome-extension://')) {
+      return url.split('/')[2];
+    }
+  }
+
+  // Method 4: Wait and listen for service worker
+  return new Promise<string>((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      reject(new Error('Extension ID not found after 10 seconds'));
+    }, 10000);
+
+    context.on('serviceworker', (worker) => {
+      const url = worker.url();
+      if (url.startsWith('chrome-extension://')) {
+        clearTimeout(timeout);
+        resolve(url.split('/')[2]);
+      }
+    });
+
+    context.on('backgroundpage', (page) => {
+      const url = page.url();
+      if (url.startsWith('chrome-extension://')) {
+        clearTimeout(timeout);
+        resolve(url.split('/')[2]);
+      }
+    });
+  });
 }
 
 /**
