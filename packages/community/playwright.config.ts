@@ -66,8 +66,11 @@ export default defineConfig({
   outputDir: 'tests/e2e/test-results',
 
   /* Timeouts */
-  timeout: 60000, // 60 seconds per test
+  timeout: 30000, // 30 seconds per test (reduced from 60s)
   expect: {
-    timeout: 10000, // 10 seconds for expect assertions
+    timeout: 5000, // 5 seconds for expect assertions (reduced from 10s)
   },
+
+  /* Global timeout for the entire test run */
+  globalTimeout: 300000, // 5 minutes total for all tests
 });
