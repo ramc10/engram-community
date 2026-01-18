@@ -51,6 +51,14 @@ interface MetadataEntry {
 }
 
 /**
+ * Options for saveMemory
+ */
+interface SaveMemoryOptions {
+  skipInitialSave?: boolean;      // Skip immediate save, wait for enrichment
+  useAtomicTransaction?: boolean;  // Wrap final save in transaction (default: true when skipInitialSave)
+}
+
+/**
  * Dexie database class
  */
 class EngramDatabase extends Dexie {
@@ -135,6 +143,12 @@ export class StorageService implements IStorage {
       // Set callback to persist enriched memories to IndexedDB
       // This fixes the race condition where enrichment completes but data isn't persisted
       this.enrichmentService.onEnrichmentComplete = async (memory: MemoryWithMemA) => {
+        // Skip save if in atomic mode (will save at end of full pipeline)
+        if (this.enrichmentService?.isAtomicMode?.()) {
+          logger.log(`[Storage] Enrichment complete for ${memory.id} (deferred save)`);
+          return;
+        }
+
         try {
           // Check if a newer version exists before persisting (avoid overwriting with stale enrichment)
           const existing = await this.db.memories.get(memory.id);
@@ -229,6 +243,12 @@ export class StorageService implements IStorage {
 
       // Set callback to persist enriched memories to IndexedDB
       this.enrichmentService.onEnrichmentComplete = async (memory: MemoryWithMemA) => {
+        // Skip save if in atomic mode (will save at end of full pipeline)
+        if (this.enrichmentService?.isAtomicMode?.()) {
+          console.log(`[Storage] Enrichment complete for ${memory.id} (deferred save)`);
+          return;
+        }
+
         try {
           // Check if a newer version exists before persisting (avoid overwriting with stale enrichment)
           const existing = await this.db.memories.get(memory.id);
@@ -332,7 +352,11 @@ export class StorageService implements IStorage {
    * @param memory Memory object with encrypted content
    * @param plaintextContent Optional plaintext content for enrichment (not persisted)
    */
-  async saveMemory(memory: Memory, plaintextContent?: { role: string; text: string; metadata?: any }): Promise<void> {
+  async saveMemory(
+    memory: Memory,
+    plaintextContent?: { role: string; text: string; metadata?: any },
+    options?: SaveMemoryOptions
+  ): Promise<void> {
     const memoryWithMemA = memory as MemoryWithMemA;
 
     // Conflict resolution: Only save if new version is actually newer
@@ -352,18 +376,42 @@ export class StorageService implements IStorage {
       }
     }
 
-    await this.db.memories.put(memoryWithMemA);
+    // Determine if we should enrich
+    const isTestEnv = typeof (globalThis as any).process !== 'undefined' &&
+                      (globalThis as any).process.env.NODE_ENV === 'test';
+    const shouldEnrich = this.enrichmentService && (!isTestEnv || this.forceEnrichmentInTests);
 
-    // Update conversation metadata
-    await this.updateConversationMetadata(memory);
+    // Skip initial save if requested AND enrichment will happen
+    if (options?.skipInitialSave && shouldEnrich && this.enrichmentService) {
+      logger.log(`[Storage] Skipping initial save for ${memory.id}, will save after enrichment`);
 
-    // Enrich in background (non-blocking)
-    // Skip background enrichment in test environments to avoid database timing issues
-    const isTestEnv = typeof (globalThis as any).process !== 'undefined' && (globalThis as any).process.env.NODE_ENV === 'test';
-    if (this.enrichmentService && (!isTestEnv || this.forceEnrichmentInTests)) {
-      this.enrichInBackground(memoryWithMemA, plaintextContent).catch((err) => {
-        logger.error('Background enrichment failed:', err);
-      });
+      // Enable atomic mode on enrichment service
+      this.enrichmentService.setAtomicMode(true);
+
+      try {
+        // BLOCKING: Wait for enrichment to complete
+        await this.enrichInBackground(memoryWithMemA, plaintextContent, {
+          useAtomicTransaction: options.useAtomicTransaction ?? true
+        });
+      } catch (err) {
+        logger.error('Enrichment failed, falling back to base save:', err);
+        // Fallback: save base memory without enrichment
+        await this.db.memories.put(memoryWithMemA);
+        await this.updateConversationMetadata(memory);
+        // Don't re-throw - the memory was saved successfully (just without enrichment)
+      } finally {
+        this.enrichmentService.setAtomicMode(false);
+      }
+    } else {
+      // Current behavior: immediate save + background enrichment
+      await this.db.memories.put(memoryWithMemA);
+      await this.updateConversationMetadata(memory);
+
+      if (shouldEnrich) {
+        this.enrichInBackground(memoryWithMemA, plaintextContent).catch((err) => {
+          logger.error('Background enrichment failed:', err);
+        });
+      }
     }
   }
 
@@ -791,7 +839,11 @@ export class StorageService implements IStorage {
   /**
    * Enrich a memory in the background (non-blocking)
    */
-  private async enrichInBackground(memory: MemoryWithMemA, plaintextContent?: { role: string; text: string; metadata?: any }): Promise<void> {
+  private async enrichInBackground(
+    memory: MemoryWithMemA,
+    plaintextContent?: { role: string; text: string; metadata?: any },
+    options?: { useAtomicTransaction?: boolean }
+  ): Promise<void> {
     if (!this.enrichmentService) return;
 
     // If we have plaintext content for enrichment, create a temporary memory with it
@@ -957,8 +1009,26 @@ export class StorageService implements IStorage {
         }
       }
 
-      await this.db.memories.put(memory);
-      console.log(`[Storage] Enriched memory ${memory.id}`);
+      // Use atomic transaction if requested
+      if (options?.useAtomicTransaction) {
+        await this.db.transaction('rw', [this.db.memories, this.db.conversations, this.db.hnswIndex], async () => {
+          // 1. Save fully enriched memory
+          await this.db.memories.put(memory);
+
+          // 2. Update conversation metadata (must be atomic with memory)
+          await this.updateConversationMetadata(memory);
+
+          // 3. Persist HNSW index (if ready)
+          if (this.hnswIndexService?.isReady()) {
+            await this.hnswIndexService.persist(this.db);
+          }
+        });
+        console.log(`[Storage] Atomically saved enriched memory ${memory.id}`);
+      } else {
+        // Legacy path: separate operations
+        await this.db.memories.put(memory);
+        console.log(`[Storage] Enriched memory ${memory.id}`);
+      }
     } catch (err: any) {
       // Ignore DatabaseClosedError (happens in tests when DB is closed mid-operation)
       if (err?.name !== 'DatabaseClosedError') {
@@ -970,7 +1040,7 @@ export class StorageService implements IStorage {
   /**
    * Get enrichment configuration from chrome.storage.local
    */
-  private async getEnrichmentConfig(): Promise<EnrichmentConfig> {
+  async getEnrichmentConfig(): Promise<EnrichmentConfig> {
     try {
       const result = await chrome.storage.local.get('enrichmentConfig');
       const config = result.enrichmentConfig || {

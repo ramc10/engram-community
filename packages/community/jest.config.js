@@ -85,6 +85,7 @@ module.exports = {
   // See: TEST_FAILURES_TO_FIX.md for details
   testPathIgnorePatterns: [
     '/node_modules/',
+    '/tests/e2e/',  // E2E tests use Playwright, not Jest
   ],
 
   // Test categorization via testPathIgnorePatterns

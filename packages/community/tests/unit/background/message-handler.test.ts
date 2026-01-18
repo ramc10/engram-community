@@ -52,6 +52,12 @@ describe('Message Handler', () => {
       getMetadata: jest.fn<any>().mockResolvedValue(null),
       setMetadata: jest.fn<any>().mockResolvedValue(undefined),
       reinitializeEnrichment: jest.fn<any>().mockResolvedValue(undefined),
+      getEnrichmentConfig: jest.fn<any>().mockResolvedValue({
+        enabled: false,
+        provider: 'openai',
+        model: 'gpt-4o-mini',
+        batchSize: 5,
+      }),
     };
 
     mockCrypto = {

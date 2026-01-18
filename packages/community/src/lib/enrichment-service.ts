@@ -90,6 +90,7 @@ export class EnrichmentService {
   private totalTokens = 0;
   private enrichedCount = 0;
   private failedCount = 0;
+  private atomicMode = false;
 
   // Callback for persistence after enrichment completes
   // StorageService will set this to persist enriched memory to IndexedDB
@@ -110,6 +111,22 @@ export class EnrichmentService {
     if (typeof chrome !== 'undefined' && chrome.storage) {
       this.startRetryProcessor();
     }
+  }
+
+  /**
+   * Set atomic mode - when enabled, onEnrichmentComplete callback won't save
+   * (used for single-pass atomic persistence)
+   */
+  setAtomicMode(enabled: boolean): void {
+    this.atomicMode = enabled;
+    console.log(`[Enrichment] Atomic mode ${enabled ? 'enabled' : 'disabled'}`);
+  }
+
+  /**
+   * Check if atomic mode is enabled
+   */
+  isAtomicMode(): boolean {
+    return this.atomicMode;
   }
 
   /**

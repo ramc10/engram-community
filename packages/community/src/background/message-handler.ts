@@ -273,7 +273,20 @@ async function handleSaveMessage(
       text: extractedMessage.content,
       metadata: extractedMessage.metadata,
     };
-    await storage.saveMemory(memory, plaintextContent);
+
+    // Check if enrichment is enabled to use atomic persistence
+    const enrichmentConfig = await storage.getEnrichmentConfig();
+    const isEnrichmentEnabled = enrichmentConfig.enabled && (
+      enrichmentConfig.provider === 'local'
+        ? !!enrichmentConfig.localEndpoint
+        : !!enrichmentConfig.apiKey
+    );
+
+    // Use atomic mode when enrichment is enabled (single-pass persistence)
+    await storage.saveMemory(memory, plaintextContent, {
+      skipInitialSave: isEnrichmentEnabled,
+      useAtomicTransaction: isEnrichmentEnabled,
+    });
 
     console.log('[Engram] Saved memory:', memory.id);
 
