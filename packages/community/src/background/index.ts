@@ -525,10 +525,10 @@ async function showErrorReportingConsent(): Promise<void> {
     }
 
     // Create notification
-    const notificationId: string = await new Promise((resolve) => {
+    const notificationId: string = await new Promise((resolve, reject) => {
       chrome.notifications.create({
         type: 'basic',
-        iconUrl: chrome.runtime.getURL('assets/icon.png'),
+        iconUrl: chrome.runtime.getManifest().icons?.['128'] || '',
         title: 'Help Improve Engram',
         message: 'Automatic error reporting is enabled to help us fix bugs. No personal data is collected. You can disable it in Settings anytime.',
         priority: 1,
@@ -536,7 +536,12 @@ async function showErrorReportingConsent(): Promise<void> {
           { title: 'Disable' },
           { title: 'Keep Enabled' }
         ]
-      }, resolve);
+      }, (notifId) => {
+        if (chrome.runtime.lastError) {
+          console.warn('[Engram] Notification icon error (non-critical):', chrome.runtime.lastError.message);
+        }
+        resolve(notifId || '');
+      });
     });
 
     // Mark as shown

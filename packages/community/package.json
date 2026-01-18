@@ -72,7 +72,8 @@
     "permissions": [
       "storage",
       "identity",
-      "sidePanel"
+      "sidePanel",
+      "notifications"
     ],
     "host_permissions": [
       "https://chatgpt.com/*",
