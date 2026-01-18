@@ -13,8 +13,9 @@
 
 // @ts-ignore - edgevec types not fully compatible
 import { EdgeVec, EdgeVecConfig } from 'edgevec';
-import type { UUID, Timestamp, Memory } from '@engram/core';
+import type { UUID, Timestamp, Memory, MemoryWithMemA } from '@engram/core';
 import type { EngramDatabase } from './storage';
+import { getCryptoService } from './crypto-service';
 
 /**
  * HNSW index entry for IndexedDB persistence
@@ -53,6 +54,8 @@ export class HNSWIndexService {
   private indexToIdMap: Map<number, UUID> = new Map(); // EdgeVec vector ID → Memory ID
   private isBuilding: boolean = false;
   private readonly dbName = 'engram-hnsw-index'; // IndexedDB name for EdgeVec persistence
+  private masterKeyProvider?: () => { key: Uint8Array } | null; // For embedding decryption
+  private embeddingCache: Map<string, Float32Array> = new Map(); // Decrypted embedding cache
 
   // Static WASM initialization state (shared across all instances)
   private static wasmInitialized: boolean = false;
@@ -127,6 +130,65 @@ export class HNSWIndexService {
   }
 
   /**
+   * Set master key provider for embedding decryption
+   */
+  setMasterKeyProvider(provider: () => { key: Uint8Array } | null): void {
+    this.masterKeyProvider = provider;
+    console.log('[HNSW] Master key provider set');
+  }
+
+  /**
+   * Decrypt and cache embedding for a memory
+   */
+  private async decryptEmbedding(memory: MemoryWithMemA): Promise<Float32Array | null> {
+    // Check cache first
+    if (this.embeddingCache.has(memory.id)) {
+      return this.embeddingCache.get(memory.id)!;
+    }
+
+    // Handle encrypted embeddings (v2)
+    if ((memory as any).encryptedEmbedding && (memory as any).embeddingVersion === 2) {
+      const masterKey = this.masterKeyProvider?.();
+      if (!masterKey) {
+        console.error('[HNSW] No master key for decryption');
+        return null;
+      }
+
+      try {
+        const crypto = await getCryptoService();
+        const decryptedBytes = await crypto.decrypt(
+          (memory as any).encryptedEmbedding,
+          masterKey.key
+        );
+
+        const embedding = new Float32Array(decryptedBytes.buffer);
+        this.embeddingCache.set(memory.id, embedding);
+
+        return embedding;
+      } catch (err) {
+        console.error(`[HNSW] Decryption failed for ${memory.id}:`, err);
+        return null;
+      }
+    }
+
+    // Handle unencrypted embeddings (v1 or legacy)
+    if (memory.embedding) {
+      this.embeddingCache.set(memory.id, memory.embedding);
+      return memory.embedding;
+    }
+
+    return null;
+  }
+
+  /**
+   * Clear embedding cache (call on logout)
+   */
+  clearEmbeddingCache(): void {
+    this.embeddingCache.clear();
+    console.log('[HNSW] Embedding cache cleared');
+  }
+
+  /**
    * Build HNSW index from existing memories
    *
    * @param memories - Memories with embeddings to index
@@ -154,15 +216,6 @@ export class HNSWIndexService {
       this.vectorIdMap.clear();
       this.indexToIdMap.clear();
 
-      // Filter memories with embeddings
-      const memoriesWithEmbeddings = memories.filter(m => (m as any).embedding && (m as any).embedding.length === 384);
-
-      if (memoriesWithEmbeddings.length === 0) {
-        console.log('[HNSW] No valid embeddings found, skipping build');
-        this.isBuilding = false;
-        return;
-      }
-
       // Initialize EdgeVec index with EdgeVecConfig
       const config = new EdgeVecConfig(this.config.dimensions);
       config.metric = this.config.metric;
@@ -171,24 +224,34 @@ export class HNSWIndexService {
 
       this.index = new EdgeVec(config);
 
+      let addedCount = 0;
       // Add vectors to index
-      for (let i = 0; i < memoriesWithEmbeddings.length; i++) {
-        const memory = memoriesWithEmbeddings[i];
+      for (let i = 0; i < memories.length; i++) {
+        const memory = memories[i] as MemoryWithMemA;
+
+        // Decrypt embedding if encrypted
+        const embedding = await this.decryptEmbedding(memory);
+
+        if (!embedding || embedding.length !== 384) {
+          console.warn(`[HNSW] Skipping ${memory.id} - no valid embedding`);
+          continue;
+        }
 
         // Insert returns the auto-generated vector ID
-        const vectorId = this.index.insert(new Float32Array((memory as any).embedding!));
+        const vectorId = this.index.insert(embedding);
+        addedCount++;
 
         // Store ID mappings
         this.vectorIdMap.set(memory.id, vectorId);
         this.indexToIdMap.set(vectorId, memory.id);
 
         // Report progress
-        if (onProgress && (i % 100 === 0 || i === memoriesWithEmbeddings.length - 1)) {
-          onProgress(i + 1, memoriesWithEmbeddings.length);
+        if (onProgress && (i % 100 === 0 || i === memories.length - 1)) {
+          onProgress(i + 1, memories.length);
         }
       }
 
-      console.log(`[HNSW] Index built successfully: ${memoriesWithEmbeddings.length} vectors indexed`);
+      console.log(`[HNSW] Index built successfully: ${addedCount} vectors indexed`);
     } catch (error) {
       console.error('[HNSW] Error building index:', error);
       this.index = null;

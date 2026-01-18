@@ -170,6 +170,22 @@ export class EnrichmentService {
   }
 
   /**
+   * Wait for the enrichment queue to be empty (all processing complete)
+   * Used for testing or when atomic persistence requires enrichment to complete
+   */
+  async waitForQueue(timeout: number = 30000): Promise<void> {
+    const startTime = Date.now();
+
+    while (this.processing || this.queue.length > 0) {
+      if (Date.now() - startTime > timeout) {
+        throw new Error(`[Enrichment] Queue processing timeout after ${timeout}ms`);
+      }
+      // Wait 50ms before checking again
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+  }
+
+  /**
    * Process enrichment queue
    * Processes memories in batches with rate limiting
    */
@@ -192,7 +208,16 @@ export class EnrichmentService {
       }
     } finally {
       this.processing = false;
-      console.log('[Enrichment] Queue processing complete');
+
+      // SECURITY: Clear any remaining plaintext from queue
+      this.queue.forEach(mem => {
+        if (mem.content && mem.content.text !== null) {
+          mem.content.text = null as any;
+          mem.content.metadata = null as any;
+        }
+      });
+
+      console.log(`[Enrichment] Queue processing complete, ${this.queue.length} items scrubbed`);
     }
   }
 
@@ -230,6 +255,11 @@ export class EnrichmentService {
         tags: memory.tags,
         context: memory.context,
       });
+
+      // SECURITY: Clear plaintext from enriched memory
+      memory.content.text = null as any;
+      memory.content.metadata = null as any;
+      console.log(`[Enrichment] Cleared plaintext from ${memory.id}`);
 
       // Remove from retry queue if it was there
       await this.retryQueue.remove(memory.id);

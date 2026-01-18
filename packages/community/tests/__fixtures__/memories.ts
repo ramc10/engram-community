@@ -39,6 +39,7 @@ function createMockEncryptedBlob(plaintext: string) {
     algorithm: 'XChaCha20-Poly1305' as const,
     nonce: btoa('test-nonce-' + Math.random().toString(36)),
     ciphertext: btoa(plaintext),
+    authTag: btoa('test-auth-tag'),
   };
 }
 
@@ -63,7 +64,7 @@ export function createMemory(options: MemoryFactoryOptions = {}): Memory {
     conversationId,
     platform,
     content: encrypted
-      ? { role: content.role as 'user' | 'assistant' | 'system', text: '[ENCRYPTED]', metadata: {} }
+      ? { role: content.role as 'user' | 'assistant' | 'system', text: null as any, metadata: null as any }
       : { role: content.role as 'user' | 'assistant' | 'system', text: content.text, metadata: content.metadata || {} },
     timestamp,
     vectorClock: { [deviceId]: 1 },

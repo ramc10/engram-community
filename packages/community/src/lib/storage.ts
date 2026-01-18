@@ -28,6 +28,7 @@ import { decryptApiKey, isEncrypted } from './api-key-crypto';
 import { getEmbeddingService } from './embedding-service';
 import type { HNSWIndexEntry, HNSWIndexService, HNSWStats } from './hnsw-index-service';
 import { createLogger } from './logger';
+import { getCryptoService } from './crypto-service';
 
 // Declare chrome for TypeScript
 declare const chrome: any;
@@ -115,9 +116,36 @@ export class StorageService implements IStorage {
   private evolutionService: EvolutionService | null = null;
   private hnswIndexService: HNSWIndexService | null = null; // Phase 4: Vector index
   public forceEnrichmentInTests = false;
+  private masterKeyProvider?: () => { key: Uint8Array } | null; // For embedding encryption
 
   constructor() {
     this.db = new EngramDatabase();
+  }
+
+  /**
+   * Set master key provider for embedding encryption
+   * Called by BackgroundService during initialization
+   */
+  setMasterKeyProvider(provider: () => { key: Uint8Array } | null): void {
+    this.masterKeyProvider = provider;
+    console.log('[Storage] Master key provider set');
+
+    // Also configure HNSW service if it exists and has the method
+    if (this.hnswIndexService && typeof this.hnswIndexService.setMasterKeyProvider === 'function') {
+      this.hnswIndexService.setMasterKeyProvider(provider);
+      console.log('[Storage] HNSW master key provider configured');
+    }
+  }
+
+  /**
+   * Get master key for embedding encryption
+   */
+  private getMasterKeyForEncryption(): { key: Uint8Array } | null {
+    if (!this.masterKeyProvider) {
+      console.warn('[Storage] Master key provider not set');
+      return null;
+    }
+    return this.masterKeyProvider();
   }
 
   /**
@@ -317,7 +345,7 @@ export class StorageService implements IStorage {
     // Build new index if none exists
     const memories = await this.db.memories.toArray();
     const memoriesWithEmbeddings = memories.filter(
-      m => (m as MemoryWithMemA).embedding
+      m => (m as MemoryWithMemA).embedding || (m as any).encryptedEmbedding
     ) as MemoryWithMemA[];
 
     if (memoriesWithEmbeddings.length === 0) {
@@ -628,7 +656,48 @@ export class StorageService implements IStorage {
     // 2. Fallback: Simple keyword search on decrypted content (expensive for large DB)
     const allMemories = await this.db.memories.toArray();
 
-    const results = allMemories.filter((memory) => {
+    // SECURITY: Decrypt memories for keyword search
+    // This is expensive but necessary since we store content encrypted
+    const decryptedMemories: Memory[] = [];
+    for (const memory of allMemories) {
+      // Skip if no encrypted content (shouldn't happen but be safe)
+      if (!(memory as any).encryptedContent) {
+        decryptedMemories.push(memory);
+        continue;
+      }
+
+      // Decrypt the content
+      try {
+        const masterKey = this.getMasterKeyForEncryption();
+        if (!masterKey) {
+          // No master key, can't decrypt - but still include memory for tag search
+          console.warn(`[Storage] No master key for keyword search, ${memory.id} will only match on tags`);
+          decryptedMemories.push(memory);
+          continue;
+        }
+
+        const crypto = await getCryptoService();
+        const decryptedBytes = await crypto.decrypt((memory as any).encryptedContent, masterKey.key);
+        const decryptedJson = new TextDecoder().decode(decryptedBytes);
+        const decryptedData = JSON.parse(decryptedJson);
+
+        // Create decrypted memory for searching
+        decryptedMemories.push({
+          ...memory,
+          content: {
+            role: decryptedData.role,
+            text: decryptedData.text,
+            metadata: decryptedData.metadata || {},
+          },
+        });
+      } catch (error) {
+        console.error(`[Storage] Failed to decrypt memory ${memory.id} for keyword search:`, error);
+        // Include memory anyway (without decrypted content) so tag search still works
+        decryptedMemories.push(memory);
+      }
+    }
+
+    const results = decryptedMemories.filter((memory) => {
       // Note: in a real extension, we would use a proper search index
       // For now, we search on content if it's already decrypted or known
       const text = memory.content?.text?.toLowerCase() || "";
@@ -863,6 +932,19 @@ export class StorageService implements IStorage {
     // The onEnrichmentComplete callback will handle persistence after enrichment completes
     await this.enrichmentService.enrichMemory(memoryForEnrichment);
 
+    // IMPORTANT: When using atomic mode, wait for enrichment to complete
+    // This ensures embeddings are generated with enriched metadata (keywords, tags, context)
+    if (options?.useAtomicTransaction) {
+      try {
+        console.log('[Storage] Waiting for enrichment queue to complete (atomic mode)...');
+        await this.enrichmentService.waitForQueue(10000); // 10 second timeout
+        console.log('[Storage] Enrichment queue complete');
+      } catch (err) {
+        console.error('[Storage] Enrichment queue timeout:', err);
+        // Continue anyway - embeddings might not be optimal but memory will still be saved
+      }
+    }
+
     // NOTE: We don't persist here anymore because enrichment is async (queued)
     // The callback (onEnrichmentComplete) will persist after enrichment actually completes
     // This fixes the race condition where unenriched data was being persisted
@@ -874,14 +956,40 @@ export class StorageService implements IStorage {
 
       // Copy the embedding to the memory
       if (memoryWithEmbedding.embedding) {
-        // Convert number[] to Float32Array for storage
-        (memory as any).embedding = new Float32Array(memoryWithEmbedding.embedding);
+        // SECURITY: Encrypt embedding before storage
+        const embeddingFloat32 = new Float32Array(memoryWithEmbedding.embedding);
+        const embeddingBytes = new Uint8Array(embeddingFloat32.buffer);
+
+        try {
+          const masterKey = this.getMasterKeyForEncryption();
+
+          if (masterKey) {
+            // Encrypt with master key
+            const crypto = await getCryptoService();
+            const encryptedEmbedding = await crypto.encrypt(embeddingBytes, masterKey.key);
+
+            (memory as any).encryptedEmbedding = encryptedEmbedding;
+            (memory as any).embeddingVersion = 2;
+
+            console.log(`[Storage] Encrypted embedding for ${memory.id}`);
+          } else {
+            // Fallback: store unencrypted (shouldn't happen in production)
+            console.warn(`[Storage] No master key, storing unencrypted embedding for ${memory.id}`);
+            (memory as any).embedding = embeddingFloat32;
+            (memory as any).embeddingVersion = 1;
+          }
+        } catch (err) {
+          console.error(`[Storage] Encryption failed for ${memory.id}:`, err);
+          // Fallback to unencrypted
+          (memory as any).embedding = embeddingFloat32;
+          (memory as any).embeddingVersion = 1;
+        }
 
         // Update HNSW index (Phase 4)
         if (this.hnswIndexService?.isReady()) {
           await this.hnswIndexService.update(
             memory.id,
-            new Float32Array(memoryWithEmbedding.embedding)
+            embeddingFloat32
           );
 
           // Batch persist (every 10 updates to reduce I/O)
@@ -1096,7 +1204,7 @@ export class StorageService implements IStorage {
 
     const memories = await this.db.memories.toArray();
     const memoriesWithEmbeddings = memories.filter(
-      m => (m as MemoryWithMemA).embedding
+      m => (m as MemoryWithMemA).embedding || (m as any).encryptedEmbedding
     ) as MemoryWithMemA[];
 
     await this.hnswIndexService.build(memoriesWithEmbeddings, onProgress);

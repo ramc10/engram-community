@@ -3,6 +3,8 @@
  * Based on MVP Implementation Specification Phase 1.1
  */
 
+import type { EncryptedBlob } from './crypto';
+
 /**
  * Unique identifier type
  */
@@ -60,11 +62,12 @@ export interface MessageMetadata {
 
 /**
  * Message content structure
+ * Note: text and metadata are null when content is encrypted
  */
 export interface MessageContent {
   role: Role;
-  text: string;
-  metadata?: MessageMetadata;
+  text: string | null; // null when content is encrypted
+  metadata?: MessageMetadata | null; // null when encrypted
 }
 
 /**
@@ -264,8 +267,25 @@ export interface MemoryWithMemA extends Memory {
   /** Schema version for migrations */
   memAVersion?: number;
 
-  /** Semantic embedding vector (384-dim for BGE-Small) */
+  /**
+   * @deprecated Use encryptedEmbedding instead (v2)
+   * Semantic embedding vector (384-dim for BGE-Small)
+   */
   embedding?: Float32Array;
+
+  /**
+   * Encrypted embedding vector (v2)
+   * Stored as EncryptedBlob to protect semantic information
+   * Decrypted on-demand during search operations
+   */
+  encryptedEmbedding?: EncryptedBlob;
+
+  /**
+   * Embedding schema version
+   * v1: Unencrypted embeddings (legacy)
+   * v2: Encrypted embeddings
+   */
+  embeddingVersion?: 1 | 2;
 }
 
 /**

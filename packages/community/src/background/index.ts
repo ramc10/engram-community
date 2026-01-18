@@ -22,6 +22,7 @@ import { DeviceKeyManager } from '../lib/device-key-manager';
 import { CloudSyncService } from '../lib/cloud-sync';
 import { premiumService } from '../lib/premium-service';
 import { getPremiumClient } from '../lib/premium-api-client';
+import { EmbeddingMigration } from '../lib/embedding-migration';
 import type { EnrichmentConfig } from '@engram/core';
 import { decryptApiKey, isEncrypted } from '../lib/api-key-crypto';
 import { createLogger } from '../lib/logger';
@@ -216,6 +217,38 @@ class BackgroundService {
   setMasterKey(masterKey: MasterKey): void {
     this.masterKey = masterKey;
     console.log('[Engram] Master key set in memory');
+
+    // SECURITY: Provide master key to storage for embedding encryption
+    // This also configures HNSW service (accessed via storage)
+    if (this.storage) {
+      this.storage.setMasterKeyProvider(() => this.masterKey);
+      console.log('[Engram] Storage configured with master key provider');
+    }
+
+    // SECURITY: Run embedding encryption migration if needed
+    if (this.storage) {
+      EmbeddingMigration.needsMigration(this.storage).then(needsMigration => {
+        if (needsMigration) {
+          console.log('[Engram] Embedding migration needed, starting...');
+
+          EmbeddingMigration.migrateEmbeddings(
+            this.storage!,
+            masterKey,
+            (current, total) => {
+              if (current % 100 === 0) {
+                console.log(`[Migration] Progress: ${current}/${total}`);
+              }
+            }
+          ).then(stats => {
+            console.log('[Migration] Complete:', stats);
+          }).catch(err => {
+            console.error('[Migration] Failed:', err);
+          });
+        }
+      }).catch(err => {
+        console.error('[Engram] Failed to check migration status:', err);
+      });
+    }
   }
 
   /**

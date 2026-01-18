@@ -252,8 +252,8 @@ async function handleSaveMessage(
       platform,
       content: {
         role: extractedMessage.role,
-        text: '[ENCRYPTED]', // Placeholder - real content is in encryptedContent
-        metadata: {}, // Empty metadata - real data encrypted
+        text: null as any, // SECURITY: null indicates encrypted content, use encryptedContent field
+        metadata: null as any, // SECURITY: null indicates encrypted metadata
       },
       encryptedContent: encrypted, // Store the complete encrypted blob with version and algorithm
       timestamp: extractedMessage.timestamp || Date.now(),
@@ -288,7 +288,21 @@ async function handleSaveMessage(
       useAtomicTransaction: isEnrichmentEnabled,
     });
 
+    // SECURITY: Explicitly clear plaintext from memory
+    // Zero out the plaintext to minimize exposure window
+    if (plaintextContent) {
+      plaintextContent.text = '';
+      plaintextContent.role = 'user';
+      if (plaintextContent.metadata) {
+        Object.keys(plaintextContent.metadata).forEach(key => {
+          delete (plaintextContent.metadata as any)[key];
+        });
+      }
+      plaintextContent.metadata = undefined;
+    }
+
     console.log('[Engram] Saved memory:', memory.id);
+    console.log('[Engram] Plaintext cleared from memory');
 
     return {
       type: MessageType.SAVE_MESSAGE_RESPONSE,
