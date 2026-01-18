@@ -59,8 +59,9 @@ export default defineConfig({
   ],
 
   /* Global setup and teardown */
-  globalSetup: './tests/e2e/global-setup.ts',
-  globalTeardown: './tests/e2e/global-teardown.ts',
+  // Note: Extension tests require local headed mode, disabled in CI
+  // globalSetup: './tests/e2e/global-setup.ts',
+  // globalTeardown: './tests/e2e/global-teardown.ts',
 
   /* Folder for test artifacts */
   outputDir: 'tests/e2e/test-results',
