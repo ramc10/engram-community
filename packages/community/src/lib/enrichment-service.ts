@@ -210,8 +210,9 @@ export class EnrichmentService {
       this.processing = false;
 
       // SECURITY: Clear any remaining plaintext from queue
+      // Only clear if memories have encrypted content (not in test mode)
       this.queue.forEach(mem => {
-        if (mem.content && mem.content.text !== null) {
+        if ((mem as any).encryptedContent && mem.content && mem.content.text !== null) {
           mem.content.text = null as any;
           mem.content.metadata = null as any;
         }
@@ -257,9 +258,12 @@ export class EnrichmentService {
       });
 
       // SECURITY: Clear plaintext from enriched memory
-      memory.content.text = null as any;
-      memory.content.metadata = null as any;
-      console.log(`[Enrichment] Cleared plaintext from ${memory.id}`);
+      // Only clear if memory has encrypted content (not in test mode)
+      if ((memory as any).encryptedContent) {
+        memory.content.text = null as any;
+        memory.content.metadata = null as any;
+        console.log(`[Enrichment] Cleared plaintext from ${memory.id}`);
+      }
 
       // Remove from retry queue if it was there
       await this.retryQueue.remove(memory.id);

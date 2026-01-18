@@ -329,6 +329,12 @@ export class StorageService implements IStorage {
     const { HNSWIndexService } = await import('./hnsw-index-service');
     this.hnswIndexService = new HNSWIndexService();
 
+    // Configure master key provider if already set
+    if (this.masterKeyProvider && typeof this.hnswIndexService.setMasterKeyProvider === 'function') {
+      this.hnswIndexService.setMasterKeyProvider(this.masterKeyProvider);
+      console.log('[Storage] HNSW master key provider configured during init');
+    }
+
     // Try to load existing index from IndexedDB
     const loaded = await this.hnswIndexService.load(this.db);
 
@@ -934,7 +940,8 @@ export class StorageService implements IStorage {
 
     // IMPORTANT: When using atomic mode, wait for enrichment to complete
     // This ensures embeddings are generated with enriched metadata (keywords, tags, context)
-    if (options?.useAtomicTransaction) {
+    // Only wait if enrichment is actually enabled
+    if (options?.useAtomicTransaction && this.enrichmentService && config?.enabled) {
       try {
         console.log('[Storage] Waiting for enrichment queue to complete (atomic mode)...');
         await this.enrichmentService.waitForQueue(10000); // 10 second timeout
