@@ -19,20 +19,28 @@ export async function launchBrowserWithExtension(): Promise<BrowserContext> {
   // Create a temporary directory for user data
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'playwright-extension-'));
 
+  const launchArgs = [
+    `--disable-extensions-except=${extensionPath}`,
+    `--load-extension=${extensionPath}`,
+    '--no-sandbox',
+    '--disable-setuid-sandbox',
+    '--disable-dev-shm-usage',
+  ];
+
+  // In headless mode, use the new headless mode which supports extensions better
+  if (isCI) {
+    launchArgs.push('--headless=new');
+  }
+
   const context = await chromium.launchPersistentContext(tempDir, {
-    // Use headed mode locally, headless in CI (with Xvfb from --with-deps)
-    headless: isCI,
-    args: [
-      `--disable-extensions-except=${extensionPath}`,
-      `--load-extension=${extensionPath}`,
-      '--no-sandbox',
-      '--disable-dev-shm-usage',
-      '--disable-gpu',
-    ],
+    // Don't use headless: true, instead use --headless=new flag for extension support
+    headless: false,
+    args: launchArgs,
+    ignoreDefaultArgs: ['--enable-automation'],
   });
 
-  // Wait a moment for the extension to initialize
-  await new Promise(resolve => setTimeout(resolve, 2000));
+  // Wait for the extension to initialize
+  await new Promise(resolve => setTimeout(resolve, 3000));
 
   return context;
 }
