@@ -11,13 +11,18 @@ import path from 'path';
 export async function launchBrowserWithExtension(): Promise<BrowserContext> {
   const extensionPath = path.join(__dirname, '../../../build/chrome-mv3-dev');
 
+  // In CI, use headless mode. Locally, use headed mode for easier debugging
+  const isCI = !!process.env.CI;
+
   const context = await chromium.launchPersistentContext('', {
-    headless: false,
+    // Use headed mode locally, headless in CI (with Xvfb from --with-deps)
+    headless: isCI,
     args: [
       `--disable-extensions-except=${extensionPath}`,
       `--load-extension=${extensionPath}`,
       '--no-sandbox',
       '--disable-dev-shm-usage',
+      '--disable-gpu',
     ],
     // Use a temporary profile for each test
     // This ensures clean state between tests

@@ -1,9 +1,10 @@
-import { chromium, FullConfig } from '@playwright/test';
+import { FullConfig } from '@playwright/test';
 import path from 'path';
+import fs from 'fs';
 
 /**
  * Global setup for Playwright tests
- * Builds the extension and verifies it's ready for testing
+ * Verifies extension build is ready for testing
  */
 async function globalSetup(config: FullConfig) {
   console.log('🚀 Starting Playwright global setup...');
@@ -12,7 +13,6 @@ async function globalSetup(config: FullConfig) {
   const extensionPath = path.join(__dirname, '../../build/chrome-mv3-dev');
 
   // Verify extension build exists
-  const fs = require('fs');
   if (!fs.existsSync(extensionPath)) {
     throw new Error(
       `Extension build not found at ${extensionPath}. Please run 'npm run build' first.`
@@ -26,33 +26,18 @@ async function globalSetup(config: FullConfig) {
 
   console.log('✅ Extension build verified at:', extensionPath);
 
-  // Launch a browser to verify extension loads
-  console.log('🔍 Verifying extension can be loaded...');
-  const browser = await chromium.launchPersistentContext('', {
-    headless: false,
-    args: [
-      `--disable-extensions-except=${extensionPath}`,
-      `--load-extension=${extensionPath}`,
-      '--no-sandbox',
-    ],
-  });
+  // Verify manifest is valid JSON
+  try {
+    const manifestContent = fs.readFileSync(manifestPath, 'utf-8');
+    const manifest = JSON.parse(manifestContent);
 
-  // Get extension ID
-  let extensionId = '';
-  const targets = browser.pages();
-  for (const target of targets) {
-    const url = target.url();
-    if (url.startsWith('chrome-extension://')) {
-      extensionId = url.split('/')[2];
-      console.log('✅ Extension loaded with ID:', extensionId);
-      break;
+    if (!manifest.name || !manifest.version || !manifest.manifest_version) {
+      throw new Error('Manifest is missing required fields');
     }
-  }
 
-  await browser.close();
-
-  if (!extensionId) {
-    console.warn('⚠️  Could not detect extension ID during setup');
+    console.log(`✅ Manifest validated: ${manifest.name} v${manifest.version}`);
+  } catch (error) {
+    throw new Error(`Invalid manifest.json: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 
   console.log('✅ Global setup complete');
