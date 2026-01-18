@@ -956,10 +956,35 @@ export class StorageService implements IStorage {
     // The callback (onEnrichmentComplete) will persist after enrichment actually completes
     // This fixes the race condition where unenriched data was being persisted
 
+    // Wait for enrichment to complete and copy enriched data to memory
+    // This ensures we have keywords/tags/context for embedding generation
+    if (memoryForEnrichment && this.enrichmentService) {
+      try {
+        // Copy enriched data from memoryForEnrichment to memory
+        if ((memoryForEnrichment as MemoryWithMemA).keywords) {
+          (memory as MemoryWithMemA).keywords = (memoryForEnrichment as MemoryWithMemA).keywords;
+        }
+        if ((memoryForEnrichment as MemoryWithMemA).tags && (memoryForEnrichment as MemoryWithMemA).tags.length > 0) {
+          (memory as MemoryWithMemA).tags = (memoryForEnrichment as MemoryWithMemA).tags;
+        }
+        if ((memoryForEnrichment as MemoryWithMemA).context) {
+          (memory as MemoryWithMemA).context = (memoryForEnrichment as MemoryWithMemA).context;
+        }
+        if ((memoryForEnrichment as MemoryWithMemA).memAVersion) {
+          (memory as MemoryWithMemA).memAVersion = (memoryForEnrichment as MemoryWithMemA).memAVersion;
+        }
+        console.log(`[Storage] Copied enriched data to memory ${memory.id}`);
+      } catch (err) {
+        console.error(`[Storage] Failed to copy enriched data:`, err);
+      }
+    }
+
     // Regenerate embedding with enhanced metadata (keywords + context + tags)
+    // Use memoryForEnrichment if available (has plaintext), otherwise use memory
     try {
       const embeddingService = getEmbeddingService();
-      const memoryWithEmbedding = await embeddingService.regenerateEmbedding(memory);
+      const memoryForEmbedding = memoryForEnrichment || memory;
+      const memoryWithEmbedding = await embeddingService.regenerateEmbedding(memoryForEmbedding);
 
       // Copy the embedding to the memory
       if (memoryWithEmbedding.embedding) {
