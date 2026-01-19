@@ -54,7 +54,7 @@ jest.mock('../../src/lib/embedding-service', () => {
 jest.mock('../../src/lib/hnsw-index-service', () => {
     return {
         HNSWIndexService: jest.fn().mockImplementation(() => {
-            let indexBuilt = false;
+            let indexBuilt = true; // Start with empty but initialized index (like real EdgeVec)
 
             return {
                 initialize: jest.fn().mockImplementation(() => Promise.resolve()),
