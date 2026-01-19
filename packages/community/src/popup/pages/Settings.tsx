@@ -8,7 +8,6 @@ declare const chrome: any;
 import React, { useState, useEffect, useCallback } from 'react';
 import { useToast, useTheme, Button } from '../../components/ui';
 import { withErrorBoundary } from '../../components';
-import { UpgradeBanner } from '../../components/UpgradeBanner';
 import type { MessageType } from '../../lib/messages';
 import type { Memory, EnrichmentConfig } from '@engram/core';
 import { formatDate } from '../../lib/formatters';
@@ -650,16 +649,62 @@ const SettingsPageComponent: React.FC<SettingsPageProps> = ({
         </Button>
       </div>
 
-      {/* Upgrade to Premium Widget - Only show for free users without pending request */}
+      {/* Upgrade to Premium Widget - Fixed, non-dismissible */}
       {!isPremium && !hasPendingRequest && (
-        <UpgradeBanner
-          onUpgrade={handleUpgrade}
+        <div
           style={{
             marginBottom: '24px',
-            marginLeft: 0,
-            marginRight: 0,
+            padding: '16px',
+            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+            borderRadius: '8px',
+            border: `1px solid ${colors.border}`,
           }}
-        />
+        >
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px',
+              marginBottom: '12px',
+            }}
+          >
+            <span style={{ fontSize: '24px' }}>☁️</span>
+            <div>
+              <h2
+                style={{
+                  fontSize: '16px',
+                  fontWeight: 600,
+                  color: 'white',
+                  marginBottom: '4px',
+                }}
+              >
+                Upgrade to Premium
+              </h2>
+              <p
+                style={{
+                  fontSize: '13px',
+                  color: 'rgba(255, 255, 255, 0.9)',
+                  margin: 0,
+                }}
+              >
+                Sync across devices • Cloud backup
+              </p>
+            </div>
+          </div>
+          <Button
+            variant="secondary"
+            size="md"
+            onClick={handleUpgrade}
+            style={{
+              backgroundColor: 'white',
+              color: '#667eea',
+              fontWeight: 600,
+              width: '100%',
+            }}
+          >
+            Upgrade Now
+          </Button>
+        </div>
       )}
 
       {/* Pending Premium Request Message */}
