@@ -134,12 +134,13 @@ export class AuthClient {
    * Login with Google OAuth
    */
   async loginWithGoogle(): Promise<AuthToken> {
-    console.log('[Auth] Starting Google OAuth with redirect:', chrome.identity.getRedirectURL());
+    const extensionRedirectUrl = chrome.identity.getRedirectURL();
+    console.log('[Auth] Starting Google OAuth with redirect:', extensionRedirectUrl);
 
     const { data, error } = await this.supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: chrome.identity.getRedirectURL(),
+        redirectTo: extensionRedirectUrl,
         skipBrowserRedirect: true,
       },
     });
@@ -154,21 +155,68 @@ export class AuthClient {
       throw new Error('No OAuth URL returned. Please enable Google provider in Supabase Dashboard.');
     }
 
-    console.log('[Auth] Got OAuth URL, launching auth flow');
-    console.log('[Auth] OAuth URL:', data.url);
+    console.log('[Auth] Got OAuth URL from Supabase');
+    console.log('[Auth] Original OAuth URL:', data.url);
+
+    // Fix: Ensure the OAuth URL uses the Chrome extension redirect URL
+    // Supabase may return a URL with the Site URL (e.g., theengram.tech) as redirect_uri
+    // We need to replace it with the Chrome extension redirect URL
+    let oauthUrl = data.url;
+    try {
+      const url = new URL(oauthUrl);
+      const currentRedirectUri = url.searchParams.get('redirect_uri');
+
+      console.log('[Auth] Current redirect_uri in OAuth URL:', currentRedirectUri);
+      console.log('[Auth] Expected redirect_uri:', extensionRedirectUrl);
+
+      // If the redirect_uri doesn't match our extension URL, replace it
+      if (currentRedirectUri && currentRedirectUri !== extensionRedirectUrl) {
+        console.warn('[Auth] OAuth URL contains incorrect redirect_uri. Replacing with extension redirect URL.');
+        console.warn('[Auth] Found redirect_uri:', currentRedirectUri);
+        console.warn('[Auth] Replacing with:', extensionRedirectUrl);
+
+        url.searchParams.set('redirect_uri', extensionRedirectUrl);
+        oauthUrl = url.toString();
+
+        console.log('[Auth] Updated OAuth URL:', oauthUrl);
+      }
+    } catch (e) {
+      console.error('[Auth] Error parsing/fixing OAuth URL:', e);
+      // Continue with original URL if parsing fails
+    }
+
+    console.log('[Auth] Launching auth flow with URL:', oauthUrl);
 
     // Launch OAuth flow in a new window
     return new Promise((resolve, reject) => {
       chrome.identity.launchWebAuthFlow(
         {
-          url: data.url,
+          url: oauthUrl,
           interactive: true,
         },
         async (redirectUrl) => {
           console.log('[Auth] Redirect URL received:', redirectUrl);
           console.log('[Auth] Chrome runtime error:', chrome.runtime.lastError);
-          if (chrome.runtime.lastError || !redirectUrl) {
-            reject(new Error(chrome.runtime.lastError?.message || 'OAuth flow cancelled'));
+
+          if (chrome.runtime.lastError) {
+            const errorMessage = chrome.runtime.lastError.message || 'Unknown error';
+            console.error('[Auth] Chrome runtime error during OAuth:', errorMessage);
+            reject(new Error(`OAuth flow failed: ${errorMessage}`));
+            return;
+          }
+
+          if (!redirectUrl) {
+            console.error('[Auth] No redirect URL received. User may have closed the popup or denied authorization.');
+            reject(new Error('OAuth flow cancelled. Please try again and approve the authorization request.'));
+            return;
+          }
+
+          // Validate that the redirect URL is from our extension
+          if (!redirectUrl.startsWith(extensionRedirectUrl)) {
+            console.error('[Auth] Redirect URL does not match extension redirect URL');
+            console.error('[Auth] Expected to start with:', extensionRedirectUrl);
+            console.error('[Auth] Received:', redirectUrl);
+            reject(new Error('Invalid OAuth redirect URL. Please check Supabase Site URL configuration.'));
             return;
           }
 
