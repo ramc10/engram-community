@@ -926,7 +926,7 @@ export class StorageService implements IStorage {
       }
     } : memory;
 
-    logger.log('Enriching memory with content:', memoryForEnrichment.content.text.substring(0, 100) + '...');
+    logger.log('Enriching memory with content:', memoryForEnrichment.content.text?.substring(0, 100) + '...');
 
     // Trigger enrichment (non-blocking queue processing)
     // The onEnrichmentComplete callback will handle persistence after enrichment completes

@@ -229,6 +229,12 @@ export class EnrichmentService {
     try {
       await this.rateLimiter.acquire();
 
+      // Skip if content is null (encrypted without plaintext)
+      if (!memory.content.text) {
+        console.warn(`[Enrichment] Skipping ${memory.id} - no plaintext content`);
+        return;
+      }
+
       const request: EnrichmentRequest = {
         memoryId: memory.id,
         text: memory.content.text,

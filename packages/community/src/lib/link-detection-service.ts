@@ -242,7 +242,9 @@ export class LinkDetectionService {
   private buildEnhancedText(memory: MemoryWithMemA): string {
     const parts: string[] = [];
 
-    parts.push(memory.content.text);
+    if (memory.content.text) {
+      parts.push(memory.content.text);
+    }
 
     if (memory.keywords && memory.keywords.length > 0) {
       parts.push(`Keywords: ${memory.keywords.join(' ')}`);
@@ -284,7 +286,7 @@ export class LinkDetectionService {
           sourceMemory,
           candidates: batch.map(result => ({
             id: result.memory.id,
-            content: result.memory.content.text,
+            content: result.memory.content.text || '',
             keywords: (result.memory as MemoryWithMemA).keywords,
             tags: (result.memory as MemoryWithMemA).tags,
             context: (result.memory as MemoryWithMemA).context,

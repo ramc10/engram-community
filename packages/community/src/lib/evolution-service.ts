@@ -376,7 +376,7 @@ Return valid JSON only:
         timestamp: this.currentTargetMemory.timestamp,
       } as any;
 
-      const newInformation = this.currentNewMemory.content.text;
+      const newInformation = this.currentNewMemory.content.text || '';
 
       const result = await client.checkEvolution(memory, newInformation);
 
