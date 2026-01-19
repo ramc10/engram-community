@@ -54,16 +54,36 @@ jest.mock('../../src/lib/hnsw-index-service', () => {
         HNSWIndexService: jest.fn().mockImplementation(() => {
             // State for this instance
             let memories: string[] = [];
+            let indexBuilt = false;
 
             return {
                 initialize: jest.fn().mockImplementation(() => Promise.resolve()),
-                isReady: jest.fn().mockReturnValue(true),
-                add: jest.fn().mockImplementation(async (...args: any[]) => { memories.push(args[0] as string); }),
+                isReady: jest.fn().mockImplementation(() => indexBuilt),
+                build: jest.fn().mockImplementation(async (...args: any[]) => {
+                    const memoriesToBuild = args[0] as any[];
+                    const onProgress = args[1] as ((current: number, total: number) => void) | undefined;
+
+                    memories = [];
+                    for (let i = 0; i < memoriesToBuild.length; i++) {
+                        const memory = memoriesToBuild[i];
+                        if (memory && memory.id && (memory.embedding || memory.encryptedEmbedding)) {
+                            memories.push(memory.id);
+                        }
+
+                        // Call progress callback if provided
+                        if (onProgress && (i % 100 === 0 || i === memoriesToBuild.length - 1)) {
+                            onProgress(i + 1, memoriesToBuild.length);
+                        }
+                    }
+                    indexBuilt = memories.length > 0;
+                }),
+                add: jest.fn().mockImplementation(async (...args: any[]) => { memories.push(args[0] as string); indexBuilt = true; }),
                 update: jest.fn().mockImplementation(async (...args: any[]) => { const id = args[0] as string; if (!memories.includes(id)) memories.push(id); }),
                 remove: jest.fn().mockImplementation(async (...args: any[]) => { const id = args[0] as string; memories = memories.filter(m => m !== id); }),
                 search: jest.fn().mockImplementation(async (...args: any[]) => {
+                    if (!indexBuilt || memories.length === 0) return [];
+
                     const vector = args[0] as Float32Array;
-                    if (memories.length === 0) return [];
 
                     // For Flow 1: index 0 is Pizza, index 1 is Python
                     if (vector && vector[1] === 1) {
@@ -82,8 +102,10 @@ jest.mock('../../src/lib/hnsw-index-service', () => {
                 }),
                 getStats: jest.fn().mockImplementation(() => ({ vectorCount: memories.length, memoryUsage: 0 })),
                 persist: jest.fn().mockImplementation(() => Promise.resolve()),
-                load: jest.fn().mockImplementation(() => Promise.resolve()),
-                reset: jest.fn().mockImplementation(() => { memories = []; })
+                load: jest.fn().mockImplementation(() => Promise.resolve(false)),
+                reset: jest.fn().mockImplementation(() => { memories = []; indexBuilt = false; }),
+                setMasterKeyProvider: jest.fn().mockImplementation(() => {}),
+                clearEmbeddingCache: jest.fn().mockImplementation(() => {})
             };
         })
     };
