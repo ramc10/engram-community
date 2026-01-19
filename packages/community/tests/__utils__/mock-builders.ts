@@ -98,8 +98,8 @@ export class MemoryBuilder {
     };
     this.memory.content = {
       role: this.memory.content?.role || 'user',
-      text: '[ENCRYPTED]',
-      metadata: {},
+      text: null as any,
+      metadata: null as any,
     };
     return this;
   }

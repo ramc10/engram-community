@@ -72,7 +72,7 @@ describe('Message Handler', () => {
         const json = JSON.stringify({
           role: 'user',
           text: 'Decrypted content',
-          metadata: {},
+          metadata: null as any,
         });
         return new TextEncoder().encode(json);
       }),
@@ -226,7 +226,7 @@ describe('Message Handler', () => {
         content: 'Test message',
         conversationId: 'conv-123',
         timestamp: Date.now(),
-        metadata: {},
+        metadata: null as any,
       };
 
       const message = {
@@ -355,7 +355,7 @@ describe('Message Handler', () => {
     it('should decrypt memories before returning', async () => {
       const encryptedMemory = {
         ...createMemory(),
-        content: { role: 'user', text: '[ENCRYPTED]', metadata: {} },
+        content: { role: 'user', text: null as any, metadata: null as any },
         encryptedContent: {
           version: 1,
           algorithm: 'AES-GCM',
@@ -380,7 +380,7 @@ describe('Message Handler', () => {
 
       const encryptedMemory = {
         ...createMemory(),
-        content: { role: 'user', text: '[ENCRYPTED]', metadata: {} },
+        content: { role: 'user', text: null as any, metadata: null as any },
         encryptedContent: {
           version: 1,
           algorithm: 'AES-GCM',
@@ -397,7 +397,7 @@ describe('Message Handler', () => {
 
       expect(response.success).toBe(true);
       expect(mockCrypto.decrypt).not.toHaveBeenCalled();
-      expect(response.memories[0].content.text).toBe('[ENCRYPTED]');
+      expect(response.memories[0].content.text).toBeNull();
     });
 
     it('should handle decryption errors gracefully', async () => {
@@ -405,7 +405,7 @@ describe('Message Handler', () => {
 
       const encryptedMemory = {
         ...createMemory(),
-        content: { role: 'user', text: '[ENCRYPTED]', metadata: {} },
+        content: { role: 'user', text: null as any, metadata: null as any },
         encryptedContent: {
           version: 1,
           algorithm: 'AES-GCM',
@@ -422,7 +422,7 @@ describe('Message Handler', () => {
 
       expect(response.success).toBe(true);
       // Should return memory as-is when decryption fails
-      expect(response.memories[0].content.text).toBe('[ENCRYPTED]');
+      expect(response.memories[0].content.text).toBeNull();
     });
   });
 
@@ -435,7 +435,7 @@ describe('Message Handler', () => {
         const json = JSON.stringify({
           role: 'user',
           text: text,
-          metadata: {},
+          metadata: null as any,
         });
         return new TextEncoder().encode(json);
       });
@@ -445,7 +445,7 @@ describe('Message Handler', () => {
       const memories = [
         {
           ...createMemory(),
-          content: { role: 'user', text: '[ENCRYPTED]', metadata: {} },
+          content: { role: 'user', text: null as any, metadata: null as any },
           encryptedContent: {
             version: 1,
             algorithm: 'AES-GCM',
@@ -457,7 +457,7 @@ describe('Message Handler', () => {
         },
         {
           ...createMemory(),
-          content: { role: 'user', text: '[ENCRYPTED]', metadata: {} },
+          content: { role: 'user', text: null as any, metadata: null as any },
           encryptedContent: {
             version: 1,
             algorithm: 'AES-GCM',
@@ -486,7 +486,7 @@ describe('Message Handler', () => {
       const memories = [
         {
           ...createMemory(),
-          content: { role: 'user', text: '[ENCRYPTED]', metadata: {} },
+          content: { role: 'user', text: null as any, metadata: null as any },
           encryptedContent: {
             version: 1,
             algorithm: 'AES-GCM',
@@ -498,7 +498,7 @@ describe('Message Handler', () => {
         },
         {
           ...createMemory(),
-          content: { role: 'user', text: '[ENCRYPTED]', metadata: {} },
+          content: { role: 'user', text: null as any, metadata: null as any },
           encryptedContent: {
             version: 1,
             algorithm: 'AES-GCM',
@@ -526,7 +526,7 @@ describe('Message Handler', () => {
     it('should apply limit when provided', async () => {
       const memories = Array.from({ length: 10 }, () => ({
         ...createMemory(),
-        content: { role: 'user' as const, text: '[ENCRYPTED]', metadata: {} },
+        content: { role: 'user' as const, text: null as any, metadata: null as any },
         encryptedContent: {
           version: 1,
           algorithm: 'AES-GCM',
@@ -566,7 +566,7 @@ describe('Message Handler', () => {
       const memories = [
         {
           ...createMemory(),
-          content: { role: 'user', text: '[ENCRYPTED]', metadata: {} },
+          content: { role: 'user', text: null as any, metadata: null as any },
           tags: ['javascript', 'testing'],
           encryptedContent: {
             version: 1,
@@ -595,7 +595,7 @@ describe('Message Handler', () => {
       const memories = [
         {
           ...createMemory(),
-          content: { role: 'user', text: '[ENCRYPTED]', metadata: {} },
+          content: { role: 'user', text: null as any, metadata: null as any },
           encryptedContent: {
             version: 1,
             algorithm: 'AES-GCM',
