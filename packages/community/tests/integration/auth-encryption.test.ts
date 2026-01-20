@@ -78,6 +78,11 @@ global.chrome = {
     },
 } as any;
 
+// Mock navigator
+global.navigator = {
+    userAgent: 'Mozilla/5.0 (Test Environment) Chrome/120.0.0.0',
+} as any;
+
 // Mock Supabase client & auth client
 // We need to spy on authClient methods to simulate the salt storage behavior
 jest.mock('@supabase/supabase-js', () => ({
@@ -189,6 +194,11 @@ describe('Auth Encryption Consistency Integration', () => {
 
         jest.spyOn(authClient, 'logout').mockImplementation(async () => {
             currentUserEmail = null;
+        });
+
+        jest.spyOn(authClient, 'registerDevice').mockImplementation(async () => {
+            // Mock device registration - just return success
+            return Promise.resolve();
         });
     });
 
