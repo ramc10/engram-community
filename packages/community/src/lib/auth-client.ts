@@ -147,7 +147,13 @@ export class AuthClient {
 
     if (error) {
       console.error('[Auth] Supabase OAuth error:', error);
-      throw new Error(`Google OAuth failed: ${error.message}. Make sure Google provider is enabled in Supabase Dashboard (Authentication > Providers > Google).`);
+      throw new Error(
+        `Google OAuth failed: ${error.message}.\n\n` +
+        `Troubleshooting steps:\n` +
+        `1. Enable Google provider in Supabase Dashboard (Authentication > Providers > Google)\n` +
+        `2. Add Chrome extension redirect URLs to Google OAuth provider configuration\n` +
+        `3. See SUPABASE_SETUP.md for detailed setup instructions`
+      );
     }
 
     if (!data.url) {
@@ -171,14 +177,21 @@ export class AuthClient {
 
       // If the redirect_uri doesn't match our extension URL, replace it
       if (currentRedirectUri && currentRedirectUri !== extensionRedirectUrl) {
-        console.warn('[Auth] OAuth URL contains incorrect redirect_uri. Replacing with extension redirect URL.');
+        console.warn('[Auth] ⚠️  CONFIGURATION ISSUE DETECTED AND AUTO-FIXED ⚠️');
+        console.warn('[Auth] OAuth URL contains incorrect redirect_uri. Auto-correcting...');
         console.warn('[Auth] Found redirect_uri:', currentRedirectUri);
         console.warn('[Auth] Replacing with:', extensionRedirectUrl);
+        console.warn('[Auth]');
+        console.warn('[Auth] 🔧 Recommendation: Update your Supabase OAuth provider configuration');
+        console.warn('[Auth] to include Chrome extension redirect URLs to prevent this issue.');
+        console.warn('[Auth] See SUPABASE_SETUP.md for instructions.');
 
         url.searchParams.set('redirect_uri', extensionRedirectUrl);
         oauthUrl = url.toString();
 
-        console.log('[Auth] Updated OAuth URL:', oauthUrl);
+        console.log('[Auth] ✅ Updated OAuth URL:', oauthUrl);
+      } else {
+        console.log('[Auth] ✅ OAuth URL redirect_uri is correctly configured');
       }
     } catch (e) {
       console.error('[Auth] Error parsing/fixing OAuth URL:', e);
@@ -207,7 +220,14 @@ export class AuthClient {
 
           if (!redirectUrl) {
             console.error('[Auth] No redirect URL received. User may have closed the popup or denied authorization.');
-            reject(new Error('OAuth flow cancelled. Please try again and approve the authorization request.'));
+            reject(new Error(
+              'OAuth flow cancelled or failed.\n\n' +
+              'Possible causes:\n' +
+              '1. You closed the popup without completing sign-in\n' +
+              '2. Chrome extension redirect URL is not configured in Google OAuth provider\n' +
+              '3. Supabase OAuth configuration is incorrect\n\n' +
+              'Please see SUPABASE_SETUP.md for configuration instructions.'
+            ));
             return;
           }
 
@@ -216,7 +236,16 @@ export class AuthClient {
             console.error('[Auth] Redirect URL does not match extension redirect URL');
             console.error('[Auth] Expected to start with:', extensionRedirectUrl);
             console.error('[Auth] Received:', redirectUrl);
-            reject(new Error('Invalid OAuth redirect URL. Please check Supabase Site URL configuration.'));
+            reject(new Error(
+              `Invalid OAuth redirect URL.\n\n` +
+              `Expected: ${extensionRedirectUrl}\n` +
+              `Received: ${redirectUrl}\n\n` +
+              `This usually means:\n` +
+              `1. The redirect was to an incorrect domain (e.g., theengram.tech)\n` +
+              `2. Google OAuth redirect URLs are not configured correctly\n` +
+              `3. Supabase OAuth provider configuration is missing Chrome extension redirect URL\n\n` +
+              `See SUPABASE_SETUP.md for detailed configuration instructions.`
+            ));
             return;
           }
 
