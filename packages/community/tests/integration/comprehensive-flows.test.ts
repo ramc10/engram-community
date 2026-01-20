@@ -32,16 +32,36 @@ jest.mock('../../src/lib/embedding-service', () => {
         getEmbeddingService: jest.fn(() => ({
             initialize: jest.fn().mockImplementation(() => Promise.resolve()),
             embed: jest.fn().mockImplementation((...args: any[]) => Promise.resolve(generateMockVector(args[0] as string))),
-            regenerateEmbedding: jest.fn().mockImplementation(async (memory: any) => ({
-                ...memory,
-                embedding: generateMockVector(memory.content?.text || memory.content || '')
-            })),
+            regenerateEmbedding: jest.fn().mockImplementation(async (memory: any) => {
+                // Build enhanced text from content, keywords, tags, context (mimics real buildEnhancedText)
+                const parts = [];
+                if (memory.content?.text) parts.push(memory.content.text);
+                if (memory.keywords?.length) parts.push(memory.keywords.join(' '));
+                if (memory.tags?.length) parts.push(memory.tags.join(' '));
+                if (memory.context) parts.push(memory.context);
+                const enhancedText = parts.join('. ') || '';
+
+                return {
+                    ...memory,
+                    embedding: generateMockVector(enhancedText)
+                };
+            }),
             embedMemories: jest.fn().mockImplementation(async (...args: any[]) => {
                 const memories = args[0] as any[];
-                return memories.map(m => ({
-                    ...m,
-                    embedding: generateMockVector(m.content?.text || m.content || '')
-                }));
+                return memories.map(m => {
+                    // Build enhanced text from content, keywords, tags, context
+                    const parts = [];
+                    if (m.content?.text) parts.push(m.content.text);
+                    if (m.keywords?.length) parts.push(m.keywords.join(' '));
+                    if (m.tags?.length) parts.push(m.tags.join(' '));
+                    if (m.context) parts.push(m.context);
+                    const enhancedText = parts.join('. ') || '';
+
+                    return {
+                        ...m,
+                        embedding: generateMockVector(enhancedText)
+                    };
+                });
             }),
             setHNSWIndex: jest.fn(),
             findSimilar: jest.fn().mockImplementation(() => Promise.resolve([])),
