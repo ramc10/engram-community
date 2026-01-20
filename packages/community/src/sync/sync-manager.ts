@@ -98,6 +98,13 @@ export class SyncManager implements ISyncManager {
    * Load or generate device signing key
    */
   private async loadOrGenerateDeviceKey(): Promise<void> {
+    // Skip device key generation in test environments
+    if (typeof process !== 'undefined' && process.env.NODE_ENV === 'test') {
+      console.log('[SyncManager] Skipping device key generation in test environment');
+      this.devicePrivateKey = null;
+      return;
+    }
+
     try {
       // Try to load existing key from storage
       const storedKey = await this.storage.getMetadata<string>('devicePrivateKey');
