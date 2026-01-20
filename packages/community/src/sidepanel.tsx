@@ -756,7 +756,7 @@ function SidePanelContent() {
         const textResults = memories.filter((memory) => {
           const q = query.toLowerCase();
           return (
-            memory.content.text.toLowerCase().includes(q) ||
+            memory.content.text?.toLowerCase().includes(q) ||
             memory.conversationId?.toLowerCase().includes(q)
           );
         });
@@ -768,7 +768,7 @@ function SidePanelContent() {
       const textResults = memories.filter((memory) => {
         const q = query.toLowerCase();
         return (
-          memory.content.text.toLowerCase().includes(q) ||
+          memory.content.text?.toLowerCase().includes(q) ||
           memory.conversationId?.toLowerCase().includes(q)
         );
       });
@@ -806,7 +806,7 @@ function SidePanelContent() {
         if (!searchQuery) return true;
         const query = searchQuery.toLowerCase();
         return (
-          memory.content.text.toLowerCase().includes(query) ||
+          memory.content.text?.toLowerCase().includes(query) ||
           memory.conversationId?.toLowerCase().includes(query)
         );
       });
@@ -1093,7 +1093,7 @@ function SidePanelContent() {
                               maxHeight: '60px',
                             }),
                           }}>
-                            {isExpanded ? memory.content.text : summarizeText(memory.content.text)}
+                            {isExpanded ? (memory.content.text || '') : summarizeText(memory.content.text || '')}
                           </div>
 
                           {/* Related Memories Section */}
@@ -1167,7 +1167,7 @@ function SidePanelContent() {
                                           whiteSpace: 'nowrap',
                                           maxWidth: '150px',
                                         }}>
-                                          {linkedMemory.content.text.slice(0, 40)}...
+                                          {(linkedMemory.content.text || '').slice(0, 40)}...
                                         </span>
 
                                         {/* Confidence score */}

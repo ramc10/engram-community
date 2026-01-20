@@ -101,7 +101,7 @@ export class ContextMatcher {
     keywords: WeightedKeyword[],
     memory: Memory
   ): { score: number; matched: string[] } {
-    const memoryText = memory.content.text.toLowerCase();
+    const memoryText = memory.content.text?.toLowerCase() || '';
     let score = 0;
     const matched: string[] = [];
 
@@ -199,7 +199,7 @@ export class ContextMatcher {
     memory: Memory,
     options: MatchOptions = {}
   ): Promise<ScoredMemory[]> {
-    return this.findRelevant(memory.content.text, {
+    return this.findRelevant(memory.content.text || '', {
       ...options,
       conversationId: memory.conversationId,
       excludeCurrentConversation: true,

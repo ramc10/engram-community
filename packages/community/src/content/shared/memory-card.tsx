@@ -120,8 +120,8 @@ export const MemoryCard: React.FC<MemoryCardProps> = ({
         }}
       >
         {isExpanded
-          ? highlightKeywords(memory.content.text)
-          : highlightKeywords(truncateText(memory.content.text))}
+          ? highlightKeywords(memory.content.text || '')
+          : highlightKeywords(truncateText(memory.content.text || ''))}
       </div>
 
       {/* Code Blocks (if expanded) */}

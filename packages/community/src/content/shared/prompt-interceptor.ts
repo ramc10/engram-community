@@ -309,7 +309,7 @@ export class PromptInterceptor {
       if (this.currentMatches.length > 0) {
         console.log('[Engram Interceptor] Top matches:', this.currentMatches.map(m => ({
           score: (m.score * 100).toFixed(1) + '%',
-          text: m.memory.content.text.substring(0, 50) + '...'
+          text: (m.memory.content.text || '').substring(0, 50) + '...'
         })));
       }
 
@@ -434,7 +434,7 @@ ${context}`;
   private buildContext(matches: SimilarityResult[]): string {
     return matches
       .map((match, index) => {
-        const text = match.memory.content.text;
+        const text = match.memory.content.text || '';
         const truncated = text.length > CONFIG.MAX_CONTEXT_LENGTH
           ? text.substring(0, CONFIG.MAX_CONTEXT_LENGTH) + '...'
           : text;

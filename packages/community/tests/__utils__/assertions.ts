@@ -30,7 +30,7 @@ declare global {
 function toBeEncrypted(this: any, received: Memory) {
   const mem = received as any;
   const pass =
-    received.content.text === '[ENCRYPTED]' &&
+    received.content.text === null &&
     mem.encryptedContent !== undefined &&
     mem.encryptedContent !== null;
 
@@ -46,7 +46,7 @@ function toBeEncrypted(this: any, received: Memory) {
     return {
       message: () =>
         `Expected memory to be encrypted\n` +
-        `  content.text: ${received.content.text} (expected "[ENCRYPTED]")\n` +
+        `  content.text: ${received.content.text} (expected null)\n` +
         `  encryptedContent: ${mem.encryptedContent ? 'present' : 'missing'} (expected present)`,
       pass: false,
     };
@@ -266,7 +266,7 @@ function toBeValidMemory(this: any, received: any) {
  */
 function toHavePlaintextContent(this: any, received: Memory) {
   const pass =
-    received.content.text !== '[ENCRYPTED]' &&
+    received.content.text !== null &&
     received.content.text !== undefined &&
     received.content.text.length > 0;
 

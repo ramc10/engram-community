@@ -287,7 +287,7 @@ const SettingsPageComponent: React.FC<SettingsPageProps> = ({
     if (!searchQuery) return true;
     const query = searchQuery.toLowerCase();
     return (
-      memory.content.text.toLowerCase().includes(query) ||
+      memory.content.text?.toLowerCase().includes(query) ||
       memory.conversationId?.toLowerCase().includes(query)
     );
   });

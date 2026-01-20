@@ -156,7 +156,9 @@ export class EmbeddingService {
     const parts: string[] = [];
 
     // 1. Original content (most important)
-    parts.push(memory.content.text);
+    if (memory.content.text) {
+      parts.push(memory.content.text);
+    }
 
     // 2. Add keywords if available (from enrichment)
     const memWithMemA = memory as MemoryWithMemA;
@@ -356,7 +358,7 @@ export class EmbeddingService {
     // ===== HYBRID SCORING (SAME FOR BOTH PATHS) =====
     const results = candidates.map(({ memory, semanticScore }) => {
       // Keyword matching boost
-      const memoryText = memory.content.text.toLowerCase();
+      const memoryText = memory.content.text?.toLowerCase() || '';
       const keywordMatches = queryKeywords.filter(kw => memoryText.includes(kw)).length;
       const keywordScore = queryKeywords.length > 0
         ? keywordMatches / queryKeywords.length
