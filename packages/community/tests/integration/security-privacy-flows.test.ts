@@ -81,6 +81,11 @@ global.chrome = {
     },
 } as any;
 
+// Mock navigator
+global.navigator = {
+    userAgent: 'Mozilla/5.0 (Test Environment) Chrome/120.0.0.0',
+} as any;
+
 const mockFetch = jest.fn<any>();
 (global as any).fetch = mockFetch;
 
