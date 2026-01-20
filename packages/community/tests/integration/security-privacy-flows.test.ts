@@ -204,6 +204,7 @@ jest.mock('../../src/lib/auth-client', () => ({
         })),
         logout: jest.fn(() => Promise.resolve({ success: true })),
         updateUserMetadata: jest.fn(() => Promise.resolve({ success: true })),
+        registerDevice: jest.fn(() => Promise.resolve()),
         getSupabaseClient: jest.fn(() => ({})),
     },
 }));
