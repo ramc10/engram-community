@@ -32,6 +32,7 @@ const SettingsPageComponent: React.FC<SettingsPageProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [syncEnabled, setSyncEnabled] = useState(false);
   const [isTogglingSync, setIsTogglingSync] = useState(false);
+  const [hasPendingRequest, setHasPendingRequest] = useState(false);
 
   // Enrichment config state
   const [enrichmentConfig, setEnrichmentConfig] = useState<EnrichmentConfig>({
@@ -189,6 +190,45 @@ const SettingsPageComponent: React.FC<SettingsPageProps> = ({
       showError('Failed to toggle sync');
     } finally {
       setIsTogglingSync(false);
+    }
+  };
+
+  const handleUpgrade = async () => {
+    // Show confirmation dialog
+    const confirmed = window.confirm(
+      '💬 Request Premium Access\n\n' +
+      'Your upgrade request will be submitted for review.\n\n' +
+      'The founder will review and grant you access shortly.\n\n' +
+      'Click OK to continue.'
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      // Send message to background script to handle upgrade request
+      const response = await chrome.runtime.sendMessage({
+        type: 'REQUEST_PREMIUM_UPGRADE' as MessageType,
+      });
+
+      if (!response.success) {
+        throw new Error(response.error || 'Failed to submit upgrade request');
+      }
+
+      // Immediately update UI to show pending state
+      setHasPendingRequest(true);
+
+      // Show success message
+      success('Upgrade request submitted! You will be notified once approved.');
+    } catch (err) {
+      console.error('Failed to submit upgrade request:', err);
+      const errorMessage = err instanceof Error
+        ? err.message
+        : typeof err === 'object' && err !== null
+          ? JSON.stringify(err)
+          : 'Failed to submit upgrade request';
+      showError(errorMessage);
     }
   };
 
@@ -608,6 +648,108 @@ const SettingsPageComponent: React.FC<SettingsPageProps> = ({
           Change Password (Coming soon)
         </Button>
       </div>
+
+      {/* Upgrade to Premium Widget - Fixed, non-dismissible */}
+      {!isPremium && !hasPendingRequest && (
+        <div
+          style={{
+            marginBottom: '24px',
+            padding: '16px',
+            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+            borderRadius: '8px',
+            border: `1px solid ${colors.border}`,
+          }}
+        >
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px',
+              marginBottom: '12px',
+            }}
+          >
+            <span style={{ fontSize: '24px' }}>☁️</span>
+            <div>
+              <h2
+                style={{
+                  fontSize: '16px',
+                  fontWeight: 600,
+                  color: 'white',
+                  marginBottom: '4px',
+                }}
+              >
+                Upgrade to Premium
+              </h2>
+              <p
+                style={{
+                  fontSize: '13px',
+                  color: 'rgba(255, 255, 255, 0.9)',
+                  margin: 0,
+                }}
+              >
+                Sync across devices • Cloud backup
+              </p>
+            </div>
+          </div>
+          <Button
+            variant="secondary"
+            size="md"
+            onClick={handleUpgrade}
+            style={{
+              backgroundColor: 'white',
+              color: '#667eea',
+              fontWeight: 600,
+              width: '100%',
+            }}
+          >
+            Upgrade Now
+          </Button>
+        </div>
+      )}
+
+      {/* Pending Premium Request Message */}
+      {!isPremium && hasPendingRequest && (
+        <div
+          style={{
+            background: 'linear-gradient(135deg, #2d2d2d 0%, #1a1a1a 100%)',
+            padding: '16px',
+            color: 'white',
+            borderRadius: '8px',
+            marginBottom: '24px',
+            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.5)',
+          }}
+        >
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px',
+            }}
+          >
+            <span style={{ fontSize: '24px' }}>⏳</span>
+            <div>
+              <div
+                style={{
+                  fontSize: '14px',
+                  fontWeight: 600,
+                  marginBottom: '4px',
+                }}
+              >
+                Upgrade Request Pending
+              </div>
+              <div
+                style={{
+                  fontSize: '12px',
+                  opacity: 0.9,
+                  lineHeight: '1.4',
+                }}
+              >
+                Your request is being reviewed. You will be notified once approved.
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Sync Settings */}
       <div
