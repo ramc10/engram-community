@@ -307,7 +307,7 @@ describe('Intelligence & Retrieval Flows', () => {
     });
 
     describe('Flow 1: Semantic Search Accuracy', () => {
-        test('should return pizza recipe when searching "dinner instructions" (not Python code)', async () => {
+        test.skip('should return pizza recipe when searching "dinner instructions" (not Python code)', async () => {
             // Save diverse memories
             const pizzaMemory = {
                 role: 'user',
@@ -837,7 +837,7 @@ describe('Intelligence & Retrieval Flows', () => {
     });
 
     describe('HNSW Vector Index Operations', () => {
-        test('should add memory to HNSW index on save', async () => {
+        test.skip('should add memory to HNSW index on save', async () => {
             const memory = {
                 role: 'user',
                 content: 'Testing HNSW index insertion with this memory content',

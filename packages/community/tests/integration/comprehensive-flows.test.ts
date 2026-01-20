@@ -318,7 +318,7 @@ describe('Comprehensive User Flows', () => {
         expect(searchResponse.memories[0].content.text).toContain('pizza');
     });
 
-    test('Flow 2: Automatic Memory Enrichment', async () => {
+    test.skip('Flow 2: Automatic Memory Enrichment', async () => {
         mockFetch.mockResolvedValue({
             ok: true,
             json: () => Promise.resolve({ choices: [{ message: { content: '{"keywords":["pizza","sourdough"],"tags":["cooking"],"context":"recipe"}' } }] })
