@@ -117,7 +117,9 @@ export class PerplexityAdapter implements IPlatformAdapter {
    * Extract conversation ID from current page
    */
   extractConversationId(): string | null {
-    return this.extractConversationIdFromUrl(window.location.href);
+    // Use pathname for easier testing and consistency with other adapters
+    const match = window.location.pathname.match(/\/search\/([\w-]+)/);
+    return match ? match[1] : null;
   }
 
   /**
