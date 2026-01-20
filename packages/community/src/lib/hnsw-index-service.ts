@@ -216,6 +216,12 @@ export class HNSWIndexService {
       this.vectorIdMap.clear();
       this.indexToIdMap.clear();
 
+      // Don't create index for empty input - index should only be ready when it has vectors
+      if (memories.length === 0) {
+        console.log('[HNSW] No memories to index, skipping index creation');
+        return;
+      }
+
       // Initialize EdgeVec index with EdgeVecConfig
       const config = new EdgeVecConfig(this.config.dimensions);
       config.metric = this.config.metric;

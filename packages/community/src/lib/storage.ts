@@ -985,9 +985,10 @@ export class StorageService implements IStorage {
           (memory as any).embeddingVersion = 1;
         }
 
-        // Update HNSW index (Phase 4)
-        if (this.hnswIndexService?.isReady()) {
-          await this.hnswIndexService.update(
+        // Add/Update HNSW index (Phase 4)
+        // Use add() which handles both new memories and updates (creates index if needed)
+        if (this.hnswIndexService) {
+          await this.hnswIndexService.add(
             memory.id,
             embeddingFloat32
           );
@@ -1055,9 +1056,9 @@ export class StorageService implements IStorage {
                     if (evolved.embedding) {
                       (linkedMemory as any).embedding = new Float32Array(evolved.embedding);
 
-                      // Update HNSW index for evolved memory (Phase 4)
-                      if (this.hnswIndexService?.isReady()) {
-                        await this.hnswIndexService.update(
+                      // Add/Update HNSW index for evolved memory (Phase 4)
+                      if (this.hnswIndexService) {
+                        await this.hnswIndexService.add(
                           linkedMemory.id,
                           new Float32Array(evolved.embedding)
                         );

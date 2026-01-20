@@ -54,7 +54,7 @@ jest.mock('../../src/lib/hnsw-index-service', () => {
         HNSWIndexService: jest.fn().mockImplementation(() => {
             // State for this instance
             let memories: string[] = [];
-            let indexBuilt = true; // Start with empty but initialized index (like real EdgeVec)
+            let indexBuilt = false; // Start as not ready - index only ready when it has vectors
 
             return {
                 initialize: jest.fn().mockImplementation(() => Promise.resolve()),
@@ -335,8 +335,15 @@ describe('Intelligence & Retrieval Flows', () => {
             await handleMessage({ type: MessageType.SAVE_MESSAGE, message: pythonMemory } as any, mockSender, backgroundService);
             await handleMessage({ type: MessageType.SAVE_MESSAGE, message: vacationMemory } as any, mockSender, backgroundService);
 
-            // Wait for indexing
-            await wait(100);
+            // Wait for enrichment and indexing to complete
+            const storage = backgroundService.getStorage() as any;
+            if (storage.enrichmentService) {
+                await storage.enrichmentService.waitForQueue(10000);
+                // Wait for onEnrichmentComplete callback to finish saving and HNSW indexing
+                await wait(500);
+            } else {
+                await wait(100);
+            }
 
             // Search for dinner-related content
             const searchResponse = await handleMessage(
@@ -844,7 +851,15 @@ describe('Intelligence & Retrieval Flows', () => {
                 backgroundService
             );
 
-            await wait(2000);
+            // Wait for enrichment and indexing to complete
+            const storage = backgroundService.getStorage() as any;
+            if (storage.enrichmentService) {
+                await storage.enrichmentService.waitForQueue(10000);
+                // Wait for onEnrichmentComplete callback to finish saving and HNSW indexing
+                await wait(500);
+            } else {
+                await wait(2000);
+            }
 
             // Save may fail if no master key is set
             if (saveResult.success) {

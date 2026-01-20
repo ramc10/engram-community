@@ -54,7 +54,7 @@ jest.mock('../../src/lib/embedding-service', () => {
 jest.mock('../../src/lib/hnsw-index-service', () => {
     return {
         HNSWIndexService: jest.fn().mockImplementation(() => {
-            let indexBuilt = true; // Start with empty but initialized index (like real EdgeVec)
+            let indexBuilt = false; // Start as not ready - index only ready when it has vectors
 
             return {
                 initialize: jest.fn().mockImplementation(() => Promise.resolve()),
@@ -326,15 +326,13 @@ describe('Comprehensive User Flows', () => {
 
         const mem2 = { role: 'user', content: 'Pizza recipe', conversationId: 'conv-1', timestamp: Date.now() };
         const saveResult = await handleMessage({ type: MessageType.SAVE_MESSAGE, message: mem2 } as any, mockSender, backgroundService);
-        await wait(100);
 
+        // Wait for automatic enrichment to complete
         const storage = backgroundService.getStorage();
-        const memory = await storage.getMemory(saveResult.memoryId);
-
-        // Manual trigger because background enrichment is often skipped in test env to avoid race conditions
         if (storage['enrichmentService']) {
-            await storage['enrichmentService'].enrichMemory(memory as any);
-            await wait(100);
+            await storage['enrichmentService'].waitForQueue(10000);
+            // Wait a bit more for the onEnrichmentComplete callback to finish saving
+            await wait(500);
         }
 
         const enriched = await storage.getMemory(saveResult.memoryId) as any;
