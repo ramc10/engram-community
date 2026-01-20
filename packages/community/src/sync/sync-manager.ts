@@ -98,27 +98,33 @@ export class SyncManager implements ISyncManager {
    * Load or generate device signing key
    */
   private async loadOrGenerateDeviceKey(): Promise<void> {
-    // Try to load existing key from storage
-    const storedKey = await this.storage.getMetadata<string>('devicePrivateKey');
+    try {
+      // Try to load existing key from storage
+      const storedKey = await this.storage.getMetadata<string>('devicePrivateKey');
 
-    if (storedKey) {
-      // Convert from base64 to Uint8Array
-      this.devicePrivateKey = base64ToUint8Array(storedKey);
-      console.log('[SyncManager] Loaded existing device signing key');
-    } else {
-      // Generate new key pair
-      const cryptoService = await getCryptoService();
-      const keyPair = await cryptoService.generateDeviceKeyPair();
-      this.devicePrivateKey = keyPair.privateKey;
+      if (storedKey) {
+        // Convert from base64 to Uint8Array
+        this.devicePrivateKey = base64ToUint8Array(storedKey);
+        console.log('[SyncManager] Loaded existing device signing key');
+      } else {
+        // Generate new key pair
+        const cryptoService = await getCryptoService();
+        const keyPair = await cryptoService.generateDeviceKeyPair();
+        this.devicePrivateKey = keyPair.privateKey;
 
-      // Store private key (base64 encoded)
-      const keyBase64 = uint8ArrayToBase64(keyPair.privateKey);
-      await this.storage.setMetadata('devicePrivateKey', keyBase64);
+        // Store private key (base64 encoded)
+        const keyBase64 = uint8ArrayToBase64(keyPair.privateKey);
+        await this.storage.setMetadata('devicePrivateKey', keyBase64);
 
-      // Store public key separately for easy access
-      await this.storage.setMetadata('devicePublicKey', keyPair.publicKey);
+        // Store public key separately for easy access
+        await this.storage.setMetadata('devicePublicKey', keyPair.publicKey);
 
-      console.log('[SyncManager] Generated new device signing key');
+        console.log('[SyncManager] Generated new device signing key');
+      }
+    } catch (error) {
+      // Log error but don't fail initialization - signing can be set up later
+      console.warn('[SyncManager] Failed to load/generate device signing key:', error);
+      this.devicePrivateKey = null;
     }
   }
 
