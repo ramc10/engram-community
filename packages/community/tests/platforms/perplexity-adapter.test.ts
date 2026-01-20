@@ -7,14 +7,20 @@ import { perplexityAdapter } from '../../src/content/platforms/perplexity-adapte
 import type { ExtractedMessage } from '@engram/core';
 
 describe('PerplexityAdapter', () => {
+  let mockLocation: { pathname: string; href: string };
+
   beforeEach(() => {
+    // Create a mock location object with writable properties
+    mockLocation = {
+      pathname: '/search/test-search-id',
+      href: 'https://www.perplexity.ai/search/test-search-id',
+    };
+
     // Mock window.location
     Object.defineProperty(window, 'location', {
-      value: {
-        pathname: '/search/test-search-id',
-        href: 'https://www.perplexity.ai/search/test-search-id',
-      },
+      value: mockLocation,
       writable: true,
+      configurable: true,
     });
     document.body.innerHTML = '';
   });
