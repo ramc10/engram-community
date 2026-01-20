@@ -434,10 +434,7 @@ export class SyncManager implements ISyncManager {
           }
 
           // Save the memory to local storage
-          await this.storage.saveMemory(operation.payload as any, {
-            skipInitialSave: false,
-            useAtomicTransaction: true,
-          });
+          await this.storage.saveMemory(operation.payload as any);
           console.log(`[SyncManager] Added memory from remote: ${operation.memoryId}`);
           break;
         }
@@ -454,10 +451,7 @@ export class SyncManager implements ISyncManager {
           if (!existing) {
             console.warn(`[SyncManager] Cannot update non-existent memory: ${operation.memoryId}`);
             // Treat as add operation instead
-            await this.storage.saveMemory(operation.payload as any, {
-              skipInitialSave: false,
-              useAtomicTransaction: true,
-            });
+            await this.storage.saveMemory(operation.payload as any);
             return;
           }
 
