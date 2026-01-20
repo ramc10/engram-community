@@ -535,7 +535,7 @@ async function handleAuthRegister(
       const keyPair = await crypto.generateDeviceKeyPair();
 
       // Store private key (base64 encoded for string storage)
-      const privateKeyBase64 = btoa(String.fromCharCode(...Array.from(keyPair.privateKey)));
+      const privateKeyBase64 = uint8ArrayToBase64(keyPair.privateKey);
       await storage.setMetadata('devicePrivateKey', privateKeyBase64);
 
       // Store public key (already base64 encoded)

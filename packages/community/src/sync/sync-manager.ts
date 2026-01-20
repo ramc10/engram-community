@@ -10,7 +10,7 @@
  * - Emit events for UI updates
  */
 
-import { SyncState, ISyncManager, SyncOperation, incrementClock, stringToUint8Array } from '@engram/core';
+import { SyncState, ISyncManager, SyncOperation, incrementClock, stringToUint8Array, base64ToUint8Array, uint8ArrayToBase64 } from '@engram/core';
 import { StorageService } from '../lib/storage';
 import { SyncStateMachine } from './state-machine';
 import { WebSocketClient, DEFAULT_WEBSOCKET_CONFIG } from './ws-client';
@@ -103,7 +103,7 @@ export class SyncManager implements ISyncManager {
 
     if (storedKey) {
       // Convert from base64 to Uint8Array
-      this.devicePrivateKey = Uint8Array.from(atob(storedKey), c => c.charCodeAt(0));
+      this.devicePrivateKey = base64ToUint8Array(storedKey);
       console.log('[SyncManager] Loaded existing device signing key');
     } else {
       // Generate new key pair
@@ -112,7 +112,7 @@ export class SyncManager implements ISyncManager {
       this.devicePrivateKey = keyPair.privateKey;
 
       // Store private key (base64 encoded)
-      const keyBase64 = btoa(String.fromCharCode(...Array.from(keyPair.privateKey)));
+      const keyBase64 = uint8ArrayToBase64(keyPair.privateKey);
       await this.storage.setMetadata('devicePrivateKey', keyBase64);
 
       // Store public key separately for easy access
