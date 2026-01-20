@@ -165,12 +165,14 @@ export class PerplexityAdapter implements IPlatformAdapter {
       }
 
       const content = this.extractTextContent(contentElement as HTMLElement);
-      if (!content || content.trim().length === 0) {
-        return null;
-      }
 
       // Extract code blocks
       const codeBlocks = this.extractCodeBlocks(element);
+
+      // Reject only if both content and code blocks are empty
+      if ((!content || content.trim().length === 0) && codeBlocks.length === 0) {
+        return null;
+      }
 
       // Extract sources (Perplexity-specific)
       const sources = this.extractSources(element);
@@ -194,7 +196,7 @@ export class PerplexityAdapter implements IPlatformAdapter {
 
       return {
         role,
-        content,
+        content: content || '', // Ensure content is at least empty string
         timestamp,
         conversationId,
         metadata: {
@@ -469,8 +471,11 @@ export class PerplexityAdapter implements IPlatformAdapter {
       return;
     }
 
-    // Check for duplicate content (same text already processed)
-    if (this.processedContents.has(extracted.content)) {
+    // Create a content signature that includes text and code blocks
+    const contentSignature = this.getContentSignature(extracted);
+
+    // Check for duplicate content (same text and code already processed)
+    if (this.processedContents.has(contentSignature)) {
       return; // Skip duplicate content
     }
 
@@ -485,7 +490,7 @@ export class PerplexityAdapter implements IPlatformAdapter {
 
     // Message is complete - save immediately
     this.lastProcessedMessages.add(messageId);
-    this.processedContents.add(extracted.content);
+    this.processedContents.add(contentSignature);
 
     // Clear any pending debounce timer for this message
     const existingTimer = this.streamingMessages.get(messageId);
@@ -515,17 +520,37 @@ export class PerplexityAdapter implements IPlatformAdapter {
 
       // Reprocess the message (it should be complete now)
       const extracted = this.extractMessage(element);
-      if (extracted &&
-          !this.lastProcessedMessages.has(messageId) &&
-          !this.processedContents.has(extracted.content)) {
-        this.lastProcessedMessages.add(messageId);
-        this.processedContents.add(extracted.content);
-        this.observerCallback?.(extracted);
-        console.log(`Perplexity adapter: Saved streamed message ${messageId}`);
+      if (extracted) {
+        const contentSignature = this.getContentSignature(extracted);
+        if (!this.lastProcessedMessages.has(messageId) &&
+            !this.processedContents.has(contentSignature)) {
+          this.lastProcessedMessages.add(messageId);
+          this.processedContents.add(contentSignature);
+          this.observerCallback?.(extracted);
+          console.log(`Perplexity adapter: Saved streamed message ${messageId}`);
+        }
       }
     }, 2000); // 2 second delay after last update
 
     this.streamingMessages.set(messageId, timer);
+  }
+
+  /**
+   * Generate content signature for deduplication
+   * Includes both text content and code blocks
+   */
+  private getContentSignature(message: ExtractedMessage): string {
+    let signature = message.content;
+
+    // Include code blocks in signature to differentiate messages with same text but different code
+    if (message.metadata?.codeBlocks && message.metadata.codeBlocks.length > 0) {
+      const codeSignature = message.metadata.codeBlocks
+        .map(block => `${block.language}:${block.code}`)
+        .join('|');
+      signature += `||CODE:${codeSignature}`;
+    }
+
+    return signature;
   }
 
   /**
