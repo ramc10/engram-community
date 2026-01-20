@@ -50,6 +50,7 @@ export class PerplexityAdapter implements IPlatformAdapter {
   private observer: MutationObserver | null = null;
   private observerCallback: ((message: ExtractedMessage) => void) | null = null;
   private lastProcessedMessages = new Set<string>();
+  private processedContents = new Set<string>(); // Track processed content to avoid duplicates
   private streamingMessages = new Map<string, number>(); // Track streaming messages with debounce timers
 
   /**
@@ -71,6 +72,7 @@ export class PerplexityAdapter implements IPlatformAdapter {
   async initialize(): Promise<void> {
     // Clear any previous state
     this.lastProcessedMessages.clear();
+    this.processedContents.clear();
 
     // Wait for page to be ready
     if (document.readyState === 'loading') {
@@ -86,6 +88,7 @@ export class PerplexityAdapter implements IPlatformAdapter {
   destroy(): void {
     this.stopObserving();
     this.lastProcessedMessages.clear();
+    this.processedContents.clear();
 
     // Clear all streaming timers
     this.streamingMessages.forEach(timer => window.clearTimeout(timer));
@@ -121,22 +124,21 @@ export class PerplexityAdapter implements IPlatformAdapter {
    * Determine message role from element
    */
   private determineRole(element: HTMLElement): Role | null {
-    // Check for user class or data attribute
+    // Check for explicit user class or data attribute first
     if (element.classList.contains('user') ||
         element.getAttribute('data-role') === 'user' ||
         element.className.includes('user')) {
       return 'user';
     }
 
-    // Check for assistant indicators
-    if (element.querySelector('.prose') ||
-        element.querySelector('.MessageContent') ||
-        element.classList.contains('assistant') ||
+    // Check for explicit assistant class or data attribute
+    if (element.classList.contains('assistant') ||
         element.getAttribute('data-role') === 'assistant') {
       return 'assistant';
     }
 
-    // Default to assistant for messages with content
+    // Check for content - if has content, default to assistant
+    // (User messages should have been caught by class check above)
     const hasContent = element.querySelector(SELECTORS.contentSelector);
     if (hasContent) {
       return 'assistant';
@@ -461,6 +463,17 @@ export class PerplexityAdapter implements IPlatformAdapter {
       return;
     }
 
+    // Extract message first to check content duplication
+    const extracted = this.extractMessage(element);
+    if (!extracted) {
+      return;
+    }
+
+    // Check for duplicate content (same text already processed)
+    if (this.processedContents.has(extracted.content)) {
+      return; // Skip duplicate content
+    }
+
     // Check if message is still streaming
     const isStreaming = this.isMessageStreaming(element);
 
@@ -470,21 +483,19 @@ export class PerplexityAdapter implements IPlatformAdapter {
       return;
     }
 
-    // Message is complete - extract and save immediately
-    const extracted = this.extractMessage(element);
-    if (extracted) {
-      this.lastProcessedMessages.add(messageId);
+    // Message is complete - save immediately
+    this.lastProcessedMessages.add(messageId);
+    this.processedContents.add(extracted.content);
 
-      // Clear any pending debounce timer for this message
-      const existingTimer = this.streamingMessages.get(messageId);
-      if (existingTimer) {
-        window.clearTimeout(existingTimer);
-        this.streamingMessages.delete(messageId);
-      }
-
-      this.observerCallback(extracted);
-      console.log(`Perplexity adapter: Saved complete message ${messageId}${forceImmediate ? ' (immediate)' : ''}`);
+    // Clear any pending debounce timer for this message
+    const existingTimer = this.streamingMessages.get(messageId);
+    if (existingTimer) {
+      window.clearTimeout(existingTimer);
+      this.streamingMessages.delete(messageId);
     }
+
+    this.observerCallback(extracted);
+    console.log(`Perplexity adapter: Saved complete message ${messageId}${forceImmediate ? ' (immediate)' : ''}`);
   }
 
   /**
@@ -504,8 +515,11 @@ export class PerplexityAdapter implements IPlatformAdapter {
 
       // Reprocess the message (it should be complete now)
       const extracted = this.extractMessage(element);
-      if (extracted && !this.lastProcessedMessages.has(messageId)) {
+      if (extracted &&
+          !this.lastProcessedMessages.has(messageId) &&
+          !this.processedContents.has(extracted.content)) {
         this.lastProcessedMessages.add(messageId);
+        this.processedContents.add(extracted.content);
         this.observerCallback?.(extracted);
         console.log(`Perplexity adapter: Saved streamed message ${messageId}`);
       }
