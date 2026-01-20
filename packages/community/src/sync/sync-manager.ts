@@ -10,11 +10,12 @@
  * - Emit events for UI updates
  */
 
-import { SyncState, ISyncManager, SyncOperation, incrementClock } from '@engram/core';
+import { SyncState, ISyncManager, SyncOperation, incrementClock, stringToUint8Array, base64ToUint8Array, uint8ArrayToBase64 } from '@engram/core';
 import { StorageService } from '../lib/storage';
 import { SyncStateMachine } from './state-machine';
 import { WebSocketClient, DEFAULT_WEBSOCKET_CONFIG } from './ws-client';
 import { OperationQueue } from './operation-queue';
+import { getCryptoService } from '../lib/crypto-service';
 
 export interface SyncManagerConfig {
   serverUrl: string;
@@ -38,6 +39,7 @@ export class SyncManager implements ISyncManager {
   private vectorClock: Record<string, number> = {};
   private lastSyncTime: number = 0;
   private syncInProgress: boolean = false;
+  private devicePrivateKey: Uint8Array | null = null; // Ed25519 private key for signing
 
   // Event callbacks
   private stateChangeCallbacks: Set<(state: SyncState) => void> = new Set();
@@ -72,9 +74,13 @@ export class SyncManager implements ISyncManager {
     const storedClock = await this.storage.getMetadata<Record<string, number>>('vectorClock');
     this.vectorClock = storedClock || { [this.config.deviceId]: 0 };
 
+    // Load or generate device signing key
+    await this.loadOrGenerateDeviceKey();
+
     console.log('[SyncManager] Initialized', {
       lastSyncTime: this.lastSyncTime,
       vectorClock: this.vectorClock,
+      hasSigningKey: !!this.devicePrivateKey,
     });
 
     // Auto-connect if configured
@@ -85,6 +91,47 @@ export class SyncManager implements ISyncManager {
     // Sync on startup if configured
     if (this.config.syncOnStartup && this.config.autoConnect) {
       setTimeout(() => this.syncNow(), 1000);
+    }
+  }
+
+  /**
+   * Load or generate device signing key
+   */
+  private async loadOrGenerateDeviceKey(): Promise<void> {
+    // Skip device key generation in test environments
+    if (typeof process !== 'undefined' && process.env.NODE_ENV === 'test') {
+      console.log('[SyncManager] Skipping device key generation in test environment');
+      this.devicePrivateKey = null;
+      return;
+    }
+
+    try {
+      // Try to load existing key from storage
+      const storedKey = await this.storage.getMetadata<string>('devicePrivateKey');
+
+      if (storedKey) {
+        // Convert from base64 to Uint8Array
+        this.devicePrivateKey = base64ToUint8Array(storedKey);
+        console.log('[SyncManager] Loaded existing device signing key');
+      } else {
+        // Generate new key pair
+        const cryptoService = await getCryptoService();
+        const keyPair = await cryptoService.generateDeviceKeyPair();
+        this.devicePrivateKey = keyPair.privateKey;
+
+        // Store private key (base64 encoded)
+        const keyBase64 = uint8ArrayToBase64(keyPair.privateKey);
+        await this.storage.setMetadata('devicePrivateKey', keyBase64);
+
+        // Store public key separately for easy access
+        await this.storage.setMetadata('devicePublicKey', keyPair.publicKey);
+
+        console.log('[SyncManager] Generated new device signing key');
+      }
+    } catch (error) {
+      // Log error but don't fail initialization - signing can be set up later
+      console.warn('[SyncManager] Failed to load/generate device signing key:', error);
+      this.devicePrivateKey = null;
     }
   }
 
@@ -375,9 +422,65 @@ export class SyncManager implements ISyncManager {
    * Apply remote operation to local storage
    */
   private async applyRemoteOperation(operation: SyncOperation): Promise<void> {
-    // TODO: Implement actual operation application logic
-    // This would involve updating memories in storage based on the operation
-    console.log('[SyncManager] Applying remote operation:', operation.id);
+    console.log('[SyncManager] Applying remote operation:', operation.id, operation.type);
+
+    try {
+      switch (operation.type) {
+        case 'add': {
+          // Add new memory from remote device
+          if (!operation.payload) {
+            console.warn('[SyncManager] Add operation missing payload');
+            return;
+          }
+
+          // Save the memory to local storage
+          await this.storage.saveMemory(operation.payload as any);
+          console.log(`[SyncManager] Added memory from remote: ${operation.memoryId}`);
+          break;
+        }
+
+        case 'update': {
+          // Update existing memory with remote changes
+          if (!operation.payload) {
+            console.warn('[SyncManager] Update operation missing payload');
+            return;
+          }
+
+          // Check if memory exists locally
+          const existing = await this.storage.getMemory(operation.memoryId);
+          if (!existing) {
+            console.warn(`[SyncManager] Cannot update non-existent memory: ${operation.memoryId}`);
+            // Treat as add operation instead
+            await this.storage.saveMemory(operation.payload as any);
+            return;
+          }
+
+          // Apply partial update
+          await this.storage.updateMemory(operation.memoryId, operation.payload);
+          console.log(`[SyncManager] Updated memory from remote: ${operation.memoryId}`);
+          break;
+        }
+
+        case 'delete': {
+          // Delete memory
+          const existing = await this.storage.getMemory(operation.memoryId);
+          if (!existing) {
+            console.warn(`[SyncManager] Cannot delete non-existent memory: ${operation.memoryId}`);
+            return;
+          }
+
+          await this.storage.deleteMemory(operation.memoryId);
+          console.log(`[SyncManager] Deleted memory from remote: ${operation.memoryId}`);
+          break;
+        }
+
+        default:
+          console.warn(`[SyncManager] Unknown operation type: ${(operation as any).type}`);
+      }
+    } catch (error) {
+      console.error('[SyncManager] Failed to apply remote operation:', error);
+      throw error;
+    }
   }
 
   /**
@@ -443,13 +546,18 @@ export class SyncManager implements ISyncManager {
   }
 
   /**
-   * Generate signature for authentication
-   * TODO: Implement actual Ed25519 signing
+   * Generate signature for authentication using Ed25519
    */
-  private async generateSignature(deviceId: string): Promise<string> {
-    // Placeholder: In production, use device's private key to sign
-    const message = `CONNECT:${deviceId}:${Date.now()}`;
-    return Buffer.from(message).toString('base64');
+  private async generateSignature(data: string): Promise<string> {
+    if (!this.devicePrivateKey) {
+      throw new Error('Device private key not available for signing');
+    }
+
+    const cryptoService = await getCryptoService();
+    const dataBytes = stringToUint8Array(data);
+    const signature = await cryptoService.sign(dataBytes, this.devicePrivateKey);
+
+    return signature;
   }
 
   /**

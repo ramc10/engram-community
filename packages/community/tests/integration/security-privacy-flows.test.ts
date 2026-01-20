@@ -81,6 +81,11 @@ global.chrome = {
     },
 } as any;
 
+// Mock navigator
+global.navigator = {
+    userAgent: 'Mozilla/5.0 (Test Environment) Chrome/120.0.0.0',
+} as any;
+
 const mockFetch = jest.fn<any>();
 (global as any).fetch = mockFetch;
 
@@ -199,6 +204,7 @@ jest.mock('../../src/lib/auth-client', () => ({
         })),
         logout: jest.fn(() => Promise.resolve({ success: true })),
         updateUserMetadata: jest.fn(() => Promise.resolve({ success: true })),
+        registerDevice: jest.fn(() => Promise.resolve()),
         getSupabaseClient: jest.fn(() => ({})),
     },
 }));

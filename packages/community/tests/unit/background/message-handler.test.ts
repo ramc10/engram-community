@@ -33,6 +33,18 @@ jest.mock('../../../src/lib/cloud-sync', () => ({
   })),
 }));
 
+// Mock global navigator for device registration
+global.navigator = {
+  userAgent: 'Mozilla/5.0 (Test) Chrome/120.0.0.0',
+} as any;
+
+// Mock chrome runtime for device registration
+global.chrome = {
+  runtime: {
+    getManifest: () => ({ version: '1.0.0-test' }),
+  },
+} as any;
+
 describe('Message Handler', () => {
   let mockService: any;
   let mockStorage: any;
@@ -58,6 +70,9 @@ describe('Message Handler', () => {
         model: 'gpt-4o-mini',
         batchSize: 5,
       }),
+      getSyncQueueTable: jest.fn<any>().mockReturnValue({
+        count: jest.fn<any>().mockResolvedValue(0),
+      }),
     };
 
     mockCrypto = {
@@ -79,6 +94,11 @@ describe('Message Handler', () => {
       deriveKey: jest.fn<any>().mockResolvedValue(createMasterKey()),
       generateEncryptionKey: jest.fn<any>().mockReturnValue(new Uint8Array(32)),
       generateSalt: jest.fn<any>().mockReturnValue(new Uint8Array(16)),
+      generateDeviceKeyPair: jest.fn<any>().mockResolvedValue({
+        privateKey: new Uint8Array(32),
+        publicKey: 'mock-public-key-base64',
+        algorithm: 'Ed25519',
+      }),
     };
 
     mockAuthClient = {
@@ -676,6 +696,17 @@ describe('Message Handler', () => {
       );
       expect(mockService.setMasterKey).toHaveBeenCalled();
       expect(mockService.persistMasterKey).toHaveBeenCalled();
+      // Verify device key pair generation and storage
+      expect(mockCrypto.generateDeviceKeyPair).toHaveBeenCalled();
+      expect(mockStorage.setMetadata).toHaveBeenCalledWith('devicePrivateKey', expect.any(String));
+      expect(mockStorage.setMetadata).toHaveBeenCalledWith('devicePublicKey', 'mock-public-key-base64');
+      // Verify device registration with public key
+      expect(mockAuthClient.registerDevice).toHaveBeenCalledWith(
+        'device-123',
+        expect.stringContaining('Browser Extension'),
+        'mock-public-key-base64',
+        expect.any(Object)
+      );
     });
 
     it('should require email and password', async () => {
