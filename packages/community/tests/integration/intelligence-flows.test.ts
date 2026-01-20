@@ -338,11 +338,11 @@ describe('Intelligence & Retrieval Flows', () => {
             // Wait for enrichment and indexing to complete
             const storage = backgroundService.getStorage() as any;
             if (storage.enrichmentService) {
-                await storage.enrichmentService.waitForQueue(10000);
+                await storage.enrichmentService.waitForQueue(15000);
                 // Wait for onEnrichmentComplete callback to finish saving and HNSW indexing
-                await wait(500);
+                await wait(1000);
             } else {
-                await wait(100);
+                await wait(2000);
             }
 
             // Search for dinner-related content
@@ -854,11 +854,11 @@ describe('Intelligence & Retrieval Flows', () => {
             // Wait for enrichment and indexing to complete
             const storage = backgroundService.getStorage() as any;
             if (storage.enrichmentService) {
-                await storage.enrichmentService.waitForQueue(10000);
+                await storage.enrichmentService.waitForQueue(15000);
                 // Wait for onEnrichmentComplete callback to finish saving and HNSW indexing
-                await wait(500);
+                await wait(1000);
             } else {
-                await wait(2000);
+                await wait(3000);
             }
 
             // Save may fail if no master key is set

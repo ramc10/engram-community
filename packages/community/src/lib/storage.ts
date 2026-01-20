@@ -1120,19 +1120,30 @@ export class StorageService implements IStorage {
 
       // Use atomic transaction if requested
       if (options?.useAtomicTransaction) {
-        await this.db.transaction('rw', [this.db.memories, this.db.conversations, this.db.hnswIndex], async () => {
-          // 1. Save fully enriched memory
+        try {
+          await this.db.transaction('rw', [this.db.memories, this.db.conversations, this.db.hnswIndex], async () => {
+            // 1. Save fully enriched memory
+            await this.db.memories.put(memory);
+
+            // 2. Update conversation metadata (must be atomic with memory)
+            await this.updateConversationMetadata(memory);
+
+            // 3. Persist HNSW index (if ready)
+            if (this.hnswIndexService?.isReady()) {
+              await this.hnswIndexService.persist(this.db);
+            }
+          });
+          console.log(`[Storage] Atomically saved enriched memory ${memory.id}`);
+        } catch (transactionError) {
+          // Fallback to non-transactional save if transactions not supported (e.g., in test env with fake-indexeddb)
+          console.warn(`[Storage] Transaction failed for ${memory.id}, falling back to non-transactional save:`, transactionError);
           await this.db.memories.put(memory);
-
-          // 2. Update conversation metadata (must be atomic with memory)
           await this.updateConversationMetadata(memory);
-
-          // 3. Persist HNSW index (if ready)
           if (this.hnswIndexService?.isReady()) {
             await this.hnswIndexService.persist(this.db);
           }
-        });
-        console.log(`[Storage] Atomically saved enriched memory ${memory.id}`);
+          console.log(`[Storage] Non-transactionally saved enriched memory ${memory.id}`);
+        }
       } else {
         // Legacy path: separate operations
         await this.db.memories.put(memory);

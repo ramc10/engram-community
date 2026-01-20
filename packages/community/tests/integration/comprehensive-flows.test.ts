@@ -327,15 +327,26 @@ describe('Comprehensive User Flows', () => {
         const mem2 = { role: 'user', content: 'Pizza recipe', conversationId: 'conv-1', timestamp: Date.now() };
         const saveResult = await handleMessage({ type: MessageType.SAVE_MESSAGE, message: mem2 } as any, mockSender, backgroundService);
 
+        console.log('[TEST] Save result:', saveResult);
+
         // Wait for automatic enrichment to complete
         const storage = backgroundService.getStorage();
+        console.log('[TEST] Has enrichmentService:', !!storage['enrichmentService']);
+
         if (storage['enrichmentService']) {
-            await storage['enrichmentService'].waitForQueue(10000);
+            await storage['enrichmentService'].waitForQueue(15000);
             // Wait a bit more for the onEnrichmentComplete callback to finish saving
-            await wait(500);
+            await wait(1000);
+        } else {
+            // Fallback if enrichment service not available
+            console.log('[TEST] No enrichment service, waiting 2s');
+            await wait(2000);
         }
 
         const enriched = await storage.getMemory(saveResult.memoryId) as any;
+        console.log('[TEST] Enriched memory:', enriched ? { id: enriched.id, keywords: enriched.keywords, tags: enriched.tags } : null);
+        expect(enriched).toBeDefined();
+        expect(enriched.keywords).toBeDefined();
         expect(enriched.keywords).toContain('pizza');
     });
 

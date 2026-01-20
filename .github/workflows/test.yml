@@ -148,7 +148,7 @@ jobs:
         run: npm run build --workspace=packages/core
 
       - name: Verify Encryption Consistency
-        run: npm run test:integration -- tests/integration/auth-encryption.test.ts
+        run: npx jest tests/integration/auth-encryption.test.ts
         working-directory: packages/community
 
       - name: Verify Auth Metadata Security
