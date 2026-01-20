@@ -33,6 +33,18 @@ jest.mock('../../../src/lib/cloud-sync', () => ({
   })),
 }));
 
+// Mock global navigator for device registration
+global.navigator = {
+  userAgent: 'Mozilla/5.0 (Test) Chrome/120.0.0.0',
+} as any;
+
+// Mock chrome runtime for device registration
+global.chrome = {
+  runtime: {
+    getManifest: () => ({ version: '1.0.0-test' }),
+  },
+} as any;
+
 describe('Message Handler', () => {
   let mockService: any;
   let mockStorage: any;
