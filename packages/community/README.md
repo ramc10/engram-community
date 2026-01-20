@@ -24,7 +24,8 @@ Browser extension for capturing and syncing AI conversations.
    - Create a project in Google Cloud Console
    - Set up OAuth 2.0 credentials
    - Add your Client ID to `PLASMO_PUBLIC_GOOGLE_CLIENT_ID` in `.env`
-   - Required to enable Google Sign-In functionality
+   - **⚠️ Important**: Configure OAuth redirect URLs for Chrome extension
+   - **See [SUPABASE_SETUP.md](../../SUPABASE_SETUP.md) for detailed setup instructions**
 
 ## Development
 ```bash

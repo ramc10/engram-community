@@ -202,6 +202,8 @@ PLASMO_PUBLIC_SUPABASE_ANON_KEY=xxx
 
 ```
 
+**⚠️ Important for Google OAuth**: If you're setting up Google Sign-In, please see **[SUPABASE_SETUP.md](SUPABASE_SETUP.md)** for detailed configuration instructions to avoid redirect URL issues.
+
 ---
 
 ## 🤝 Contributing
