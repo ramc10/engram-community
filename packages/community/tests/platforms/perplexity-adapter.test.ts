@@ -292,6 +292,9 @@ describe('PerplexityAdapter', () => {
 
       await perplexityAdapter.observeMessages(messageCallback);
 
+      // Small wait to ensure processExistingMessagesWithRetry completes
+      await new Promise(resolve => setTimeout(resolve, 100));
+
       expect(messageCallback).toHaveBeenCalledTimes(1);
       const call = messageCallback.mock.calls[0][0] as ExtractedMessage;
       expect(call.content).toBe('Existing message');
@@ -330,6 +333,9 @@ describe('PerplexityAdapter', () => {
       `;
 
       await perplexityAdapter.observeMessages(messageCallback);
+
+      // Small wait to ensure processExistingMessagesWithRetry completes
+      await new Promise(resolve => setTimeout(resolve, 100));
 
       expect(messageCallback).toHaveBeenCalledTimes(1);
     });
