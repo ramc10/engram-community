@@ -282,7 +282,7 @@ describe('PerplexityAdapter', () => {
       perplexityAdapter.stopObserving();
     });
 
-    it('should observe existing messages on start', () => {
+    it('should observe existing messages on start', async () => {
       const container = document.querySelector('main')!;
       container.innerHTML = `
         <div class="MessageContainer user">
@@ -290,7 +290,7 @@ describe('PerplexityAdapter', () => {
         </div>
       `;
 
-      perplexityAdapter.observeMessages(messageCallback);
+      await perplexityAdapter.observeMessages(messageCallback);
 
       expect(messageCallback).toHaveBeenCalledTimes(1);
       const call = messageCallback.mock.calls[0][0] as ExtractedMessage;
@@ -318,7 +318,7 @@ describe('PerplexityAdapter', () => {
       expect(call.content).toBe('New message');
     }, 10000);
 
-    it('should not process duplicate messages', () => {
+    it('should not process duplicate messages', async () => {
       const container = document.querySelector('main')!;
       container.innerHTML = `
         <div class="message">
@@ -329,13 +329,13 @@ describe('PerplexityAdapter', () => {
         </div>
       `;
 
-      perplexityAdapter.observeMessages(messageCallback);
+      await perplexityAdapter.observeMessages(messageCallback);
 
       expect(messageCallback).toHaveBeenCalledTimes(1);
     });
 
-    it('should stop observing when requested', () => {
-      perplexityAdapter.observeMessages(messageCallback);
+    it('should stop observing when requested', async () => {
+      await perplexityAdapter.observeMessages(messageCallback);
       perplexityAdapter.stopObserving();
 
       const container = document.querySelector('main')!;
