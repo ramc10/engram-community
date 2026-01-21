@@ -298,24 +298,25 @@ describe('PerplexityAdapter', () => {
       expect(call.role).toBe('user');
     });
 
-    it('should detect new messages added to DOM', (done) => {
-      perplexityAdapter.observeMessages(messageCallback);
+    it('should detect new messages added to DOM', async () => {
+      await perplexityAdapter.observeMessages(messageCallback);
 
-      setTimeout(() => {
-        const container = document.querySelector('main')!;
-        const newMessage = document.createElement('div');
-        newMessage.className = 'message';
-        newMessage.innerHTML = '<div class="prose">New message</div>';
-        container.appendChild(newMessage);
+      // Wait for observer to be fully set up
+      await new Promise(resolve => setTimeout(resolve, 500));
 
-        setTimeout(() => {
-          expect(messageCallback).toHaveBeenCalled();
-          const call = messageCallback.mock.calls[0][0] as ExtractedMessage;
-          expect(call.content).toBe('New message');
-          done();
-        }, 100);
-      }, 50);
-    });
+      const container = document.querySelector('main')!;
+      const newMessage = document.createElement('div');
+      newMessage.className = 'message';
+      newMessage.innerHTML = '<div class="prose">New message</div>';
+      container.appendChild(newMessage);
+
+      // Wait for mutation observer + streaming debounce (2000ms) + buffer
+      await new Promise(resolve => setTimeout(resolve, 3000));
+
+      expect(messageCallback).toHaveBeenCalled();
+      const call = messageCallback.mock.calls[0][0] as ExtractedMessage;
+      expect(call.content).toBe('New message');
+    }, 10000);
 
     it('should not process duplicate messages', () => {
       const container = document.querySelector('main')!;
@@ -359,27 +360,28 @@ describe('PerplexityAdapter', () => {
       expect(() => perplexityAdapter.observeMessages(messageCallback)).not.toThrow();
     });
 
-    it('should detect messages in nested structures', (done) => {
-      perplexityAdapter.observeMessages(messageCallback);
+    it('should detect messages in nested structures', async () => {
+      await perplexityAdapter.observeMessages(messageCallback);
 
-      setTimeout(() => {
-        const container = document.querySelector('main')!;
-        const wrapper = document.createElement('div');
-        wrapper.className = 'conversation-wrapper';
-        const newMessage = document.createElement('div');
-        newMessage.className = 'MessageContainer';
-        newMessage.innerHTML = '<div class="prose">Nested message</div>';
-        wrapper.appendChild(newMessage);
-        container.appendChild(wrapper);
+      // Wait for observer to be fully set up
+      await new Promise(resolve => setTimeout(resolve, 500));
 
-        setTimeout(() => {
-          expect(messageCallback).toHaveBeenCalled();
-          const call = messageCallback.mock.calls[0][0] as ExtractedMessage;
-          expect(call.content).toBe('Nested message');
-          done();
-        }, 100);
-      }, 50);
-    });
+      const container = document.querySelector('main')!;
+      const wrapper = document.createElement('div');
+      wrapper.className = 'conversation-wrapper';
+      const newMessage = document.createElement('div');
+      newMessage.className = 'MessageContainer';
+      newMessage.innerHTML = '<div class="prose">Nested message</div>';
+      wrapper.appendChild(newMessage);
+      container.appendChild(wrapper);
+
+      // Wait for mutation observer + streaming debounce (2000ms) + buffer
+      await new Promise(resolve => setTimeout(resolve, 3000));
+
+      expect(messageCallback).toHaveBeenCalled();
+      const call = messageCallback.mock.calls[0][0] as ExtractedMessage;
+      expect(call.content).toBe('Nested message');
+    }, 10000);
   });
 
   describe('UI Injection', () => {
