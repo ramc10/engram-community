@@ -4,17 +4,23 @@
 
 import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
 import { perplexityAdapter } from '../../src/content/platforms/perplexity-adapter';
-import { ExtractedMessage } from 'engram-shared/types/platform-adapter';
+import type { ExtractedMessage } from '@engram/core';
 
 describe('PerplexityAdapter', () => {
+  let mockLocation: { pathname: string; href: string };
+
   beforeEach(() => {
+    // Create a mock location object with writable properties
+    mockLocation = {
+      pathname: '/search/test-search-id',
+      href: 'https://www.perplexity.ai/search/test-search-id',
+    };
+
     // Mock window.location
     Object.defineProperty(window, 'location', {
-      value: {
-        pathname: '/search/test-search-id',
-        href: 'https://www.perplexity.ai/search/test-search-id',
-      },
+      value: mockLocation,
       writable: true,
+      configurable: true,
     });
     document.body.innerHTML = '';
   });
@@ -167,12 +173,15 @@ describe('PerplexityAdapter', () => {
     it('should detect language from parent pre element', () => {
       const messageElement = document.createElement('div');
       messageElement.className = 'message';
+      const contentWrapper = document.createElement('div');
+      contentWrapper.className = 'prose';
       const preElement = document.createElement('pre');
       preElement.className = 'language-typescript';
       const codeElement = document.createElement('code');
       codeElement.textContent = 'const x: number = 5;';
       preElement.appendChild(codeElement);
-      messageElement.appendChild(preElement);
+      contentWrapper.appendChild(preElement);
+      messageElement.appendChild(contentWrapper);
 
       const message = perplexityAdapter.extractMessage(messageElement);
 
@@ -276,7 +285,7 @@ describe('PerplexityAdapter', () => {
       perplexityAdapter.stopObserving();
     });
 
-    it('should observe existing messages on start', () => {
+    it('should observe existing messages on start', async () => {
       const container = document.querySelector('main')!;
       container.innerHTML = `
         <div class="MessageContainer user">
@@ -284,7 +293,10 @@ describe('PerplexityAdapter', () => {
         </div>
       `;
 
-      perplexityAdapter.observeMessages(messageCallback);
+      await perplexityAdapter.observeMessages(messageCallback);
+
+      // Small wait to ensure processExistingMessagesWithRetry completes
+      await new Promise(resolve => setTimeout(resolve, 100));
 
       expect(messageCallback).toHaveBeenCalledTimes(1);
       const call = messageCallback.mock.calls[0][0] as ExtractedMessage;
@@ -292,26 +304,27 @@ describe('PerplexityAdapter', () => {
       expect(call.role).toBe('user');
     });
 
-    it('should detect new messages added to DOM', (done) => {
-      perplexityAdapter.observeMessages(messageCallback);
+    it('should detect new messages added to DOM', async () => {
+      await perplexityAdapter.observeMessages(messageCallback);
 
-      setTimeout(() => {
-        const container = document.querySelector('main')!;
-        const newMessage = document.createElement('div');
-        newMessage.className = 'message';
-        newMessage.innerHTML = '<div class="prose">New message</div>';
-        container.appendChild(newMessage);
+      // Wait for observer to be fully set up
+      await new Promise(resolve => setTimeout(resolve, 500));
 
-        setTimeout(() => {
-          expect(messageCallback).toHaveBeenCalled();
-          const call = messageCallback.mock.calls[0][0] as ExtractedMessage;
-          expect(call.content).toBe('New message');
-          done();
-        }, 100);
-      }, 50);
-    });
+      const container = document.querySelector('main')!;
+      const newMessage = document.createElement('div');
+      newMessage.className = 'message';
+      newMessage.innerHTML = '<div class="prose">New message</div>';
+      container.appendChild(newMessage);
 
-    it('should not process duplicate messages', () => {
+      // Wait for mutation observer + streaming debounce (2000ms) + buffer
+      await new Promise(resolve => setTimeout(resolve, 3000));
+
+      expect(messageCallback).toHaveBeenCalled();
+      const call = messageCallback.mock.calls[0][0] as ExtractedMessage;
+      expect(call.content).toBe('New message');
+    }, 10000);
+
+    it('should not process duplicate messages', async () => {
       const container = document.querySelector('main')!;
       container.innerHTML = `
         <div class="message">
@@ -322,13 +335,16 @@ describe('PerplexityAdapter', () => {
         </div>
       `;
 
-      perplexityAdapter.observeMessages(messageCallback);
+      await perplexityAdapter.observeMessages(messageCallback);
+
+      // Small wait to ensure processExistingMessagesWithRetry completes
+      await new Promise(resolve => setTimeout(resolve, 100));
 
       expect(messageCallback).toHaveBeenCalledTimes(1);
     });
 
-    it('should stop observing when requested', () => {
-      perplexityAdapter.observeMessages(messageCallback);
+    it('should stop observing when requested', async () => {
+      await perplexityAdapter.observeMessages(messageCallback);
       perplexityAdapter.stopObserving();
 
       const container = document.querySelector('main')!;
@@ -353,27 +369,28 @@ describe('PerplexityAdapter', () => {
       expect(() => perplexityAdapter.observeMessages(messageCallback)).not.toThrow();
     });
 
-    it('should detect messages in nested structures', (done) => {
-      perplexityAdapter.observeMessages(messageCallback);
+    it('should detect messages in nested structures', async () => {
+      await perplexityAdapter.observeMessages(messageCallback);
 
-      setTimeout(() => {
-        const container = document.querySelector('main')!;
-        const wrapper = document.createElement('div');
-        wrapper.className = 'conversation-wrapper';
-        const newMessage = document.createElement('div');
-        newMessage.className = 'MessageContainer';
-        newMessage.innerHTML = '<div class="prose">Nested message</div>';
-        wrapper.appendChild(newMessage);
-        container.appendChild(wrapper);
+      // Wait for observer to be fully set up
+      await new Promise(resolve => setTimeout(resolve, 500));
 
-        setTimeout(() => {
-          expect(messageCallback).toHaveBeenCalled();
-          const call = messageCallback.mock.calls[0][0] as ExtractedMessage;
-          expect(call.content).toBe('Nested message');
-          done();
-        }, 100);
-      }, 50);
-    });
+      const container = document.querySelector('main')!;
+      const wrapper = document.createElement('div');
+      wrapper.className = 'conversation-wrapper';
+      const newMessage = document.createElement('div');
+      newMessage.className = 'MessageContainer';
+      newMessage.innerHTML = '<div class="prose">Nested message</div>';
+      wrapper.appendChild(newMessage);
+      container.appendChild(wrapper);
+
+      // Wait for mutation observer + streaming debounce (2000ms) + buffer
+      await new Promise(resolve => setTimeout(resolve, 3000));
+
+      expect(messageCallback).toHaveBeenCalled();
+      const call = messageCallback.mock.calls[0][0] as ExtractedMessage;
+      expect(call.content).toBe('Nested message');
+    }, 10000);
   });
 
   describe('UI Injection', () => {

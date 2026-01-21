@@ -6,6 +6,7 @@
 
 import { chatGPTAdapter } from './platforms/chatgpt-adapter';
 import { claudeAdapter } from './platforms/claude-adapter';
+import { perplexityAdapter } from './platforms/perplexity-adapter';
 import { IPlatformAdapter } from '@engram/core';
 import { sendInitRequest, sendSaveMessage } from '../lib/messages';
 import { uiInjector } from './shared/ui-injector';
@@ -89,10 +90,9 @@ class ContentScript {
       return 'claude';
     }
 
-    // TODO: Add Perplexity detection when adapter is ready
-    // if (perplexityAdapter.isCurrentPlatform(url)) {
-    //   return 'perplexity';
-    // }
+    if (perplexityAdapter.isCurrentPlatform(url)) {
+      return 'perplexity';
+    }
 
     return null;
   }
@@ -106,9 +106,8 @@ class ContentScript {
         return chatGPTAdapter;
       case 'claude':
         return claudeAdapter;
-      // TODO: Add Perplexity when adapter is ready
-      // case 'perplexity':
-      //   return perplexityAdapter;
+      case 'perplexity':
+        return perplexityAdapter;
       default:
         return null;
     }
