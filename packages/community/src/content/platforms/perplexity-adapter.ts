@@ -233,7 +233,7 @@ export class PerplexityAdapter implements IPlatformAdapter {
     // Clean up whitespace
     text = text
       .split('\n') // Split into lines
-      .map(line => line.trim()) // Trim each line
+      .map(line => line.trim().replace(/\s+/g, ' ')) // Trim each line and collapse spaces
       .join('\n') // Rejoin
       .replace(/\n{3,}/g, '\n\n') // Max 2 consecutive newlines
       .trim();
@@ -281,13 +281,18 @@ export class PerplexityAdapter implements IPlatformAdapter {
   private extractSources(element: HTMLElement): string[] {
     const sources = new Set<string>();
 
+    // Helper to normalize URL (remove trailing slash)
+    const normalizeUrl = (url: string): string => {
+      return url.endsWith('/') ? url.slice(0, -1) : url;
+    };
+
     // Look for source and citation containers
     const sourceElements = element.querySelectorAll('.source a, .citation a, [class*="source"] a, [class*="citation"] a');
 
     sourceElements.forEach(link => {
       const href = (link as HTMLAnchorElement).href;
       if (href && href.startsWith('http')) {
-        sources.add(href);
+        sources.add(normalizeUrl(href));
       }
     });
 
@@ -297,7 +302,7 @@ export class PerplexityAdapter implements IPlatformAdapter {
       const href = (link as HTMLAnchorElement).href;
       // Only include external links, not internal navigation
       if (href && href.startsWith('http') && !href.includes('perplexity.ai')) {
-        sources.add(href);
+        sources.add(normalizeUrl(href));
       }
     });
 

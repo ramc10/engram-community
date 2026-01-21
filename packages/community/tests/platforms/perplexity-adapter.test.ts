@@ -173,12 +173,15 @@ describe('PerplexityAdapter', () => {
     it('should detect language from parent pre element', () => {
       const messageElement = document.createElement('div');
       messageElement.className = 'message';
+      const contentWrapper = document.createElement('div');
+      contentWrapper.className = 'prose';
       const preElement = document.createElement('pre');
       preElement.className = 'language-typescript';
       const codeElement = document.createElement('code');
       codeElement.textContent = 'const x: number = 5;';
       preElement.appendChild(codeElement);
-      messageElement.appendChild(preElement);
+      contentWrapper.appendChild(preElement);
+      messageElement.appendChild(contentWrapper);
 
       const message = perplexityAdapter.extractMessage(messageElement);
 
