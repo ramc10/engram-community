@@ -40,7 +40,7 @@ export class MemoryBuilder {
     return this;
   }
 
-  withPlatform(platform: 'chatgpt' | 'claude' | 'perplexity'): this {
+  withPlatform(platform: 'chatgpt' | 'claude' | 'perplexity' | 'gemini'): this {
     this.memory.platform = platform;
     return this;
   }

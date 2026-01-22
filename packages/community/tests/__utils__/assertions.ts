@@ -227,7 +227,7 @@ function toHaveEvolution(this: any, received: MemoryWithMemA) {
 function toBeValidMemory(this: any, received: any) {
   const hasId = typeof received.id === 'string';
   const hasConversationId = typeof received.conversationId === 'string';
-  const hasPlatform = ['chatgpt', 'claude', 'perplexity'].includes(received.platform);
+  const hasPlatform = ['chatgpt', 'claude', 'perplexity', 'gemini'].includes(received.platform);
   const hasContent = received.content !== undefined;
   const hasTimestamp = typeof received.timestamp === 'number';
   const hasDeviceId = typeof received.deviceId === 'string';
@@ -245,7 +245,7 @@ function toBeValidMemory(this: any, received: any) {
     const issues: string[] = [];
     if (!hasId) issues.push('id is missing or invalid');
     if (!hasConversationId) issues.push('conversationId is missing or invalid');
-    if (!hasPlatform) issues.push('platform is not one of: chatgpt, claude, perplexity');
+    if (!hasPlatform) issues.push('platform is not one of: chatgpt, claude, perplexity, gemini');
     if (!hasContent) issues.push('content is missing');
     if (!hasTimestamp) issues.push('timestamp is missing or not a number');
     if (!hasDeviceId) issues.push('deviceId is missing or invalid');
