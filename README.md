@@ -9,7 +9,7 @@
 
 **Save, search, and reuse AI chat conversations with end-to-end encryption.**
 
-Engram is a browser extension that captures AI conversations from ChatGPT, Claude, and Perplexity, stores them with end-to-end encryption, and intelligently surfaces relevant context from past conversations.
+Engram is a browser extension that captures AI conversations from ChatGPT, Claude, Perplexity, and Gemini, stores them with end-to-end encryption, and intelligently surfaces relevant context from past conversations.
 
 **🌐 Website:** [theengram.tech](https://theengram.tech)
 **📧 Contact:** artha360.live@gmail.com
@@ -17,7 +17,7 @@ Engram is a browser extension that captures AI conversations from ChatGPT, Claud
 ---
 
 ## ✨ Features
-- ✅ **Multi-platform capture**: ChatGPT, Claude, Perplexity
+- ✅ **Multi-platform capture**: ChatGPT, Claude, Perplexity, Gemini
 - ✅ **End-to-end encryption**: XChaCha20-Poly1305
 - ✅ **Local semantic search**: BGE-Small embeddings + HNSW
 - ✅ **Memory injection**: Automatic context in chat
@@ -133,7 +133,7 @@ packages/community/src/
 │   └── message-handler.ts
 │
 ├── content/              # Content scripts
-│   ├── platforms/        # ChatGPT, Claude, Perplexity
+│   ├── platforms/        # ChatGPT, Claude, Perplexity, Gemini
 │   └── shared/           # Prompt interceptor, UI injector
 │
 ├── lib/                  # Core services

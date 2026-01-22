@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Engram",
   "version": "0.1.0",
-  "description": "Save, search, and reuse AI conversations with end-to-end encryption. Works with ChatGPT, Claude, and Perplexity.",
+  "description": "Save, search, and reuse AI conversations with end-to-end encryption. Works with ChatGPT, Claude, Perplexity, and Gemini.",
   "permissions": [
     "storage",
     "unlimitedStorage",
@@ -12,7 +12,8 @@
   "host_permissions": [
     "https://chatgpt.com/*",
     "https://claude.ai/*",
-    "https://www.perplexity.ai/*"
+    "https://www.perplexity.ai/*",
+    "https://gemini.google.com/*"
   ],
   "background": {
     "service_worker": "background.js",
@@ -23,7 +24,8 @@
       "matches": [
         "https://chatgpt.com/*",
         "https://claude.ai/*",
-        "https://www.perplexity.ai/*"
+        "https://www.perplexity.ai/*",
+        "https://gemini.google.com/*"
       ],
       "js": [
         "content.js"
