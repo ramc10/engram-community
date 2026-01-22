@@ -7,6 +7,7 @@
 import { chatGPTAdapter } from './platforms/chatgpt-adapter';
 import { claudeAdapter } from './platforms/claude-adapter';
 import { perplexityAdapter } from './platforms/perplexity-adapter';
+import { geminiAdapter } from './platforms/gemini-adapter';
 import { IPlatformAdapter } from '@engram/core';
 import { sendInitRequest, sendSaveMessage } from '../lib/messages';
 import { uiInjector } from './shared/ui-injector';
@@ -94,6 +95,10 @@ class ContentScript {
       return 'perplexity';
     }
 
+    if (geminiAdapter.isCurrentPlatform(url)) {
+      return 'gemini';
+    }
+
     return null;
   }
 
@@ -108,6 +113,8 @@ class ContentScript {
         return claudeAdapter;
       case 'perplexity':
         return perplexityAdapter;
+      case 'gemini':
+        return geminiAdapter;
       default:
         return null;
     }
