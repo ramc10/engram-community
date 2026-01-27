@@ -675,48 +675,50 @@ chrome.runtime.onStartup.addListener(async () => {
 });
 
 /**
- * Check if URL is a supported platform (ChatGPT, Claude, or Perplexity)
+ * Check if URL is a known AI chat platform with a dedicated adapter
  */
-function isSupportedPlatform(url?: string): boolean {
+function isAIPlatform(url?: string): boolean {
   if (!url) return false;
 
-  const supportedDomains = [
+  const aiDomains = [
     'chat.openai.com',
     'chatgpt.com',
     'claude.ai',
     'www.perplexity.ai',
+    'gemini.google.com',
   ];
 
   try {
     const urlObj = new URL(url);
-    return supportedDomains.some(domain => urlObj.hostname === domain);
+    return aiDomains.some(domain => urlObj.hostname === domain);
   } catch {
     return false;
   }
 }
 
 /**
- * Tab update handler - enable/disable side panel based on URL
+ * Check if URL is a valid web page (not a browser internal page)
+ */
+function isWebPage(url?: string): boolean {
+  if (!url) return false;
+  return url.startsWith('http://') || url.startsWith('https://');
+}
+
+/**
+ * Tab update handler - enable side panel on all web pages
  */
 chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
   // Only process when URL changes or tab loads
   if (changeInfo.status === 'complete' || changeInfo.url) {
-    const isSupported = isSupportedPlatform(tab.url);
+    const enabled = isWebPage(tab.url);
 
     try {
-      if (isSupported) {
-        // Enable side panel for this tab
-        await chrome.sidePanel.setOptions({
-          tabId,
-          enabled: true,
-        });
+      await chrome.sidePanel.setOptions({
+        tabId,
+        enabled,
+      });
+      if (enabled) {
         console.log('[Engram] Side panel enabled for', tab.url);
-      } else {
-        // Disable side panel for this tab
-        await chrome.sidePanel.setOptions({
-          tabId,
-          enabled: false,
-        });
       }
     } catch (error) {
       // Silently fail if tab is closed or invalid
@@ -734,11 +736,10 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
 chrome.tabs.onActivated.addListener(async (activeInfo) => {
   try {
     const tab = await chrome.tabs.get(activeInfo.tabId);
-    const isSupported = isSupportedPlatform(tab.url);
 
     await chrome.sidePanel.setOptions({
       tabId: activeInfo.tabId,
-      enabled: isSupported,
+      enabled: isWebPage(tab.url),
     });
   } catch (error) {
     // Silently fail
@@ -746,16 +747,14 @@ chrome.tabs.onActivated.addListener(async (activeInfo) => {
 });
 
 /**
- * Action icon click handler - open side panel
+ * Action icon click handler - open side panel on any web page
  */
 chrome.action.onClicked.addListener(async (tab) => {
   console.log('[Engram] Action clicked, opening side panel');
 
   try {
-    // Check if we're on a supported platform
-    if (!isSupportedPlatform(tab.url)) {
-      console.log('[Engram] Not on a supported platform');
-      // Could show a notification here
+    if (!isWebPage(tab.url)) {
+      console.log('[Engram] Not a web page, cannot open side panel');
       return;
     }
 
