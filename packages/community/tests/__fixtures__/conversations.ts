@@ -11,7 +11,7 @@ import { generateTestUUID } from './memories';
  */
 export interface ConversationFactoryOptions {
   id?: UUID;
-  platform?: 'chatgpt' | 'claude' | 'perplexity';
+  platform?: 'chatgpt' | 'claude' | 'perplexity' | 'gemini';
   createdAt?: number;
   lastMessageAt?: number;
   messageCount?: number;
@@ -66,6 +66,15 @@ export function createPerplexityConversation(
   options: Omit<ConversationFactoryOptions, 'platform'> = {}
 ): Conversation {
   return createConversation({ ...options, platform: 'perplexity' });
+}
+
+/**
+ * Create a Gemini conversation
+ */
+export function createGeminiConversation(
+  options: Omit<ConversationFactoryOptions, 'platform'> = {}
+): Conversation {
+  return createConversation({ ...options, platform: 'gemini' });
 }
 
 /**
