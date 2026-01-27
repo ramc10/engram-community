@@ -14,12 +14,12 @@ import {
 import { Platform, Role } from '@engram/core';
 
 /**
- * Gemini DOM selectors (verified Jan 2025)
+ * Gemini DOM selectors (verified Jan 2026)
  */
 const SELECTORS: PlatformSelectors = {
   containerSelector: 'chat-window, main',
-  messageSelector: '.conversation-container > .model-response-container, .conversation-container > .user-query',
-  contentSelector: '.model-response-text, .user-query-text, .markdown, message-content',
+  messageSelector: '.user-query-container, .response-container',
+  contentSelector: '.query-text, .model-response-text',
   codeBlockSelector: 'pre code',
   injectionPointSelector: 'aside, .sidebar',
 };
@@ -154,21 +154,16 @@ class GeminiAdapter implements IPlatformAdapter {
    * Get all message elements from DOM
    */
   private getAllMessageElements(): Element[] {
-    // Try multiple selector strategies to find messages
-    const selectors = [
-      '.conversation-container > .model-response-container',
-      '.conversation-container > .user-query',
-      '[class*="message"]',
-      'message-content',
-    ];
+    // Use specific selectors for Gemini's current DOM structure (Jan 2026)
+    // Only select top-level containers to avoid duplicate nested elements
+    const userMessages = document.querySelectorAll('.user-query-container');
+    const assistantMessages = document.querySelectorAll('.response-container');
 
-    const elements: Element[] = [];
-    for (const selector of selectors) {
-      const found = document.querySelectorAll(selector);
-      if (found.length > 0) {
-        elements.push(...Array.from(found));
-      }
-    }
+    // Combine and return unique elements
+    const elements: Element[] = [
+      ...Array.from(userMessages),
+      ...Array.from(assistantMessages),
+    ];
 
     return elements;
   }
@@ -224,10 +219,8 @@ class GeminiAdapter implements IPlatformAdapter {
    */
   private isMessageElement(element: HTMLElement): boolean {
     return (
-      element.classList.contains('model-response-container') ||
-      element.classList.contains('user-query') ||
-      element.tagName.toLowerCase() === 'message-content' ||
-      Array.from(element.classList).some(cls => cls.includes('message'))
+      element.classList.contains('user-query-container') ||
+      element.classList.contains('response-container')
     );
   }
 
@@ -429,47 +422,40 @@ class GeminiAdapter implements IPlatformAdapter {
    * Determine message role from element
    */
   private determineRole(element: HTMLElement): Role | null {
-    // Check for user message indicators
+    // Check for user message indicators (Gemini Jan 2026)
     if (
-      element.classList.contains('user-query') ||
-      element.querySelector('.user-query') ||
-      element.classList.contains('user-message')
+      element.classList.contains('user-query-container') ||
+      element.querySelector('.query-text')
     ) {
       return 'user';
     }
 
-    // Check for assistant/model message indicators
+    // Check for assistant/model message indicators (Gemini Jan 2026)
     if (
-      element.classList.contains('model-response-container') ||
-      element.querySelector('.model-response-text') ||
-      element.classList.contains('assistant-message') ||
-      element.classList.contains('model-response')
+      element.classList.contains('response-container') ||
+      element.querySelector('.model-response-text')
     ) {
       return 'assistant';
     }
 
-    // Check data attributes
+    // Check data attributes as fallback
     const roleAttr = element.getAttribute('data-role') || element.getAttribute('role');
     if (roleAttr === 'user' || roleAttr === 'assistant') {
       return roleAttr as Role;
     }
 
-    // Default to assistant if we found a message but can't determine role
-    // This is safer than returning null for valid messages
-    return 'assistant';
+    // Return null for unknown elements - don't capture random UI
+    return null;
   }
 
   /**
    * Find content element within message
    */
   private findContentElement(element: HTMLElement): HTMLElement | null {
-    // Try specific content selectors
+    // Try specific content selectors for Gemini (Jan 2026)
     const selectors = [
-      '.model-response-text',
-      '.user-query-text',
-      '.markdown',
-      'message-content',
-      '.message-content',
+      '.query-text',           // User message text
+      '.model-response-text',  // Assistant response text
     ];
 
     for (const selector of selectors) {
@@ -479,8 +465,8 @@ class GeminiAdapter implements IPlatformAdapter {
       }
     }
 
-    // Fallback to the element itself if no content element found
-    return element;
+    // Don't fallback to the element itself - only capture known content
+    return null;
   }
 
   /**

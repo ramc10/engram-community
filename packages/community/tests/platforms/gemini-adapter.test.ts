@@ -85,9 +85,9 @@ describe('GeminiAdapter', () => {
   describe('Message Extraction', () => {
     it('should extract a basic user message', () => {
       const messageElement = document.createElement('div');
-      messageElement.className = 'user-query';
+      messageElement.className = 'user-query-container';
       messageElement.innerHTML = `
-        <div class="user-query-text">Hello, Gemini!</div>
+        <div class="query-text">Hello, Gemini!</div>
       `;
 
       const message = geminiAdapter.extractMessage(messageElement);
@@ -100,7 +100,7 @@ describe('GeminiAdapter', () => {
 
     it('should extract a basic assistant message', () => {
       const messageElement = document.createElement('div');
-      messageElement.className = 'model-response-container';
+      messageElement.className = 'response-container';
       messageElement.innerHTML = `
         <div class="model-response-text">Hello! How can I help you today?</div>
       `;
@@ -114,7 +114,7 @@ describe('GeminiAdapter', () => {
 
     it('should extract message with code blocks', () => {
       const messageElement = document.createElement('div');
-      messageElement.className = 'model-response-container';
+      messageElement.className = 'response-container';
       messageElement.innerHTML = `
         <div class="model-response-text markdown">
           Here's a Python example:
@@ -133,7 +133,7 @@ describe('GeminiAdapter', () => {
 
     it('should extract multiple code blocks', () => {
       const messageElement = document.createElement('div');
-      messageElement.className = 'model-response-container';
+      messageElement.className = 'response-container';
       messageElement.innerHTML = `
         <div class="model-response-text markdown">
           Python:
@@ -153,7 +153,7 @@ describe('GeminiAdapter', () => {
 
     it('should handle code blocks without language detection', () => {
       const messageElement = document.createElement('div');
-      messageElement.className = 'model-response-container';
+      messageElement.className = 'response-container';
       messageElement.innerHTML = `
         <div class="model-response-text">
           <pre><code>const x = 5;</code></pre>
@@ -169,7 +169,7 @@ describe('GeminiAdapter', () => {
 
     it('should detect language from data-language attribute', () => {
       const messageElement = document.createElement('div');
-      messageElement.className = 'model-response-container';
+      messageElement.className = 'response-container';
       const contentDiv = document.createElement('div');
       contentDiv.className = 'model-response-text';
       contentDiv.textContent = 'Code example:';
@@ -189,7 +189,7 @@ describe('GeminiAdapter', () => {
 
     it('should return null for empty messages', () => {
       const messageElement = document.createElement('div');
-      messageElement.className = 'model-response-container';
+      messageElement.className = 'response-container';
       messageElement.innerHTML = '<div class="model-response-text"></div>';
 
       const message = geminiAdapter.extractMessage(messageElement);
@@ -201,7 +201,7 @@ describe('GeminiAdapter', () => {
       window.location.pathname = '/';
 
       const messageElement = document.createElement('div');
-      messageElement.className = 'model-response-container';
+      messageElement.className = 'response-container';
       messageElement.innerHTML = '<div class="model-response-text">Test message</div>';
 
       const message = geminiAdapter.extractMessage(messageElement);
@@ -209,23 +209,24 @@ describe('GeminiAdapter', () => {
       expect(message).toBeNull();
     });
 
-    it('should handle messages without specific content selectors', () => {
+    it('should return null for messages without specific content selectors', () => {
+      // With updated adapter, we don't fallback to element text
+      // This prevents capturing random UI elements
       const messageElement = document.createElement('div');
-      messageElement.className = 'model-response-container';
+      messageElement.className = 'response-container';
       messageElement.textContent = 'Direct text content';
 
       const message = geminiAdapter.extractMessage(messageElement);
 
-      expect(message).not.toBeNull();
-      expect(message?.role).toBe('assistant');
-      expect(message?.content).toBe('Direct text content');
+      // Should return null because there's no .model-response-text or .query-text child
+      expect(message).toBeNull();
     });
 
     it('should normalize whitespace in extracted content', () => {
       const messageElement = document.createElement('div');
-      messageElement.className = 'user-query';
+      messageElement.className = 'user-query-container';
       messageElement.innerHTML = `
-        <div class="user-query-text">
+        <div class="query-text">
           This   has    multiple
 
 
@@ -248,16 +249,13 @@ describe('GeminiAdapter', () => {
     });
 
     it('should process existing messages with retry', async () => {
-      // Create a mock message in the DOM
-      const messageContainer = document.createElement('div');
-      messageContainer.className = 'conversation-container';
-
+      // Create a mock message in the DOM - directly append to body
+      // The adapter now searches for .user-query-container and .response-container directly
       const messageElement = document.createElement('div');
-      messageElement.className = 'user-query';
-      messageElement.innerHTML = '<div class="user-query-text">Test message</div>';
+      messageElement.className = 'user-query-container';
+      messageElement.innerHTML = '<div class="query-text">Test message</div>';
 
-      messageContainer.appendChild(messageElement);
-      document.body.appendChild(messageContainer);
+      document.body.appendChild(messageElement);
 
       const messages: ExtractedMessage[] = [];
       const callback = (msg: ExtractedMessage) => messages.push(msg);
@@ -282,7 +280,7 @@ describe('GeminiAdapter', () => {
 
       // Add a new message to the DOM
       const messageElement = document.createElement('div');
-      messageElement.className = 'model-response-container';
+      messageElement.className = 'response-container';
       messageElement.innerHTML = '<div class="model-response-text">New message</div>';
       document.body.appendChild(messageElement);
 
@@ -302,7 +300,7 @@ describe('GeminiAdapter', () => {
 
       // Create a message element
       const messageElement = document.createElement('div');
-      messageElement.className = 'model-response-container';
+      messageElement.className = 'response-container';
       const textElement = document.createElement('div');
       textElement.className = 'model-response-text';
       textElement.textContent = 'Streaming';
@@ -327,8 +325,8 @@ describe('GeminiAdapter', () => {
 
     it('should deduplicate processed messages', async () => {
       const messageElement = document.createElement('div');
-      messageElement.className = 'user-query';
-      messageElement.innerHTML = '<div class="user-query-text">Duplicate test</div>';
+      messageElement.className = 'user-query-container';
+      messageElement.innerHTML = '<div class="query-text">Duplicate test</div>';
       document.body.appendChild(messageElement);
 
       const messages: ExtractedMessage[] = [];
@@ -342,7 +340,7 @@ describe('GeminiAdapter', () => {
       const initialCount = messages.length;
 
       // Trigger mutation that would reprocess the same message
-      messageElement.innerHTML = '<div class="user-query-text">Duplicate test</div>';
+      messageElement.innerHTML = '<div class="query-text">Duplicate test</div>';
 
       // Wait for potential reprocessing
       await new Promise(resolve => setTimeout(resolve, 2500));
@@ -363,8 +361,8 @@ describe('GeminiAdapter', () => {
 
       // Add a new message
       const messageElement = document.createElement('div');
-      messageElement.className = 'user-query';
-      messageElement.innerHTML = '<div class="user-query-text">Should not be captured</div>';
+      messageElement.className = 'user-query-container';
+      messageElement.innerHTML = '<div class="query-text">Should not be captured</div>';
       document.body.appendChild(messageElement);
 
       // Wait to see if it gets processed
@@ -403,7 +401,7 @@ describe('GeminiAdapter', () => {
   describe('Edge Cases', () => {
     it('should handle malformed HTML gracefully', () => {
       const messageElement = document.createElement('div');
-      messageElement.className = 'model-response-container';
+      messageElement.className = 'response-container';
       messageElement.innerHTML = '<div><span>Nested <b>content</b></span></div>';
 
       expect(() => geminiAdapter.extractMessage(messageElement)).not.toThrow();
@@ -411,7 +409,7 @@ describe('GeminiAdapter', () => {
 
     it('should handle messages with only code blocks', () => {
       const messageElement = document.createElement('div');
-      messageElement.className = 'model-response-container';
+      messageElement.className = 'response-container';
       messageElement.innerHTML = `
         <div class="model-response-text">
           <pre><code class="language-python">print("only code")</code></pre>
@@ -424,14 +422,16 @@ describe('GeminiAdapter', () => {
       expect(message?.metadata?.codeBlocks).toHaveLength(1);
     });
 
-    it('should handle elements without role indicators', () => {
+    it('should return null for elements without role indicators', () => {
+      // With updated adapter, unknown elements are not captured
+      // This prevents capturing random UI elements
       const messageElement = document.createElement('div');
       messageElement.innerHTML = '<div>Generic message</div>';
 
       const message = geminiAdapter.extractMessage(messageElement);
 
-      // Should default to assistant role
-      expect(message?.role).toBe('assistant');
+      // Should return null - unknown elements are not processed
+      expect(message).toBeNull();
     });
   });
 });
