@@ -187,7 +187,7 @@ class GeminiAdapter implements IPlatformAdapter {
               // Check if this is a message element
               if (this.isMessageElement(element)) {
                 this.processMessage(element);
-              } else if (element.querySelectorAll) {
+              } else {
                 // Check if element contains messages
                 const messages = this.getAllMessageElements();
                 messages.forEach(msg => this.processMessage(msg as HTMLElement));
