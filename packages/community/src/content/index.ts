@@ -8,6 +8,7 @@ import { chatGPTAdapter } from './platforms/chatgpt-adapter';
 import { claudeAdapter } from './platforms/claude-adapter';
 import { perplexityAdapter } from './platforms/perplexity-adapter';
 import { geminiAdapter } from './platforms/gemini-adapter';
+import { genericAdapter } from './platforms/generic-adapter';
 import { IPlatformAdapter } from '@engram/core';
 import { sendInitRequest, sendSaveMessage } from '../lib/messages';
 import { uiInjector } from './shared/ui-injector';
@@ -30,13 +31,8 @@ class ContentScript {
     try {
       console.log('[Engram Content] Initializing...');
 
-      // Detect which platform we're on
+      // Detect which platform we're on (always returns a platform, falls back to 'generic')
       const platform = this.detectPlatform();
-      if (!platform) {
-        console.log('[Engram Content] Not on a supported platform');
-        return;
-      }
-
       console.log('[Engram Content] Detected platform:', platform);
 
       // Get appropriate adapter
@@ -78,9 +74,10 @@ class ContentScript {
   }
 
   /**
-   * Detect which platform we're on
+   * Detect which platform we're on.
+   * Falls back to 'generic' for any web page without a dedicated adapter.
    */
-  private detectPlatform(): string | null {
+  private detectPlatform(): string {
     const url = window.location.href;
 
     if (chatGPTAdapter.isCurrentPlatform(url)) {
@@ -99,7 +96,7 @@ class ContentScript {
       return 'gemini';
     }
 
-    return null;
+    return 'generic';
   }
 
   /**
@@ -115,6 +112,8 @@ class ContentScript {
         return perplexityAdapter;
       case 'gemini':
         return geminiAdapter;
+      case 'generic':
+        return genericAdapter;
       default:
         return null;
     }

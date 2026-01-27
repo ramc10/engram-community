@@ -18,7 +18,7 @@ export type Timestamp = number;
 /**
  * Platform identifier
  */
-export type Platform = 'chatgpt' | 'claude' | 'perplexity' | 'gemini';
+export type Platform = 'chatgpt' | 'claude' | 'perplexity' | 'gemini' | 'generic';
 
 /**
  * Message role in conversation

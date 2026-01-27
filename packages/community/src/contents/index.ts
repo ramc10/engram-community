@@ -1,17 +1,15 @@
 /**
  * Plasmo Content Script Entry Point
- * This file is automatically detected by Plasmo and injected into matching pages
+ * This file is automatically detected by Plasmo and injected into matching pages.
+ * Runs on all websites to provide universal access to Engram memories.
  */
 
 import type { PlasmoCSConfig } from "plasmo";
 
-// Configure which sites this content script runs on
+// Configure to run on all sites for universal access
 export const config: PlasmoCSConfig = {
   matches: [
-    "https://chat.openai.com/*",
-    "https://chatgpt.com/*",
-    "https://claude.ai/*",
-    "https://www.perplexity.ai/*"
+    "<all_urls>"
   ],
   all_frames: false,
   run_at: "document_end"
@@ -22,6 +20,7 @@ import { chatGPTAdapter } from '../content/platforms/chatgpt-adapter';
 import { claudeAdapter } from '../content/platforms/claude-adapter';
 import { sendInitRequest, sendSaveMessage } from '../lib/messages';
 import { PromptInterceptor } from '../content/shared/prompt-interceptor';
+import { uiInjector } from '../content/shared/ui-injector';
 
 /**
  * Track current conversation ID to detect navigation
@@ -172,6 +171,33 @@ async function initializeClaude() {
 }
 
 /**
+ * Initialize generic mode for non-AI sites.
+ * Connects to the background service and injects the memory panel UI
+ * so users can search and access their memories from any website.
+ */
+async function initializeGeneric() {
+  try {
+    console.log('[Engram] Generic site detected, initializing memory access...');
+
+    // Initialize background connection
+    const initResponse = await sendInitRequest();
+    if (!initResponse.success) {
+      console.error('[Engram] Background init failed:', initResponse.error);
+      return;
+    }
+
+    console.log('[Engram] Background connected, device ID:', initResponse.deviceId);
+
+    // Inject the memory panel UI (fixed position) so users can search memories
+    uiInjector.inject(document.body);
+
+    console.log('[Engram] Ready - memory panel available on this page');
+  } catch (error) {
+    console.error('[Engram] Generic initialization error:', error);
+  }
+}
+
+/**
  * Main initialization function
  */
 async function initialize() {
@@ -197,7 +223,8 @@ async function initialize() {
     } else if (url.includes('claude.ai')) {
       await initializeClaude();
     } else {
-      console.log('[Engram] Platform not yet supported:', url);
+      // Generic site - provide memory access UI
+      await initializeGeneric();
     }
   } catch (error) {
     console.error('[Engram] Content script error:', error);
