@@ -18,7 +18,7 @@ export function generateTestUUID(): UUID {
 export interface MemoryFactoryOptions {
   id?: UUID;
   conversationId?: UUID;
-  platform?: 'chatgpt' | 'claude' | 'perplexity';
+  platform?: 'chatgpt' | 'claude' | 'perplexity' | 'gemini';
   content?: { role: string; text: string; metadata?: any };
   encrypted?: boolean;
   enriched?: boolean;
@@ -212,4 +212,8 @@ export function createClaudeMemory(options: Omit<MemoryFactoryOptions, 'platform
 
 export function createPerplexityMemory(options: Omit<MemoryFactoryOptions, 'platform'> = {}): Memory {
   return createMemory({ ...options, platform: 'perplexity' });
+}
+
+export function createGeminiMemory(options: Omit<MemoryFactoryOptions, 'platform'> = {}): Memory {
+  return createMemory({ ...options, platform: 'gemini' });
 }
