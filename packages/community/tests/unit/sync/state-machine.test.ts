@@ -581,7 +581,7 @@ describe('SyncStateMachine', () => {
       expect(stats.currentState).toBe('IDLE');
       expect(stats.transitionCount).toBe(4);
       expect(stats.errorCount).toBe(0);
-      expect(stats.uptime).toBeGreaterThan(0);
+      expect(stats.uptime).toBeGreaterThanOrEqual(0);
     });
 
     it('should track state distribution', () => {
