@@ -40,6 +40,7 @@ export const SUPABASE_CONFIG = {
   URL: process.env.PLASMO_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || 'https://your-project.supabase.co',
   ANON_KEY: process.env.PLASMO_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || 'your-anon-key',
   SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY || 'your-service-role-key', // Server-side only - has admin privileges
+  GOOGLE_CLIENT_ID: process.env.PLASMO_PUBLIC_GOOGLE_CLIENT_ID || '', // Google OAuth Client ID for direct OAuth flow
 } as const;
 
 /**

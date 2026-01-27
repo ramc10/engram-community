@@ -132,85 +132,48 @@ export class AuthClient {
 
   /**
    * Login with Google OAuth
+   *
+   * Uses direct Google OAuth flow + Supabase signInWithIdToken to avoid
+   * redirect issues where Supabase redirects to theengram.tech (site URL)
+   * instead of the Chrome extension's chromiumapp.org URL.
+   *
+   * Flow:
+   * 1. Get Google Client ID from config or extract from Supabase
+   * 2. Open Google OAuth directly via chrome.identity.launchWebAuthFlow
+   * 3. Google redirects back to extension's chromiumapp.org URL
+   * 4. Extract ID token from Google's response
+   * 5. Authenticate with Supabase using signInWithIdToken
    */
   async loginWithGoogle(): Promise<AuthToken> {
     const extensionRedirectUrl = chrome.identity.getRedirectURL();
     console.log('[Auth] Starting Google OAuth with redirect:', extensionRedirectUrl);
 
-    const { data, error } = await this.supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: extensionRedirectUrl,
-        skipBrowserRedirect: true,
-      },
-    });
+    // Get Google Client ID
+    const googleClientId = await this.getGoogleClientId();
+    console.log('[Auth] Google Client ID resolved');
 
-    if (error) {
-      console.error('[Auth] Supabase OAuth error:', error);
-      throw new Error(
-        `Google OAuth failed: ${error.message}.\n\n` +
-        `Troubleshooting steps:\n` +
-        `1. Enable Google provider in Supabase Dashboard (Authentication > Providers > Google)\n` +
-        `2. Add Chrome extension redirect URLs to Google OAuth provider configuration\n` +
-        `3. See SUPABASE_SETUP.md for detailed setup instructions`
-      );
-    }
+    // Generate nonce for security (required for ID token validation)
+    const rawNonce = this.generateNonce();
+    const hashedNonce = await this.sha256(rawNonce);
 
-    if (!data.url) {
-      console.error('[Auth] No OAuth URL returned from Supabase. Data:', data);
-      throw new Error('No OAuth URL returned. Please enable Google provider in Supabase Dashboard.');
-    }
+    // Build direct Google OAuth URL (bypasses Supabase redirect entirely)
+    const googleAuthUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
+    googleAuthUrl.searchParams.set('client_id', googleClientId);
+    googleAuthUrl.searchParams.set('redirect_uri', extensionRedirectUrl);
+    googleAuthUrl.searchParams.set('response_type', 'id_token');
+    googleAuthUrl.searchParams.set('scope', 'openid email profile');
+    googleAuthUrl.searchParams.set('nonce', hashedNonce);
+    googleAuthUrl.searchParams.set('prompt', 'consent');
 
-    console.log('[Auth] Got OAuth URL from Supabase');
-    console.log('[Auth] Original OAuth URL:', data.url);
+    console.log('[Auth] Launching direct Google OAuth flow (bypassing Supabase redirect)');
 
-    // Fix: Ensure the OAuth URL uses the Chrome extension redirect URL
-    // Supabase may return a URL with the Site URL (e.g., theengram.tech) as redirect_uri
-    // We need to replace it with the Chrome extension redirect URL
-    let oauthUrl = data.url;
-    try {
-      const url = new URL(oauthUrl);
-      const currentRedirectUri = url.searchParams.get('redirect_uri');
-
-      console.log('[Auth] Current redirect_uri in OAuth URL:', currentRedirectUri);
-      console.log('[Auth] Expected redirect_uri:', extensionRedirectUrl);
-
-      // If the redirect_uri doesn't match our extension URL, replace it
-      if (currentRedirectUri && currentRedirectUri !== extensionRedirectUrl) {
-        console.warn('[Auth] ⚠️  CONFIGURATION ISSUE DETECTED AND AUTO-FIXED ⚠️');
-        console.warn('[Auth] OAuth URL contains incorrect redirect_uri. Auto-correcting...');
-        console.warn('[Auth] Found redirect_uri:', currentRedirectUri);
-        console.warn('[Auth] Replacing with:', extensionRedirectUrl);
-        console.warn('[Auth]');
-        console.warn('[Auth] 🔧 Recommendation: Update your Supabase OAuth provider configuration');
-        console.warn('[Auth] to include Chrome extension redirect URLs to prevent this issue.');
-        console.warn('[Auth] See SUPABASE_SETUP.md for instructions.');
-
-        url.searchParams.set('redirect_uri', extensionRedirectUrl);
-        oauthUrl = url.toString();
-
-        console.log('[Auth] ✅ Updated OAuth URL:', oauthUrl);
-      } else {
-        console.log('[Auth] ✅ OAuth URL redirect_uri is correctly configured');
-      }
-    } catch (e) {
-      console.error('[Auth] Error parsing/fixing OAuth URL:', e);
-      // Continue with original URL if parsing fails
-    }
-
-    console.log('[Auth] Launching auth flow with URL:', oauthUrl);
-
-    // Launch OAuth flow in a new window
     return new Promise((resolve, reject) => {
       chrome.identity.launchWebAuthFlow(
         {
-          url: oauthUrl,
+          url: googleAuthUrl.toString(),
           interactive: true,
         },
-        async (redirectUrl) => {
-          console.log('[Auth] Redirect URL received:', redirectUrl);
-          console.log('[Auth] Chrome runtime error:', chrome.runtime.lastError);
-
+        async (redirectUrl: string | undefined) => {
           if (chrome.runtime.lastError) {
             const errorMessage = chrome.runtime.lastError.message || 'Unknown error';
             console.error('[Auth] Chrome runtime error during OAuth:', errorMessage);
@@ -219,65 +182,47 @@ export class AuthClient {
           }
 
           if (!redirectUrl) {
-            console.error('[Auth] No redirect URL received. User may have closed the popup or denied authorization.');
+            console.error('[Auth] No redirect URL received');
             reject(new Error(
               'OAuth flow cancelled or failed.\n\n' +
               'Possible causes:\n' +
               '1. You closed the popup without completing sign-in\n' +
-              '2. Chrome extension redirect URL is not configured in Google OAuth provider\n' +
-              '3. Supabase OAuth configuration is incorrect\n\n' +
-              'Please see SUPABASE_SETUP.md for configuration instructions.'
+              '2. Chrome extension redirect URL is not configured in Google Cloud Console\n\n' +
+              'Please add this URL to Google Cloud Console > Authorized redirect URIs:\n' +
+              extensionRedirectUrl
             ));
-            return;
-          }
-
-          // Validate that the redirect URL is from our extension
-          if (!redirectUrl.startsWith(extensionRedirectUrl)) {
-            console.error('[Auth] Redirect URL does not match extension redirect URL');
-            console.error('[Auth] Expected to start with:', extensionRedirectUrl);
-            console.error('[Auth] Received:', redirectUrl);
-            reject(new Error(
-              `Invalid OAuth redirect URL.\n\n` +
-              `Expected: ${extensionRedirectUrl}\n` +
-              `Received: ${redirectUrl}\n\n` +
-              `This usually means:\n` +
-              `1. The redirect was to an incorrect domain (e.g., theengram.tech)\n` +
-              `2. Google OAuth redirect URLs are not configured correctly\n` +
-              `3. Supabase OAuth provider configuration is missing Chrome extension redirect URL\n\n` +
-              `See SUPABASE_SETUP.md for detailed configuration instructions.`
-            ));
-            return;
-          }
-
-          // Extract tokens from redirect URL
-          const url = new URL(redirectUrl);
-          const hashParams = new URLSearchParams(url.hash.substring(1));
-          const accessToken = hashParams.get('access_token');
-          const refreshToken = hashParams.get('refresh_token');
-          const expiresIn = hashParams.get('expires_in');
-
-          console.log('[Auth] Extracted tokens from URL');
-          console.log('[Auth] Access token present:', !!accessToken);
-          console.log('[Auth] Refresh token present:', !!refreshToken);
-
-          if (!accessToken) {
-            reject(new Error('No access token in OAuth response'));
             return;
           }
 
           try {
-            // Set the session with the OAuth tokens
-            console.log('[Auth] Setting session with tokens...');
-            const { data: sessionData, error: sessionError } = await this.supabase.auth.setSession({
-              access_token: accessToken,
-              refresh_token: refreshToken || '',
-            });
+            // Extract ID token from redirect URL hash
+            const url = new URL(redirectUrl);
+            const hashParams = new URLSearchParams(url.hash.substring(1));
+            const idToken = hashParams.get('id_token');
 
-            console.log('[Auth] setSession result:', { sessionData, sessionError });
+            console.log('[Auth] ID token present:', !!idToken);
+
+            if (!idToken) {
+              reject(new Error(
+                'No ID token in Google OAuth response.\n\n' +
+                'This may mean the Google OAuth client is not configured for ID token flow.\n' +
+                'Ensure your Google Cloud Console OAuth client is a "Web application" type.'
+              ));
+              return;
+            }
+
+            // Authenticate with Supabase using the Google ID token
+            console.log('[Auth] Authenticating with Supabase using Google ID token...');
+            const { data: sessionData, error: sessionError } =
+              await this.supabase.auth.signInWithIdToken({
+                provider: 'google',
+                token: idToken,
+                nonce: rawNonce,
+              });
 
             if (sessionError) {
-              console.error('[Auth] Session error:', sessionError);
-              reject(new Error(`Failed to establish session: ${sessionError.message}`));
+              console.error('[Auth] Supabase signInWithIdToken error:', sessionError);
+              reject(new Error(`Failed to authenticate with Supabase: ${sessionError.message}`));
               return;
             }
 
@@ -288,11 +233,11 @@ export class AuthClient {
             }
 
             this.session = sessionData.session;
-            console.log('[Auth] Session established successfully');
+            console.log('[Auth] Google OAuth session established successfully');
 
             resolve({
               token: sessionData.session.access_token,
-              expiresIn: String(sessionData.session.expires_in || expiresIn || 3600),
+              expiresIn: String(sessionData.session.expires_in || 3600),
               user: {
                 id: sessionData.user.id,
                 email: sessionData.user.email!,
@@ -302,18 +247,81 @@ export class AuthClient {
               },
             });
           } catch (error) {
-            console.error('[Auth] Exception during setSession:', error);
+            console.error('[Auth] Exception during Google OAuth:', error);
             const err = error as any;
-            console.error('[Auth] Error details:', {
-              name: err?.name,
-              message: err?.message,
-              stack: err?.stack,
-            });
-            reject(new Error(`OAuth session error: ${err?.message || 'Unknown error'}`));
+            reject(new Error(`OAuth error: ${err?.message || 'Unknown error'}`));
           }
         }
       );
     });
+  }
+
+  /**
+   * Get Google Client ID from config or extract from Supabase OAuth flow
+   */
+  private async getGoogleClientId(): Promise<string> {
+    // 1. Try from config (PLASMO_PUBLIC_GOOGLE_CLIENT_ID env var)
+    if (SUPABASE_CONFIG.GOOGLE_CLIENT_ID) {
+      console.log('[Auth] Using Google Client ID from config');
+      return SUPABASE_CONFIG.GOOGLE_CLIENT_ID;
+    }
+
+    // 2. Try to extract from Supabase OAuth flow by following the redirect
+    console.log('[Auth] No Google Client ID in config, attempting to extract from Supabase...');
+    try {
+      const { data } = await this.supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          skipBrowserRedirect: true,
+        },
+      });
+
+      if (data?.url) {
+        // Fetch the Supabase authorize URL - it returns a 302 redirect to Google
+        // The response.url after following redirects should be Google's OAuth page
+        const response = await fetch(data.url, {
+          redirect: 'follow',
+          credentials: 'omit',
+        });
+
+        const finalUrl = new URL(response.url);
+        const clientId = finalUrl.searchParams.get('client_id');
+
+        if (clientId) {
+          console.log('[Auth] Extracted Google Client ID from Supabase OAuth flow');
+          return clientId;
+        }
+      }
+    } catch (error) {
+      console.warn('[Auth] Failed to extract Google Client ID from Supabase:', error);
+    }
+
+    throw new Error(
+      'Google Client ID not available.\n\n' +
+      'Please set PLASMO_PUBLIC_GOOGLE_CLIENT_ID in your .env file.\n' +
+      'Get it from Google Cloud Console > APIs & Services > Credentials.\n\n' +
+      'See SUPABASE_SETUP.md for detailed setup instructions.'
+    );
+  }
+
+  /**
+   * Generate a cryptographically secure random nonce
+   */
+  private generateNonce(): string {
+    const array = new Uint8Array(32);
+    crypto.getRandomValues(array);
+    return Array.from(array, byte => byte.toString(16).padStart(2, '0')).join('');
+  }
+
+  /**
+   * Hash a string using SHA-256
+   */
+  private async sha256(input: string): Promise<string> {
+    const encoder = new TextEncoder();
+    const data = encoder.encode(input);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
   }
 
   /**
