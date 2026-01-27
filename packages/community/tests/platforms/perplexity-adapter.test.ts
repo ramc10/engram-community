@@ -357,7 +357,7 @@ describe('PerplexityAdapter', () => {
       expect(messageCallback).not.toHaveBeenCalled();
     });
 
-    it('should handle observer errors gracefully', () => {
+    it('should handle observer errors gracefully', async () => {
       const container = document.querySelector('main')!;
       container.innerHTML = `
         <div class="message">
@@ -366,7 +366,7 @@ describe('PerplexityAdapter', () => {
       `;
 
       // Should not throw even with invalid messages
-      expect(() => perplexityAdapter.observeMessages(messageCallback)).not.toThrow();
+      await expect(perplexityAdapter.observeMessages(messageCallback)).resolves.not.toThrow();
     });
 
     it('should detect messages in nested structures', async () => {
