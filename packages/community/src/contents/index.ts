@@ -22,7 +22,6 @@ import { perplexityAdapter } from '../content/platforms/perplexity-adapter';
 import { geminiAdapter } from '../content/platforms/gemini-adapter';
 import { sendInitRequest, sendSaveMessage } from '../lib/messages';
 import { PromptInterceptor } from '../content/shared/prompt-interceptor';
-import { uiInjector } from '../content/shared/ui-injector';
 
 /**
  * Track current conversation ID to detect navigation
@@ -266,29 +265,13 @@ async function initializePerplexity() {
 
 /**
  * Initialize generic mode for non-AI sites.
- * Connects to the background service and injects the memory panel UI
- * so users can search and access their memories from any website.
+ * On generic sites, we don't auto-inject UI - users can access memories
+ * via the extension popup or side panel when needed.
  */
 async function initializeGeneric() {
-  try {
-    console.log('[Engram] Generic site detected, initializing memory access...');
-
-    // Initialize background connection
-    const initResponse = await sendInitRequest();
-    if (!initResponse.success) {
-      console.error('[Engram] Background init failed:', initResponse.error);
-      return;
-    }
-
-    console.log('[Engram] Background connected, device ID:', initResponse.deviceId);
-
-    // Inject the memory panel UI (fixed position) so users can search memories
-    uiInjector.inject(document.body);
-
-    console.log('[Engram] Ready - memory panel available on this page');
-  } catch (error) {
-    console.error('[Engram] Generic initialization error:', error);
-  }
+  // Don't auto-inject memory panel on every website
+  // Users can access memories via the extension popup/sidepanel
+  console.log('[Engram] Generic site - memory access available via extension popup');
 }
 
 /**
