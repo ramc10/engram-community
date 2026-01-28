@@ -130,28 +130,23 @@ export class AuthClient {
     };
   }
 
-  // Store pending OAuth data for tab-based flow
-  private pendingOAuthNonce: string | null = null;
-  private pendingOAuthResolve: ((value: AuthToken) => void) | null = null;
-  private pendingOAuthReject: ((reason: Error) => void) | null = null;
-
   /**
-   * Login with Google OAuth (tab-based flow)
+   * Login with Google OAuth
    *
-   * Opens Google sign-in in a new browser tab for better UX.
+   * Uses direct Google OAuth flow + Supabase signInWithIdToken to avoid
+   * redirect issues where Supabase redirects to theengram.tech (site URL)
+   * instead of the Chrome extension's chromiumapp.org URL.
    *
    * Flow:
    * 1. Get Google Client ID from config or extract from Supabase
-   * 2. Open Google OAuth in a new tab via chrome.tabs.create()
-   * 3. Google redirects to extension's oauth-callback page
-   * 4. Callback page extracts ID token and sends to background
-   * 5. Background authenticates with Supabase using signInWithIdToken
+   * 2. Open Google OAuth directly via chrome.identity.launchWebAuthFlow
+   * 3. Google redirects back to extension's chromiumapp.org URL
+   * 4. Extract ID token from Google's response
+   * 5. Authenticate with Supabase using signInWithIdToken
    */
   async loginWithGoogle(): Promise<AuthToken> {
-    // Use extension's OAuth callback page as redirect URI
-    const extensionId = chrome.runtime.id;
-    const callbackUrl = `chrome-extension://${extensionId}/tabs/oauth-callback.html`;
-    console.log('[Auth] Starting Google OAuth with tab redirect:', callbackUrl);
+    const extensionRedirectUrl = chrome.identity.getRedirectURL();
+    console.log('[Auth] Starting Google OAuth with redirect:', extensionRedirectUrl);
 
     // Get Google Client ID
     const googleClientId = await this.getGoogleClientId();
@@ -161,125 +156,104 @@ export class AuthClient {
     const rawNonce = this.generateNonce();
     const hashedNonce = await this.sha256(rawNonce);
 
-    // Store nonce for later verification
-    this.pendingOAuthNonce = rawNonce;
-
-    // Build direct Google OAuth URL
+    // Build direct Google OAuth URL (bypasses Supabase redirect entirely)
     const googleAuthUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
     googleAuthUrl.searchParams.set('client_id', googleClientId);
-    googleAuthUrl.searchParams.set('redirect_uri', callbackUrl);
+    googleAuthUrl.searchParams.set('redirect_uri', extensionRedirectUrl);
     googleAuthUrl.searchParams.set('response_type', 'id_token');
     googleAuthUrl.searchParams.set('scope', 'openid email profile');
     googleAuthUrl.searchParams.set('nonce', hashedNonce);
-    googleAuthUrl.searchParams.set('prompt', 'select_account');
+    googleAuthUrl.searchParams.set('prompt', 'consent');
 
-    console.log('[Auth] Opening Google OAuth in new tab');
+    console.log('[Auth] Launching direct Google OAuth flow (bypassing Supabase redirect)');
 
     return new Promise((resolve, reject) => {
-      // Store resolve/reject for use when callback is received
-      this.pendingOAuthResolve = resolve;
-      this.pendingOAuthReject = reject;
-
-      // Open OAuth in a new tab
-      chrome.tabs.create({
-        url: googleAuthUrl.toString(),
-        active: true,
-      }, (tab) => {
-        if (chrome.runtime.lastError) {
-          const errorMessage = chrome.runtime.lastError.message || 'Unknown error';
-          console.error('[Auth] Failed to open OAuth tab:', errorMessage);
-          this.clearPendingOAuth();
-          reject(new Error(`Failed to open sign-in tab: ${errorMessage}`));
-          return;
-        }
-        console.log('[Auth] OAuth tab opened:', tab?.id);
-      });
-
-      // Set a timeout for the OAuth flow (5 minutes)
-      setTimeout(() => {
-        if (this.pendingOAuthReject) {
-          this.pendingOAuthReject(new Error('Sign-in timed out. Please try again.'));
-          this.clearPendingOAuth();
-        }
-      }, 5 * 60 * 1000);
-    });
-  }
-
-  /**
-   * Handle OAuth callback from the callback page
-   * Called by background service when OAUTH_CALLBACK message is received
-   */
-  async handleOAuthCallback(idToken: string): Promise<AuthToken> {
-    console.log('[Auth] Handling OAuth callback, token present:', !!idToken);
-
-    if (!this.pendingOAuthNonce) {
-      throw new Error('No pending OAuth flow. Please start sign-in again.');
-    }
-
-    const rawNonce = this.pendingOAuthNonce;
-
-    try {
-      // Authenticate with Supabase using the Google ID token
-      console.log('[Auth] Authenticating with Supabase using Google ID token...');
-      const { data: sessionData, error: sessionError } =
-        await this.supabase.auth.signInWithIdToken({
-          provider: 'google',
-          token: idToken,
-          nonce: rawNonce,
-        });
-
-      if (sessionError) {
-        console.error('[Auth] Supabase signInWithIdToken error:', sessionError);
-        throw new Error(`Failed to authenticate with Supabase: ${sessionError.message}`);
-      }
-
-      if (!sessionData.user || !sessionData.session) {
-        console.error('[Auth] No user or session in response');
-        throw new Error('Failed to establish session - no user or session returned');
-      }
-
-      this.session = sessionData.session;
-      console.log('[Auth] Google OAuth session established successfully');
-
-      const authToken: AuthToken = {
-        token: sessionData.session.access_token,
-        expiresIn: String(sessionData.session.expires_in || 3600),
-        user: {
-          id: sessionData.user.id,
-          email: sessionData.user.email!,
-          emailVerified: !!sessionData.user.email_confirmed_at,
-          createdAt: new Date(sessionData.user.created_at).getTime() / 1000,
-          user_metadata: sessionData.user.user_metadata,
+      chrome.identity.launchWebAuthFlow(
+        {
+          url: googleAuthUrl.toString(),
+          interactive: true,
         },
-      };
+        async (redirectUrl: string | undefined) => {
+          if (chrome.runtime.lastError) {
+            const errorMessage = chrome.runtime.lastError.message || 'Unknown error';
+            console.error('[Auth] Chrome runtime error during OAuth:', errorMessage);
+            reject(new Error(`OAuth flow failed: ${errorMessage}`));
+            return;
+          }
 
-      // Resolve the pending promise if exists
-      if (this.pendingOAuthResolve) {
-        this.pendingOAuthResolve(authToken);
-      }
+          if (!redirectUrl) {
+            console.error('[Auth] No redirect URL received');
+            reject(new Error(
+              'OAuth flow cancelled or failed.\n\n' +
+              'Possible causes:\n' +
+              '1. You closed the popup without completing sign-in\n' +
+              '2. Chrome extension redirect URL is not configured in Google Cloud Console\n\n' +
+              'Please add this URL to Google Cloud Console > Authorized redirect URIs:\n' +
+              extensionRedirectUrl
+            ));
+            return;
+          }
 
-      this.clearPendingOAuth();
-      return authToken;
-    } catch (error) {
-      console.error('[Auth] Exception during OAuth callback:', error);
-      const err = error as Error;
+          try {
+            // Extract ID token from redirect URL hash
+            const url = new URL(redirectUrl);
+            const hashParams = new URLSearchParams(url.hash.substring(1));
+            const idToken = hashParams.get('id_token');
 
-      if (this.pendingOAuthReject) {
-        this.pendingOAuthReject(err);
-      }
+            console.log('[Auth] ID token present:', !!idToken);
 
-      this.clearPendingOAuth();
-      throw err;
-    }
-  }
+            if (!idToken) {
+              reject(new Error(
+                'No ID token in Google OAuth response.\n\n' +
+                'This may mean the Google OAuth client is not configured for ID token flow.\n' +
+                'Ensure your Google Cloud Console OAuth client is a "Web application" type.'
+              ));
+              return;
+            }
 
-  /**
-   * Clear pending OAuth state
-   */
-  private clearPendingOAuth(): void {
-    this.pendingOAuthNonce = null;
-    this.pendingOAuthResolve = null;
-    this.pendingOAuthReject = null;
+            // Authenticate with Supabase using the Google ID token
+            console.log('[Auth] Authenticating with Supabase using Google ID token...');
+            const { data: sessionData, error: sessionError } =
+              await this.supabase.auth.signInWithIdToken({
+                provider: 'google',
+                token: idToken,
+                nonce: rawNonce,
+              });
+
+            if (sessionError) {
+              console.error('[Auth] Supabase signInWithIdToken error:', sessionError);
+              reject(new Error(`Failed to authenticate with Supabase: ${sessionError.message}`));
+              return;
+            }
+
+            if (!sessionData.user || !sessionData.session) {
+              console.error('[Auth] No user or session in response');
+              reject(new Error('Failed to establish session - no user or session returned'));
+              return;
+            }
+
+            this.session = sessionData.session;
+            console.log('[Auth] Google OAuth session established successfully');
+
+            resolve({
+              token: sessionData.session.access_token,
+              expiresIn: String(sessionData.session.expires_in || 3600),
+              user: {
+                id: sessionData.user.id,
+                email: sessionData.user.email!,
+                emailVerified: !!sessionData.user.email_confirmed_at,
+                createdAt: new Date(sessionData.user.created_at).getTime() / 1000,
+                user_metadata: sessionData.user.user_metadata,
+              },
+            });
+          } catch (error) {
+            console.error('[Auth] Exception during Google OAuth:', error);
+            const err = error as any;
+            reject(new Error(`OAuth error: ${err?.message || 'Unknown error'}`));
+          }
+        }
+      );
+    });
   }
 
   /**
