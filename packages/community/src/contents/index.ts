@@ -18,9 +18,10 @@ export const config: PlasmoCSConfig = {
 // Direct implementation using platform adapters
 import { chatGPTAdapter } from '../content/platforms/chatgpt-adapter';
 import { claudeAdapter } from '../content/platforms/claude-adapter';
+import { perplexityAdapter } from '../content/platforms/perplexity-adapter';
+import { geminiAdapter } from '../content/platforms/gemini-adapter';
 import { sendInitRequest, sendSaveMessage } from '../lib/messages';
 import { PromptInterceptor } from '../content/shared/prompt-interceptor';
-import { uiInjector } from '../content/shared/ui-injector';
 
 /**
  * Track current conversation ID to detect navigation
@@ -171,13 +172,11 @@ async function initializeClaude() {
 }
 
 /**
- * Initialize generic mode for non-AI sites.
- * Connects to the background service and injects the memory panel UI
- * so users can search and access their memories from any website.
+ * Initialize Gemini adapter
  */
-async function initializeGeneric() {
+async function initializeGemini() {
   try {
-    console.log('[Engram] Generic site detected, initializing memory access...');
+    console.log('[Engram] Gemini detected, initializing adapter...');
 
     // Initialize background connection
     const initResponse = await sendInitRequest();
@@ -188,13 +187,91 @@ async function initializeGeneric() {
 
     console.log('[Engram] Background connected, device ID:', initResponse.deviceId);
 
-    // Inject the memory panel UI (fixed position) so users can search memories
-    uiInjector.inject(document.body);
+    // Initialize adapter
+    await geminiAdapter.initialize();
+    console.log('[Engram] Adapter initialized');
 
-    console.log('[Engram] Ready - memory panel available on this page');
+    // Start observing messages
+    await geminiAdapter.observeMessages(async (extractedMessage) => {
+      console.log('[Engram] Message extracted:', {
+        role: extractedMessage.role,
+        contentLength: extractedMessage.content.length,
+        conversationId: extractedMessage.conversationId
+      });
+
+      try {
+        const saveResponse = await sendSaveMessage(extractedMessage);
+        if (saveResponse.success) {
+          console.log('[Engram] Message saved successfully');
+        } else {
+          console.error('[Engram] Failed to save message:', saveResponse.error);
+        }
+      } catch (error) {
+        console.error('[Engram] Error saving message:', error);
+      }
+    });
+
+    console.log('[Engram] Ready - monitoring Gemini messages');
   } catch (error) {
-    console.error('[Engram] Generic initialization error:', error);
+    console.error('[Engram] Gemini initialization error:', error);
   }
+}
+
+/**
+ * Initialize Perplexity adapter
+ */
+async function initializePerplexity() {
+  try {
+    console.log('[Engram] Perplexity detected, initializing adapter...');
+
+    // Initialize background connection
+    const initResponse = await sendInitRequest();
+    if (!initResponse.success) {
+      console.error('[Engram] Background init failed:', initResponse.error);
+      return;
+    }
+
+    console.log('[Engram] Background connected, device ID:', initResponse.deviceId);
+
+    // Initialize adapter
+    await perplexityAdapter.initialize();
+    console.log('[Engram] Adapter initialized');
+
+    // Start observing messages
+    await perplexityAdapter.observeMessages(async (extractedMessage) => {
+      console.log('[Engram] Message extracted:', {
+        role: extractedMessage.role,
+        contentLength: extractedMessage.content.length,
+        conversationId: extractedMessage.conversationId
+      });
+
+      try {
+        const saveResponse = await sendSaveMessage(extractedMessage);
+        if (saveResponse.success) {
+          console.log('[Engram] Message saved successfully');
+        } else {
+          console.error('[Engram] Failed to save message:', saveResponse.error);
+        }
+      } catch (error) {
+        console.error('[Engram] Error saving message:', error);
+      }
+    });
+
+    console.log('[Engram] Ready - monitoring Perplexity messages');
+  } catch (error) {
+    console.error('[Engram] Perplexity initialization error:', error);
+  }
+}
+
+/**
+ * Initialize generic mode for non-AI sites.
+ * On generic sites, we don't auto-inject UI - users can access memories
+ * via the extension popup or side panel when needed.
+ */
+async function initializeGeneric() {
+  // Don't auto-inject memory panel on every website
+  // Users can access memories via the extension popup/sidepanel
+  console.log('[Engram] Generic site - memory access available via extension popup');
 }
 
 /**
@@ -222,6 +299,10 @@ async function initialize() {
       setupNavigationMonitoring();
     } else if (url.includes('claude.ai')) {
       await initializeClaude();
+    } else if (url.includes('gemini.google.com')) {
+      await initializeGemini();
+    } else if (url.includes('perplexity.ai')) {
+      await initializePerplexity();
     } else {
       // Generic site - provide memory access UI
       await initializeGeneric();
