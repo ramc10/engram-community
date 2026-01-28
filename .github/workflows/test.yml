@@ -37,6 +37,7 @@ jobs:
           files: ./packages/community/coverage/lcov.info
           flags: unit
           token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
 
   integration-tests:
     name: Integration Tests
@@ -67,6 +68,7 @@ jobs:
           files: ./packages/community/coverage/lcov.info
           flags: integration
           token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
 
   platform-tests:
     name: Platform Adapter Tests
@@ -97,6 +99,7 @@ jobs:
           files: ./packages/community/coverage/lcov.info
           flags: platform
           token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
 
   lib-tests:
     name: Library Tests
@@ -127,6 +130,7 @@ jobs:
           files: ./packages/community/coverage/lcov.info
           flags: lib
           token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
 
   encryption-security:
     name: Encryption & Security
