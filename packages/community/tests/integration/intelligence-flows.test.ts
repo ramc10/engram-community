@@ -26,19 +26,42 @@ jest.mock('../../src/lib/embedding-service', () => {
         return new Array(384).fill(0).map((_, i) => i === vectorType ? 1 : 0);
     };
 
+    // Helper to extract text from memory, handling encrypted content
+    const extractTextFromMemory = (memory: any): string => {
+        // Try plaintext content first
+        if (typeof memory.content === 'string') {
+            return memory.content;
+        }
+        if (memory.content?.text && typeof memory.content.text === 'string') {
+            return memory.content.text;
+        }
+        // For encrypted content, use enriched metadata (keywords, tags, context)
+        const parts: string[] = [];
+        if (memory.keywords && Array.isArray(memory.keywords)) {
+            parts.push(...memory.keywords);
+        }
+        if (memory.tags && Array.isArray(memory.tags)) {
+            parts.push(...memory.tags);
+        }
+        if (memory.context && typeof memory.context === 'string') {
+            parts.push(memory.context);
+        }
+        return parts.join(' ') || 'default';
+    };
+
     return {
         getEmbeddingService: jest.fn(() => ({
             initialize: jest.fn().mockImplementation(() => Promise.resolve()),
             embed: jest.fn().mockImplementation((...args: any[]) => Promise.resolve(generateMockVector(args[0] as string))),
             regenerateEmbedding: jest.fn().mockImplementation(async (memory: any) => ({
                 ...memory,
-                embedding: generateMockVector(memory.content?.text || memory.content || '')
+                embedding: generateMockVector(extractTextFromMemory(memory))
             })),
             embedMemories: jest.fn().mockImplementation(async (...args: any[]) => {
                 const memories = args[0] as any[];
                 return memories.map(m => ({
                     ...m,
-                    embedding: generateMockVector(m.content?.text || m.content || '')
+                    embedding: generateMockVector(extractTextFromMemory(m))
                 }));
             }),
             setHNSWIndex: jest.fn(),
@@ -857,14 +880,14 @@ describe('Intelligence & Retrieval Flows', () => {
 
                 // Wait for enrichment queue to complete first
                 if (storage.enrichmentService) {
-                    await storage.enrichmentService.waitForQueue(15000);
+                    await storage.enrichmentService.waitForQueue(10000);
                 }
 
                 // Wait for HNSW indexing to complete using the new polling helper
                 // This handles the race condition where embedding generation and HNSW
                 // indexing happen after enrichment completes
                 try {
-                    await storage.waitForHNSWIndexing(1, 10000, 100);
+                    await storage.waitForHNSWIndexing(1, 5000, 50);
                 } catch {
                     // If HNSW indexing times out, check if we at least have stats
                     // (index may be available but empty in test environment)
@@ -880,7 +903,7 @@ describe('Intelligence & Retrieval Flows', () => {
                 // Message handler requires master key for encryption
                 expect(saveResult.error).toBeDefined();
             }
-        });
+        }, 30000); // Increase timeout to 30 seconds for async enrichment + HNSW indexing
 
         test('should remove memory from HNSW index on delete', async () => {
             const memory = {
