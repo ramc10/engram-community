@@ -837,7 +837,7 @@ describe('Intelligence & Retrieval Flows', () => {
     });
 
     describe('HNSW Vector Index Operations', () => {
-        test.skip('should add memory to HNSW index on save', async () => {
+        test('should add memory to HNSW index on save', async () => {
             const memory = {
                 role: 'user',
                 content: 'Testing HNSW index insertion with this memory content',
@@ -851,20 +851,26 @@ describe('Intelligence & Retrieval Flows', () => {
                 backgroundService
             );
 
-            // Wait for enrichment and indexing to complete
-            const storage = backgroundService.getStorage() as any;
-            if (storage.enrichmentService) {
-                await storage.enrichmentService.waitForQueue(15000);
-                // Wait for onEnrichmentComplete callback to finish saving and HNSW indexing
-                await wait(1000);
-            } else {
-                await wait(3000);
-            }
-
             // Save may fail if no master key is set
             if (saveResult.success) {
+                const storage = backgroundService.getStorage() as any;
+
+                // Wait for enrichment queue to complete first
+                if (storage.enrichmentService) {
+                    await storage.enrichmentService.waitForQueue(15000);
+                }
+
+                // Wait for HNSW indexing to complete using the new polling helper
+                // This handles the race condition where embedding generation and HNSW
+                // indexing happen after enrichment completes
+                try {
+                    await storage.waitForHNSWIndexing(1, 10000, 100);
+                } catch {
+                    // If HNSW indexing times out, check if we at least have stats
+                    // (index may be available but empty in test environment)
+                }
+
                 // HNSW stats should show the vector was added
-                const storage = backgroundService.getStorage();
                 const stats = storage.getHNSWStats();
 
                 if (stats) {

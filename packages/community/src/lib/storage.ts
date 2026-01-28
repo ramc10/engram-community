@@ -738,6 +738,36 @@ export class StorageService implements IStorage {
   }
 
   /**
+   * Wait for HNSW index to contain at least the specified number of vectors
+   * Used in tests to wait for async enrichment + embedding + HNSW indexing to complete
+   *
+   * @param minVectorCount Minimum number of vectors to wait for
+   * @param timeout Maximum time to wait in milliseconds (default: 10000)
+   * @param pollInterval How often to check in milliseconds (default: 100)
+   */
+  async waitForHNSWIndexing(
+    minVectorCount: number = 1,
+    timeout: number = 10000,
+    pollInterval: number = 100
+  ): Promise<void> {
+    const startTime = Date.now();
+
+    while (Date.now() - startTime < timeout) {
+      const stats = this.getHNSWStats();
+      if (stats && stats.vectorCount >= minVectorCount) {
+        return;
+      }
+      await new Promise(resolve => setTimeout(resolve, pollInterval));
+    }
+
+    const finalStats = this.getHNSWStats();
+    throw new Error(
+      `[Storage] HNSW indexing timeout after ${timeout}ms. ` +
+      `Expected vectorCount >= ${minVectorCount}, got ${finalStats?.vectorCount ?? 0}`
+    );
+  }
+
+  /**
    * Update search index for a memory
    */
   async updateSearchIndex(memoryId: UUID, tags: string[]): Promise<void> {
