@@ -4,6 +4,19 @@
  * Coordinates message extraction and storage
  */
 
+import type { PlasmoCSConfig } from "plasmo"
+
+// Plasmo content script configuration
+// Only run on AI chat platforms, not all websites
+export const config: PlasmoCSConfig = {
+  matches: [
+    "https://chatgpt.com/*",
+    "https://claude.ai/*",
+    "https://www.perplexity.ai/*",
+    "https://gemini.google.com/*"
+  ]
+};
+
 import { chatGPTAdapter } from './platforms/chatgpt-adapter';
 import { claudeAdapter } from './platforms/claude-adapter';
 import { perplexityAdapter } from './platforms/perplexity-adapter';

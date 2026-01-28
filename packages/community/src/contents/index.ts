@@ -6,10 +6,13 @@
 
 import type { PlasmoCSConfig } from "plasmo";
 
-// Configure to run on all sites for universal access
+// Configure to run only on AI chat platforms for better security and faster Chrome Web Store review
 export const config: PlasmoCSConfig = {
   matches: [
-    "<all_urls>"
+    "https://chatgpt.com/*",
+    "https://claude.ai/*",
+    "https://www.perplexity.ai/*",
+    "https://gemini.google.com/*"
   ],
   all_frames: false,
   run_at: "document_end"
