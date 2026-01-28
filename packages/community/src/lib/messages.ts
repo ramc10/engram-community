@@ -43,6 +43,8 @@ export enum MessageType {
   AUTH_LOGIN_RESPONSE = 'AUTH_LOGIN_RESPONSE',
   AUTH_LOGIN_GOOGLE = 'AUTH_LOGIN_GOOGLE',
   AUTH_LOGIN_GOOGLE_RESPONSE = 'AUTH_LOGIN_GOOGLE_RESPONSE',
+  OAUTH_CALLBACK = 'OAUTH_CALLBACK',
+  OAUTH_CALLBACK_RESPONSE = 'OAUTH_CALLBACK_RESPONSE',
   AUTH_LOGOUT = 'AUTH_LOGOUT',
   AUTH_LOGOUT_RESPONSE = 'AUTH_LOGOUT_RESPONSE',
   GET_AUTH_STATE = 'GET_AUTH_STATE',
@@ -204,6 +206,19 @@ export interface AuthLoginGoogleResponse extends BaseMessage {
   error?: string;
 }
 
+export interface OAuthCallbackRequest extends BaseMessage {
+  type: MessageType.OAUTH_CALLBACK;
+  payload: {
+    idToken: string;
+  };
+}
+
+export interface OAuthCallbackResponse extends BaseMessage {
+  type: MessageType.OAUTH_CALLBACK_RESPONSE;
+  success: boolean;
+  error?: string;
+}
+
 export interface AuthLogoutRequest extends BaseMessage {
   type: MessageType.AUTH_LOGOUT;
 }
@@ -347,6 +362,8 @@ export type Message =
   | AuthLoginResponse
   | AuthLoginGoogleRequest
   | AuthLoginGoogleResponse
+  | OAuthCallbackRequest
+  | OAuthCallbackResponse
   | AuthLogoutRequest
   | AuthLogoutResponse
   | GetAuthStateRequest

@@ -1,6 +1,6 @@
 {
   "name": "engram-extension",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Save, search, and reuse AI conversations with end-to-end encryption. Works with ChatGPT, Claude, Perplexity, and Gemini.",
   "private": true,
   "scripts": {

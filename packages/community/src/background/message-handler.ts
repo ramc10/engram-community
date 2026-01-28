@@ -140,6 +140,9 @@ export async function handleMessage(
       case MessageType.AUTH_LOGIN_GOOGLE:
         return await handleAuthLoginGoogle(service);
 
+      case MessageType.OAUTH_CALLBACK:
+        return await handleOAuthCallback(message, service);
+
       case MessageType.AUTH_LOGOUT:
         return await handleAuthLogout(service);
 
@@ -742,6 +745,59 @@ async function handleAuthLoginGoogle(
     console.error('[Engram] Google login failed:', error);
     return {
       type: MessageType.AUTH_LOGIN_GOOGLE_RESPONSE,
+      success: false,
+      error: (error as Error).message,
+    };
+  }
+}
+
+/**
+ * Handle OAuth callback from the callback page (tab-based OAuth flow)
+ */
+async function handleOAuthCallback(
+  message: any,
+  service: BackgroundService
+): Promise<{ type: string; success: boolean; error?: string }> {
+  try {
+    const authClient = service.getAuthClient();
+    const idToken = message.payload?.idToken;
+
+    if (!idToken) {
+      throw new Error('No ID token in OAuth callback');
+    }
+
+    console.log('[Engram] Processing OAuth callback');
+
+    // 1. Handle the OAuth callback (authenticates with Supabase)
+    const authToken = await authClient.handleOAuthCallback(idToken);
+
+    if (!authToken || !authToken.user) {
+      throw new Error('OAuth callback failed: No user returned');
+    }
+
+    console.log('[Engram] OAuth callback successful, userId:', authToken.user.id);
+
+    // 2. Generate master key for Google OAuth user
+    const cryptoService = service.getCrypto();
+    const masterKeyBytes = cryptoService.generateEncryptionKey();
+
+    const masterKey = {
+      key: masterKeyBytes,
+      salt: cryptoService.generateSalt(),
+      derivedAt: Date.now(),
+    };
+
+    service.setMasterKey(masterKey);
+    console.log('[Engram] Master key generated for OAuth user');
+
+    return {
+      type: MessageType.OAUTH_CALLBACK_RESPONSE,
+      success: true,
+    };
+  } catch (error) {
+    console.error('[Engram] OAuth callback failed:', error);
+    return {
+      type: MessageType.OAUTH_CALLBACK_RESPONSE,
       success: false,
       error: (error as Error).message,
     };
