@@ -1,4 +1,5 @@
 name: Test Suite
+# Comprehensive test suite for Engram extension
 
 on:
   push:
