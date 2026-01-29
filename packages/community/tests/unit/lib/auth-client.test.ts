@@ -4,7 +4,6 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
-import { AuthClient } from '../../../src/lib/auth-client';
 import { createMockChromeStorage } from '../../__utils__/test-helpers';
 
 // Mock Supabase client
@@ -26,6 +25,21 @@ const mockSupabaseClient = {
 jest.mock('@supabase/supabase-js', () => ({
   createClient: jest.fn(() => mockSupabaseClient),
 }));
+
+// Mock @engram/core config
+jest.mock('@engram/core', () => ({
+  ...jest.requireActual('@engram/core'),
+  SUPABASE_CONFIG: {
+    URL: 'https://test.supabase.co',
+    ANON_KEY: 'test-anon-key',
+  },
+  SYNC_CONFIG: {
+    API_BASE_URL: 'http://localhost:3001/api',
+  },
+}));
+
+// Import after mocking
+import { AuthClient } from '../../../src/lib/auth-client';
 
 describe('AuthClient', () => {
   let authClient: AuthClient;

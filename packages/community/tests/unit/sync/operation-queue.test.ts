@@ -8,6 +8,12 @@ import { OperationQueue, DEFAULT_QUEUE_CONFIG } from '../../../src/sync/operatio
 import { StorageService } from '../../../src/lib/storage';
 import { SyncOperation } from '@engram/core';
 
+// Mock generateUUID
+jest.mock('@engram/core', () => ({
+  ...jest.requireActual('@engram/core'),
+  generateUUID: jest.fn(() => 'mock-uuid-' + Date.now()),
+}));
+
 // Mock storage service
 const createMockStorageService = () => {
   const mockTable = {
