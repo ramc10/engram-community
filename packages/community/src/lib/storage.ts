@@ -239,11 +239,17 @@ export class StorageService implements IStorage {
   }
 
   /**
-   * Close the database
+   * Close the database and cleanup resources
    */
   async close(): Promise<void> {
     // Clear pending enrichments to avoid async leaks during shutdown
     this.pendingEnrichments.clear();
+
+    // Stop enrichment service retry processor to prevent timer leaks
+    if (this.enrichmentService) {
+      this.enrichmentService.stopRetryProcessor();
+    }
+
     this.db.close();
   }
 

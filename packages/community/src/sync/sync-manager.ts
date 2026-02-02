@@ -588,6 +588,12 @@ export class SyncManager implements ISyncManager {
     console.log('[SyncManager] Destroying...');
 
     await this.disconnect();
+
+    // Cleanup operation queue timers to prevent leaks
+    if (this.operationQueue) {
+      this.operationQueue.destroy();
+    }
+
     this.stateChangeCallbacks.clear();
     this.remoteChangeCallbacks.clear();
     this.errorCallbacks.clear();
