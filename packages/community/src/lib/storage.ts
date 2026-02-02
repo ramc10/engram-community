@@ -180,6 +180,11 @@ export class StorageService implements IStorage {
         }
 
         try {
+          // Always regenerate embedding with enriched metadata (keywords, tags, context)
+          // This ensures the embedding captures the enriched semantics
+          // Do this BEFORE the version check since HNSW indexing should always happen
+          await this.regenerateEmbeddingAndIndex(memory);
+
           // Check if a newer version exists before persisting (avoid overwriting with stale enrichment)
           const existing = await this.db.memories.get(memory.id);
           if (existing) {
@@ -192,14 +197,10 @@ export class StorageService implements IStorage {
             );
 
             if (!isNewer) {
-              logger.log(`[Storage] Skipping persist for enriched memory ${memory.id} - existing version is newer`);
+              logger.log(`[Storage] Skipping DB persist for enriched memory ${memory.id} - existing version is newer (HNSW indexed)`);
               return;
             }
           }
-
-          // Regenerate embedding with enriched metadata (keywords, tags, context)
-          // This ensures the embedding captures the enriched semantics
-          await this.regenerateEmbeddingAndIndex(memory);
 
           await this.db.memories.put(memory);
           logger.log(`[Storage] Persisted enriched memory with embedding: ${memory.id}`);
@@ -287,6 +288,11 @@ export class StorageService implements IStorage {
         }
 
         try {
+          // Always regenerate embedding with enriched metadata (keywords, tags, context)
+          // This ensures the embedding captures the enriched semantics
+          // Do this BEFORE the version check since HNSW indexing should always happen
+          await this.regenerateEmbeddingAndIndex(memory);
+
           // Check if a newer version exists before persisting (avoid overwriting with stale enrichment)
           const existing = await this.db.memories.get(memory.id);
           if (existing) {
@@ -299,14 +305,10 @@ export class StorageService implements IStorage {
             );
 
             if (!isNewer) {
-              console.log(`[Storage] Skipping persist for enriched memory ${memory.id} - existing version is newer`);
+              console.log(`[Storage] Skipping DB persist for enriched memory ${memory.id} - existing version is newer (HNSW indexed)`);
               return;
             }
           }
-
-          // Regenerate embedding with enriched metadata (keywords, tags, context)
-          // This ensures the embedding captures the enriched semantics
-          await this.regenerateEmbeddingAndIndex(memory);
 
           await this.db.memories.put(memory);
           console.log(`[Storage] Persisted enriched memory with embedding: ${memory.id}`);
