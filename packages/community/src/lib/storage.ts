@@ -117,6 +117,7 @@ export class StorageService implements IStorage {
   private hnswIndexService: HNSWIndexService | null = null; // Phase 4: Vector index
   public forceEnrichmentInTests = false;
   private masterKeyProvider?: () => { key: Uint8Array } | null; // For embedding encryption
+  private pendingEnrichments: Map<string, Promise<void>> = new Map(); // Track pending enrichInBackground operations
 
   constructor() {
     this.db = new EngramDatabase();
@@ -170,6 +171,7 @@ export class StorageService implements IStorage {
 
       // Set callback to persist enriched memories to IndexedDB
       // This fixes the race condition where enrichment completes but data isn't persisted
+      // Also handles embedding regeneration and HNSW indexing (fix for #87)
       this.enrichmentService.onEnrichmentComplete = async (memory: MemoryWithMemA) => {
         // Skip save if in atomic mode (will save at end of full pipeline)
         if (this.enrichmentService?.isAtomicMode?.()) {
@@ -195,8 +197,12 @@ export class StorageService implements IStorage {
             }
           }
 
+          // Regenerate embedding with enriched metadata (keywords, tags, context)
+          // This ensures the embedding captures the enriched semantics
+          await this.regenerateEmbeddingAndIndex(memory);
+
           await this.db.memories.put(memory);
-          logger.log(`[Storage] Persisted enriched memory: ${memory.id}`);
+          logger.log(`[Storage] Persisted enriched memory with embedding: ${memory.id}`);
         } catch (error) {
           logger.error(`[Storage] Failed to persist enriched memory:`, error);
         }
@@ -270,6 +276,7 @@ export class StorageService implements IStorage {
       this.enrichmentService = new EnrichmentService(config);
 
       // Set callback to persist enriched memories to IndexedDB
+      // Also handles embedding regeneration and HNSW indexing (fix for #87)
       this.enrichmentService.onEnrichmentComplete = async (memory: MemoryWithMemA) => {
         // Skip save if in atomic mode (will save at end of full pipeline)
         if (this.enrichmentService?.isAtomicMode?.()) {
@@ -295,8 +302,12 @@ export class StorageService implements IStorage {
             }
           }
 
+          // Regenerate embedding with enriched metadata (keywords, tags, context)
+          // This ensures the embedding captures the enriched semantics
+          await this.regenerateEmbeddingAndIndex(memory);
+
           await this.db.memories.put(memory);
-          console.log(`[Storage] Persisted enriched memory: ${memory.id}`);
+          console.log(`[Storage] Persisted enriched memory with embedding: ${memory.id}`);
         } catch (error) {
           console.error(`[Storage] Failed to persist enriched memory:`, error);
         }
@@ -349,7 +360,10 @@ export class StorageService implements IStorage {
     ) as MemoryWithMemA[];
 
     if (memoriesWithEmbeddings.length === 0) {
-      logger.log('No embeddings found, skipping HNSW build');
+      logger.log('No embeddings found, skipping HNSW build but keeping service ready for add()');
+      // Still connect to embedding service so add() works for new memories
+      const embeddingService = getEmbeddingService();
+      embeddingService.setHNSWIndex(this.hnswIndexService);
       return;
     }
 
@@ -436,9 +450,16 @@ export class StorageService implements IStorage {
       await this.updateConversationMetadata(memory);
 
       if (shouldEnrich) {
-        this.enrichInBackground(memoryWithMemA, plaintextContent).catch((err) => {
-          logger.error('Background enrichment failed:', err);
-        });
+        // Track pending enrichment for waitForPendingEnrichments() (fix for #87)
+        const memoryId = memoryWithMemA.id;
+        const enrichmentPromise = this.enrichInBackground(memoryWithMemA, plaintextContent)
+          .catch((err) => {
+            logger.error('Background enrichment failed:', err);
+          })
+          .finally(() => {
+            this.pendingEnrichments.delete(memoryId);
+          });
+        this.pendingEnrichments.set(memoryId, enrichmentPromise);
       }
     }
   }
@@ -768,6 +789,39 @@ export class StorageService implements IStorage {
   }
 
   /**
+   * Wait for all pending enrichInBackground operations to complete
+   * Used in tests to ensure async enrichment + HNSW indexing is finished
+   *
+   * @param timeout Maximum time to wait in milliseconds (default: 30000)
+   */
+  async waitForPendingEnrichments(timeout: number = 30000): Promise<void> {
+    const startTime = Date.now();
+
+    while (this.pendingEnrichments.size > 0) {
+      if (Date.now() - startTime > timeout) {
+        throw new Error(
+          `[Storage] Pending enrichments timeout after ${timeout}ms. ` +
+          `${this.pendingEnrichments.size} operations still pending`
+        );
+      }
+
+      // Wait for all current pending operations
+      try {
+        await Promise.race([
+          Promise.all(Array.from(this.pendingEnrichments.values())),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Timeout')), Math.min(1000, timeout - (Date.now() - startTime)))
+          )
+        ]);
+      } catch {
+        // Continue polling - some operations may have completed
+      }
+
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+  }
+
+  /**
    * Update search index for a memory
    */
   async updateSearchIndex(memoryId: UUID, tags: string[]): Promise<void> {
@@ -936,6 +990,69 @@ export class StorageService implements IStorage {
   }
 
   /**
+   * Regenerate embedding for a memory and add to HNSW index
+   * This is called after enrichment completes to ensure embeddings capture enriched metadata
+   * Fixes issue #87: HNSW index race condition
+   */
+  private async regenerateEmbeddingAndIndex(memory: MemoryWithMemA): Promise<void> {
+    try {
+      const embeddingService = getEmbeddingService();
+      const memoryWithEmbedding = await embeddingService.regenerateEmbedding(memory);
+
+      // Copy the embedding to the memory
+      if (memoryWithEmbedding.embedding) {
+        // SECURITY: Encrypt embedding before storage
+        const embeddingFloat32 = new Float32Array(memoryWithEmbedding.embedding);
+        const embeddingBytes = new Uint8Array(embeddingFloat32.buffer);
+
+        try {
+          const masterKey = this.getMasterKeyForEncryption();
+
+          if (masterKey) {
+            // Encrypt with master key
+            const crypto = await getCryptoService();
+            const encryptedEmbedding = await crypto.encrypt(embeddingBytes, masterKey.key);
+
+            (memory as any).encryptedEmbedding = encryptedEmbedding;
+            (memory as any).embeddingVersion = 2;
+
+            logger.log(`[Storage] Encrypted embedding for ${memory.id}`);
+          } else {
+            // Fallback: store unencrypted (shouldn't happen in production)
+            logger.warn(`[Storage] No master key, storing unencrypted embedding for ${memory.id}`);
+            (memory as any).embedding = embeddingFloat32;
+            (memory as any).embeddingVersion = 1;
+          }
+        } catch (err) {
+          logger.error(`[Storage] Encryption failed for ${memory.id}:`, err);
+          // Fallback to unencrypted
+          (memory as any).embedding = embeddingFloat32;
+          (memory as any).embeddingVersion = 1;
+        }
+
+        // Add/Update HNSW index (Phase 4)
+        // Use add() which handles both new memories and updates (creates index if needed)
+        if (this.hnswIndexService) {
+          await this.hnswIndexService.add(
+            memory.id,
+            embeddingFloat32
+          );
+
+          // Batch persist (every 10 updates to reduce I/O)
+          if (Math.random() < 0.1) {
+            await this.hnswIndexService.persist(this.db);
+          }
+        }
+      }
+
+      logger.log(`[Storage] Regenerated embedding for memory ${memory.id}`);
+    } catch (err) {
+      // Don't fail if embedding fails
+      logger.error(`[Storage] Failed to regenerate embedding for memory ${memory.id}:`, err);
+    }
+  }
+
+  /**
    * Enrich a memory in the background (non-blocking)
    */
   private async enrichInBackground(
@@ -975,66 +1092,9 @@ export class StorageService implements IStorage {
       }
     }
 
-    // NOTE: We don't persist here anymore because enrichment is async (queued)
-    // The callback (onEnrichmentComplete) will persist after enrichment actually completes
-    // This fixes the race condition where unenriched data was being persisted
-
-    // Regenerate embedding with enhanced metadata (keywords + context + tags)
-    try {
-      const embeddingService = getEmbeddingService();
-      const memoryWithEmbedding = await embeddingService.regenerateEmbedding(memory);
-
-      // Copy the embedding to the memory
-      if (memoryWithEmbedding.embedding) {
-        // SECURITY: Encrypt embedding before storage
-        const embeddingFloat32 = new Float32Array(memoryWithEmbedding.embedding);
-        const embeddingBytes = new Uint8Array(embeddingFloat32.buffer);
-
-        try {
-          const masterKey = this.getMasterKeyForEncryption();
-
-          if (masterKey) {
-            // Encrypt with master key
-            const crypto = await getCryptoService();
-            const encryptedEmbedding = await crypto.encrypt(embeddingBytes, masterKey.key);
-
-            (memory as any).encryptedEmbedding = encryptedEmbedding;
-            (memory as any).embeddingVersion = 2;
-
-            console.log(`[Storage] Encrypted embedding for ${memory.id}`);
-          } else {
-            // Fallback: store unencrypted (shouldn't happen in production)
-            console.warn(`[Storage] No master key, storing unencrypted embedding for ${memory.id}`);
-            (memory as any).embedding = embeddingFloat32;
-            (memory as any).embeddingVersion = 1;
-          }
-        } catch (err) {
-          console.error(`[Storage] Encryption failed for ${memory.id}:`, err);
-          // Fallback to unencrypted
-          (memory as any).embedding = embeddingFloat32;
-          (memory as any).embeddingVersion = 1;
-        }
-
-        // Add/Update HNSW index (Phase 4)
-        // Use add() which handles both new memories and updates (creates index if needed)
-        if (this.hnswIndexService) {
-          await this.hnswIndexService.add(
-            memory.id,
-            embeddingFloat32
-          );
-
-          // Batch persist (every 10 updates to reduce I/O)
-          if (Math.random() < 0.1) {
-            await this.hnswIndexService.persist(this.db);
-          }
-        }
-      }
-
-      console.log(`[Storage] Regenerated embedding for enriched memory ${memory.id}`);
-    } catch (err) {
-      // Don't fail the enrichment if embedding fails
-      console.error(`[Storage] Failed to regenerate embedding for memory ${memory.id}:`, err);
-    }
+    // NOTE: Embedding regeneration and HNSW indexing is now handled in onEnrichmentComplete
+    // This ensures embeddings capture enriched metadata (keywords, tags, context)
+    // and fixes the race condition (issue #87) where tests checked HNSW before indexing completed
 
     // Detect semantic links (Phase 2)
     if (this.linkDetectionService) {
