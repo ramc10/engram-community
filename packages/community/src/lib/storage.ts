@@ -173,18 +173,18 @@ export class StorageService implements IStorage {
       // This fixes the race condition where enrichment completes but data isn't persisted
       // Also handles embedding regeneration and HNSW indexing (fix for #87)
       this.enrichmentService.onEnrichmentComplete = async (memory: MemoryWithMemA) => {
-        // Skip save if in atomic mode (will save at end of full pipeline)
+        // Always regenerate embedding with enriched metadata (keywords, tags, context)
+        // This ensures the embedding captures the enriched semantics
+        // HNSW indexing must happen regardless of atomic mode
+        await this.regenerateEmbeddingAndIndex(memory);
+
+        // Skip DB save if in atomic mode (will save at end of full pipeline)
         if (this.enrichmentService?.isAtomicMode?.()) {
-          logger.log(`[Storage] Enrichment complete for ${memory.id} (deferred save)`);
+          logger.log(`[Storage] Enrichment complete for ${memory.id} (deferred DB save, HNSW indexed)`);
           return;
         }
 
         try {
-          // Always regenerate embedding with enriched metadata (keywords, tags, context)
-          // This ensures the embedding captures the enriched semantics
-          // Do this BEFORE the version check since HNSW indexing should always happen
-          await this.regenerateEmbeddingAndIndex(memory);
-
           // Check if a newer version exists before persisting (avoid overwriting with stale enrichment)
           const existing = await this.db.memories.get(memory.id);
           if (existing) {
@@ -287,18 +287,18 @@ export class StorageService implements IStorage {
       // Set callback to persist enriched memories to IndexedDB
       // Also handles embedding regeneration and HNSW indexing (fix for #87)
       this.enrichmentService.onEnrichmentComplete = async (memory: MemoryWithMemA) => {
-        // Skip save if in atomic mode (will save at end of full pipeline)
+        // Always regenerate embedding with enriched metadata (keywords, tags, context)
+        // This ensures the embedding captures the enriched semantics
+        // HNSW indexing must happen regardless of atomic mode
+        await this.regenerateEmbeddingAndIndex(memory);
+
+        // Skip DB save if in atomic mode (will save at end of full pipeline)
         if (this.enrichmentService?.isAtomicMode?.()) {
-          console.log(`[Storage] Enrichment complete for ${memory.id} (deferred save)`);
+          console.log(`[Storage] Enrichment complete for ${memory.id} (deferred DB save, HNSW indexed)`);
           return;
         }
 
         try {
-          // Always regenerate embedding with enriched metadata (keywords, tags, context)
-          // This ensures the embedding captures the enriched semantics
-          // Do this BEFORE the version check since HNSW indexing should always happen
-          await this.regenerateEmbeddingAndIndex(memory);
-
           // Check if a newer version exists before persisting (avoid overwriting with stale enrichment)
           const existing = await this.db.memories.get(memory.id);
           if (existing) {
@@ -1190,8 +1190,11 @@ export class StorageService implements IStorage {
         // Create bidirectional links
         await this.linkDetectionService.createBidirectionalLinks(memory, links, allMemories);
 
-        // Save all updated memories (source + targets with reverse links + evolved memories)
-        await this.db.memories.bulkPut(allMemories);
+        // Save target memories with reverse links (NOT the source memory)
+        // The source memory will be saved later with a proper version check to avoid
+        // overwriting newer versions that may have been saved during async enrichment
+        const memoriesToSave = allMemories.filter(m => m.id !== memory.id);
+        await this.db.memories.bulkPut(memoriesToSave);
 
         // Persist HNSW index after bulk updates (Phase 4)
         if (this.hnswIndexService?.isReady()) {
