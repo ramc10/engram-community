@@ -241,6 +241,8 @@ export class StorageService implements IStorage {
    * Close the database
    */
   async close(): Promise<void> {
+    // Clear pending enrichments to avoid async leaks during shutdown
+    this.pendingEnrichments.clear();
     this.db.close();
   }
 
@@ -805,16 +807,22 @@ export class StorageService implements IStorage {
         );
       }
 
-      // Wait for all current pending operations
+      // Wait for all current pending operations with proper timeout cleanup
+      let timeoutId: ReturnType<typeof setTimeout> | undefined;
       try {
         await Promise.race([
           Promise.all(Array.from(this.pendingEnrichments.values())),
-          new Promise((_, reject) =>
-            setTimeout(() => reject(new Error('Timeout')), Math.min(1000, timeout - (Date.now() - startTime)))
-          )
+          new Promise((_, reject) => {
+            timeoutId = setTimeout(
+              () => reject(new Error('Timeout')),
+              Math.min(1000, timeout - (Date.now() - startTime))
+            );
+          })
         ]);
       } catch {
         // Continue polling - some operations may have completed
+      } finally {
+        if (timeoutId) clearTimeout(timeoutId);
       }
 
       await new Promise(resolve => setTimeout(resolve, 50));
