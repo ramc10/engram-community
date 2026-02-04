@@ -3,7 +3,8 @@
  * Suppresses logs in test environment to reduce noise
  */
 
-import type { GitHubReporter, ErrorContext, ErrorSeverity } from './github-reporter';
+import type { GitHubReporter } from './github-reporter';
+import type { ErrorContext, ErrorSeverity } from './error-types';
 
 type LogLevel = 'log' | 'warn' | 'error' | 'debug';
 
@@ -128,4 +129,4 @@ export function createLogger(namespace: string): Logger {
 /**
  * Re-export error severity for convenience
  */
-export type { ErrorSeverity } from './github-reporter';
+export type { ErrorSeverity } from './error-types';
