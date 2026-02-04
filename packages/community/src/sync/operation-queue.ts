@@ -119,6 +119,17 @@ export class OperationQueue {
   }
 
   /**
+   * Cleanup resources (call during shutdown to prevent timer leaks)
+   */
+  destroy(): void {
+    if (this.debounceTimer) {
+      clearTimeout(this.debounceTimer);
+      this.debounceTimer = null;
+    }
+    this.processingCallbacks.clear();
+  }
+
+  /**
    * Get next batch of operations
    * Returns up to maxBatchSize operations in FIFO order
    */
