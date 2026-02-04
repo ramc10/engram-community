@@ -330,7 +330,7 @@ describe('Intelligence & Retrieval Flows', () => {
     });
 
     describe('Flow 1: Semantic Search Accuracy', () => {
-        test.skip('should return pizza recipe when searching "dinner instructions" (not Python code)', async () => {
+        test('should return pizza recipe when searching "dinner instructions" (not Python code)', async () => {
             // Save diverse memories
             const pizzaMemory = {
                 role: 'user',
