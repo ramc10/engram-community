@@ -6,6 +6,9 @@
 import { createLogger } from './logger';
 import { generateErrorFingerprint, type ErrorFingerprint } from './error-fingerprint';
 import { sanitizeError, validateSanitization, type SanitizedErrorData } from './error-sanitizer';
+// Import and re-export error types from separate file for tree-shaking
+import { ErrorSeverity, type ErrorContext } from './error-types';
+export { ErrorSeverity, type ErrorContext } from './error-types';
 
 const logger = createLogger('GitHubReporter');
 
@@ -32,27 +35,6 @@ function getGitHubConfig() {
     owner: process.env.PLASMO_PUBLIC_GITHUB_REPO_OWNER || 'ramc10',
     repo: process.env.PLASMO_PUBLIC_GITHUB_REPO_NAME || 'engram-community',
   };
-}
-
-/**
- * Error severity levels mapped to GitHub labels
- */
-export enum ErrorSeverity {
-  CRITICAL = 'critical',
-  HIGH = 'high',
-  MEDIUM = 'medium',
-  LOW = 'low'
-}
-
-/**
- * Error context for reporting
- */
-export interface ErrorContext {
-  service?: string;
-  operation?: string;
-  severity?: ErrorSeverity;
-  userAction?: string;
-  additionalData?: Record<string, any>;
 }
 
 /**

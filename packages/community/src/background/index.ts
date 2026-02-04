@@ -15,18 +15,65 @@ import { CryptoService } from '../lib/crypto-service';
 import { StorageService } from '../lib/storage';
 import { Message, createErrorResponse } from '../lib/messages';
 import { handleMessage } from './message-handler';
-import { SyncManager } from '../sync/sync-manager';
+// LAZY LOADED: SyncManager, CloudSyncService, premiumService, getPremiumClient, EmbeddingMigration
+// These are loaded dynamically to reduce initial bundle size (~500KB savings)
 import { authClient } from '../lib/auth-client';
 import { getMigrationService } from '../lib/migration-service';
 import { DeviceKeyManager } from '../lib/device-key-manager';
-import { CloudSyncService } from '../lib/cloud-sync';
-import { premiumService } from '../lib/premium-service';
-import { getPremiumClient } from '../lib/premium-api-client';
-import { EmbeddingMigration } from '../lib/embedding-migration';
 import type { EnrichmentConfig } from '@engram/core';
 import { decryptApiKey, isEncrypted } from '../lib/api-key-crypto';
 import { createLogger } from '../lib/logger';
-import { ErrorSeverity } from '../lib/github-reporter';
+// Import ErrorSeverity from separate file for tree-shaking
+import { ErrorSeverity } from '../lib/error-types';
+
+// Types for lazy-loaded modules
+type SyncManagerModule = typeof import('../sync/sync-manager');
+type CloudSyncServiceModule = typeof import('../lib/cloud-sync');
+type PremiumServiceModule = typeof import('../lib/premium-service');
+type PremiumClientModule = typeof import('../lib/premium-api-client');
+type EmbeddingMigrationModule = typeof import('../lib/embedding-migration');
+
+// Lazy module loaders (cached after first load)
+let syncManagerModule: SyncManagerModule | null = null;
+let cloudSyncModule: CloudSyncServiceModule | null = null;
+let premiumServiceModule: PremiumServiceModule | null = null;
+let premiumClientModule: PremiumClientModule | null = null;
+let embeddingMigrationModule: EmbeddingMigrationModule | null = null;
+
+async function getSyncManagerModule(): Promise<SyncManagerModule> {
+  if (!syncManagerModule) {
+    syncManagerModule = await import('../sync/sync-manager');
+  }
+  return syncManagerModule;
+}
+
+async function getCloudSyncModule(): Promise<CloudSyncServiceModule> {
+  if (!cloudSyncModule) {
+    cloudSyncModule = await import('../lib/cloud-sync');
+  }
+  return cloudSyncModule;
+}
+
+async function getPremiumServiceModule(): Promise<PremiumServiceModule> {
+  if (!premiumServiceModule) {
+    premiumServiceModule = await import('../lib/premium-service');
+  }
+  return premiumServiceModule;
+}
+
+async function getPremiumClientModule(): Promise<PremiumClientModule> {
+  if (!premiumClientModule) {
+    premiumClientModule = await import('../lib/premium-api-client');
+  }
+  return premiumClientModule;
+}
+
+async function getEmbeddingMigrationModule(): Promise<EmbeddingMigrationModule> {
+  if (!embeddingMigrationModule) {
+    embeddingMigrationModule = await import('../lib/embedding-migration');
+  }
+  return embeddingMigrationModule;
+}
 
 const logger = createLogger('Background');
 
@@ -36,8 +83,9 @@ const logger = createLogger('Background');
 class BackgroundService {
   private crypto: CryptoService | null = null;
   private storage: StorageService | null = null;
-  private syncManager: SyncManager | null = null;
-  private cloudSync: CloudSyncService | null = null;
+  // Use 'any' for lazy-loaded types to avoid circular dependency issues
+  private syncManager: any = null; // SyncManager instance (lazy loaded)
+  private cloudSync: any = null; // CloudSyncService instance (lazy loaded)
   private deviceId: string | null = null;
   private masterKey: MasterKey | null = null; // Master key in memory (can be persisted encrypted)
   private deviceKeyManager: DeviceKeyManager = new DeviceKeyManager();
@@ -92,7 +140,8 @@ class BackgroundService {
       this.deviceId = await this.getOrCreateDeviceId();
       console.log('[Engram] Device ID:', this.deviceId);
 
-      // Initialize sync manager
+      // Initialize sync manager (lazy loaded to reduce initial bundle size)
+      const { SyncManager } = await getSyncManagerModule();
       this.syncManager = new SyncManager(this.storage, {
         serverUrl: 'ws://localhost:3001/ws',
         deviceId: this.deviceId,
@@ -189,7 +238,7 @@ class BackgroundService {
   /**
    * Get sync manager (must be initialized)
    */
-  getSyncManager(): SyncManager {
+  getSyncManager(): any {
     if (!this.syncManager) {
       throw new Error('Sync manager not initialized');
     }
@@ -225,29 +274,30 @@ class BackgroundService {
       console.log('[Engram] Storage configured with master key provider');
     }
 
-    // SECURITY: Run embedding encryption migration if needed
+    // SECURITY: Run embedding encryption migration if needed (lazy loaded)
     if (this.storage) {
-      EmbeddingMigration.needsMigration(this.storage).then(needsMigration => {
-        if (needsMigration) {
-          console.log('[Engram] Embedding migration needed, starting...');
+      (async () => {
+        try {
+          const { EmbeddingMigration } = await getEmbeddingMigrationModule();
+          const needsMigration = await EmbeddingMigration.needsMigration(this.storage!);
+          if (needsMigration) {
+            console.log('[Engram] Embedding migration needed, starting...');
 
-          EmbeddingMigration.migrateEmbeddings(
-            this.storage!,
-            masterKey,
-            (current, total) => {
-              if (current % 100 === 0) {
-                console.log(`[Migration] Progress: ${current}/${total}`);
+            const stats = await EmbeddingMigration.migrateEmbeddings(
+              this.storage!,
+              masterKey,
+              (current, total) => {
+                if (current % 100 === 0) {
+                  console.log(`[Migration] Progress: ${current}/${total}`);
+                }
               }
-            }
-          ).then(stats => {
+            );
             console.log('[Migration] Complete:', stats);
-          }).catch(err => {
-            console.error('[Migration] Failed:', err);
-          });
+          }
+        } catch (err) {
+          console.error('[Engram] Failed to run embedding migration:', err);
         }
-      }).catch(err => {
-        console.error('[Engram] Failed to check migration status:', err);
-      });
+      })();
     }
   }
 
@@ -331,6 +381,7 @@ class BackgroundService {
   /**
    * Initialize cloud sync if user is premium with sync enabled
    * Called on startup after master key restoration
+   * Uses lazy loading for CloudSyncService and premiumService (~200KB savings)
    */
   async initializeCloudSyncIfNeeded(): Promise<void> {
     if (!this.hasMasterKey()) {
@@ -351,6 +402,9 @@ class BackgroundService {
         return;
       }
 
+      // Lazy load premium service module
+      const { premiumService } = await getPremiumServiceModule();
+
       // Check premium status and sync enabled
       const supabaseClient = authClient.getSupabaseClient();
       const premiumStatus = await premiumService.getPremiumStatus(
@@ -362,6 +416,9 @@ class BackgroundService {
         console.log('[CloudSync] User not premium or sync disabled');
         return;
       }
+
+      // Lazy load CloudSyncService
+      const { CloudSyncService } = await getCloudSyncModule();
 
       // Initialize CloudSyncService
       console.log('[CloudSync] Initializing cloud sync...');
@@ -387,10 +444,13 @@ class BackgroundService {
   /**
    * Initialize premium API client if enrichment provider is 'premium'
    * Called on startup and when enrichment settings change
+   * Uses lazy loading for premium client (~100KB savings)
    */
   async initializePremiumClientIfNeeded(): Promise<void> {
     console.log('[PremiumAPI] initializePremiumClientIfNeeded() started');
     try {
+      // Lazy load premium client module
+      const { getPremiumClient } = await getPremiumClientModule();
       // Get the premium client singleton
       const premiumClient = getPremiumClient();
       console.log('[PremiumAPI] Got premium client singleton');
@@ -506,7 +566,7 @@ class BackgroundService {
   /**
    * Get cloud sync service (if initialized)
    */
-  getCloudSync(): CloudSyncService | null {
+  getCloudSync(): any | null {
     return this.cloudSync;
   }
 

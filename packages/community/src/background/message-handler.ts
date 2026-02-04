@@ -33,7 +33,17 @@ import {
 import { BackgroundService } from './index';
 import { Memory } from '@engram/core';
 import { generateUUID, getPlatformFromUrl, base64ToUint8Array, uint8ArrayToBase64 } from '@engram/core';
-import { premiumService } from '../lib/premium-service';
+
+// Lazy load premium service for bundle size optimization
+type PremiumServiceModule = typeof import('../lib/premium-service');
+let premiumServiceModule: PremiumServiceModule | null = null;
+
+async function getPremiumServiceModule(): Promise<PremiumServiceModule> {
+  if (!premiumServiceModule) {
+    premiumServiceModule = await import('../lib/premium-service');
+  }
+  return premiumServiceModule;
+}
 
 
 /**
@@ -853,6 +863,7 @@ async function handleGetPremiumStatus(
     // Get authenticated Supabase client (has user session for RLS)
     const supabaseClient = authClient.getSupabaseClient();
 
+    const { premiumService } = await getPremiumServiceModule();
     const status = await premiumService.getPremiumStatus(authState.userId, supabaseClient);
 
     return {
@@ -886,6 +897,7 @@ async function handleUpgradeToPremium(
 
     console.log('[Premium] Upgrading user to premium:', authState.userId);
 
+    const { premiumService } = await getPremiumServiceModule();
     await premiumService.upgradeToPremium(authState.userId);
 
     console.log('[Premium] User upgraded successfully');
@@ -923,6 +935,7 @@ async function handleRequestPremiumUpgrade(
     // Get authenticated Supabase client (has user session for RLS)
     const supabaseClient = authClient.getSupabaseClient();
 
+    const { premiumService } = await getPremiumServiceModule();
     await premiumService.requestPremiumUpgrade(authState.userId, authState.email, supabaseClient);
 
     console.log('[Premium] Upgrade request submitted successfully');
@@ -957,6 +970,9 @@ async function handleStartCloudSync(
 
     // Get authenticated Supabase client (has user session for RLS)
     const supabaseClient = authClient.getSupabaseClient();
+
+    // Lazy load premium service
+    const { premiumService } = await getPremiumServiceModule();
 
     // Check if user has premium tier
     const isPremium = await premiumService.isPremium(authState.userId, supabaseClient);
@@ -1007,7 +1023,8 @@ async function handleStopCloudSync(
       // Get authenticated Supabase client (has user session for RLS)
       const supabaseClient = authClient.getSupabaseClient();
 
-      // Disable sync in database with authenticated client (for RLS)
+      // Lazy load premium service and disable sync in database with authenticated client (for RLS)
+      const { premiumService } = await getPremiumServiceModule();
       await premiumService.disableSync(authState.userId, supabaseClient);
     }
 
