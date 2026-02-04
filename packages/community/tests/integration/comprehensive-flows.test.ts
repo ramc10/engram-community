@@ -32,16 +32,27 @@ jest.mock('../../src/lib/embedding-service', () => {
         getEmbeddingService: jest.fn(() => ({
             initialize: jest.fn().mockImplementation(() => Promise.resolve()),
             embed: jest.fn().mockImplementation((...args: any[]) => Promise.resolve(generateMockVector(args[0] as string))),
-            regenerateEmbedding: jest.fn().mockImplementation(async (memory: any) => ({
-                ...memory,
-                embedding: generateMockVector(memory.content?.text || memory.content || '')
-            })),
+            regenerateEmbedding: jest.fn().mockImplementation(async (memory: any) => {
+                // Use enrichment metadata when content.text is null (post-enrichment)
+                const text = [
+                    memory.content?.text,
+                    ...(memory.keywords || []),
+                    ...(memory.tags || []),
+                    memory.context
+                ].filter(Boolean).join(' ');
+                return { ...memory, embedding: generateMockVector(text || '') };
+            }),
             embedMemories: jest.fn().mockImplementation(async (...args: any[]) => {
                 const memories = args[0] as any[];
-                return memories.map(m => ({
-                    ...m,
-                    embedding: generateMockVector(m.content?.text || m.content || '')
-                }));
+                return memories.map(m => {
+                    const text = [
+                        m.content?.text,
+                        ...(m.keywords || []),
+                        ...(m.tags || []),
+                        m.context
+                    ].filter(Boolean).join(' ');
+                    return { ...m, embedding: generateMockVector(text || '') };
+                });
             }),
             setHNSWIndex: jest.fn(),
             findSimilar: jest.fn().mockImplementation(() => Promise.resolve([])),
@@ -318,7 +329,7 @@ describe('Comprehensive User Flows', () => {
         expect(searchResponse.memories[0].content.text).toContain('pizza');
     });
 
-    test.skip('Flow 2: Automatic Memory Enrichment', async () => {
+    test('Flow 2: Automatic Memory Enrichment', async () => {
         mockFetch.mockResolvedValue({
             ok: true,
             json: () => Promise.resolve({ choices: [{ message: { content: '{"keywords":["pizza","sourdough"],"tags":["cooking"],"context":"recipe"}' } }] })

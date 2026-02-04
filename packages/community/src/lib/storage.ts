@@ -1108,6 +1108,23 @@ export class StorageService implements IStorage {
       }
     }
 
+    // Copy enrichment results back to the original memory object.
+    // enrichMemory() mutates memoryForEnrichment in-place, but when plaintextContent
+    // is provided memoryForEnrichment is a spread copy — enriched fields (keywords, tags,
+    // context, embedding) must be transferred back before the final atomic save below.
+    if (memoryForEnrichment !== memory) {
+      memory.keywords = memoryForEnrichment.keywords;
+      memory.tags = memoryForEnrichment.tags;
+      memory.context = memoryForEnrichment.context;
+      if ((memoryForEnrichment as any).encryptedEmbedding) {
+        (memory as any).encryptedEmbedding = (memoryForEnrichment as any).encryptedEmbedding;
+        (memory as any).embeddingVersion = (memoryForEnrichment as any).embeddingVersion;
+      } else if ((memoryForEnrichment as any).embedding) {
+        (memory as any).embedding = (memoryForEnrichment as any).embedding;
+        (memory as any).embeddingVersion = (memoryForEnrichment as any).embeddingVersion;
+      }
+    }
+
     // NOTE: Embedding regeneration and HNSW indexing is now handled in onEnrichmentComplete
     // This ensures embeddings capture enriched metadata (keywords, tags, context)
     // and fixes the race condition (issue #87) where tests checked HNSW before indexing completed
