@@ -118,6 +118,7 @@ export class StorageService implements IStorage {
   public forceEnrichmentInTests = false;
   private masterKeyProvider?: () => { key: Uint8Array } | null; // For embedding encryption
   private pendingEnrichments: Map<string, Promise<void>> = new Map(); // Track pending enrichInBackground operations
+  private hnswPersistCounter: number = 0; // Deterministic batch counter for HNSW persistence
 
   constructor() {
     this.db = new EngramDatabase();
@@ -1055,7 +1056,9 @@ export class StorageService implements IStorage {
           );
 
           // Batch persist (every 10 updates to reduce I/O)
-          if (Math.random() < 0.1) {
+          this.hnswPersistCounter++;
+          if (this.hnswPersistCounter >= 10) {
+            this.hnswPersistCounter = 0;
             await this.hnswIndexService.persist(this.db);
           }
         }

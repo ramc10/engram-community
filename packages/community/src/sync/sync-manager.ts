@@ -373,11 +373,12 @@ export class SyncManager implements ISyncManager {
       // Apply operation to local storage
       await this.applyRemoteOperation(operation);
 
-      // Merge vector clock
-      this.vectorClock = {
-        ...this.vectorClock,
-        ...operation.vectorClock,
-      };
+      // Merge vector clock (take max per device to preserve causality)
+      const merged: Record<string, number> = { ...this.vectorClock };
+      for (const [device, version] of Object.entries(operation.vectorClock || {})) {
+        merged[device] = Math.max(merged[device] || 0, version as number);
+      }
+      this.vectorClock = merged;
     }
 
     // Save updated vector clock
