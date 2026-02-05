@@ -37,6 +37,40 @@ export function injectNetworkInterceptor(): void {
         }
       });
 
+      // Extract plain text from string | {text} | [{type:"text",text}]
+      function extractText(content) {
+        if (typeof content === 'string') return content;
+        if (Array.isArray(content)) {
+          const block = content.find(function(b) { return b && b.type === 'text'; });
+          return block ? block.text : null;
+        }
+        if (content && typeof content === 'object' && 'text' in content) {
+          return content.text || null;
+        }
+        return null;
+      }
+
+      // Write enriched text back, preserving original content shape
+      function writeText(content, enriched) {
+        if (typeof content === 'string') return enriched;
+        if (Array.isArray(content)) {
+          return content.map(function(b) {
+            return (b && b.type === 'text') ? Object.assign({}, b, { text: enriched }) : b;
+          });
+        }
+        if (content && typeof content === 'object' && 'text' in content) {
+          return Object.assign({}, content, { text: enriched });
+        }
+        return enriched;
+      }
+
+      // Loose match: true when either side contains the other (after trim)
+      function promptsMatch(bodyValue, original) {
+        var a = bodyValue.trim();
+        var b = original.trim();
+        return a === b || a.indexOf(b) !== -1 || b.indexOf(a) !== -1;
+      }
+
       // Override fetch
       window.fetch = async function(...args) {
         const [resource, config] = args;
@@ -75,46 +109,43 @@ export function injectNetworkInterceptor(): void {
               let modified = false;
 
               // Try different prompt locations in request body
-              if (body.prompt) {
+              if (body.prompt && typeof body.prompt === 'string') {
                 console.log('[Engram Network Injector] Found body.prompt');
-                if (body.prompt.trim() === queuedInjection.originalPrompt.trim()) {
+                if (promptsMatch(body.prompt, queuedInjection.originalPrompt)) {
                   body.prompt = queuedInjection.enrichedPrompt;
                   modified = true;
                   console.log('[Engram Network Injector] ✅ Replaced body.prompt');
                 }
               }
 
-              if (body.message && typeof body.message === 'string') {
+              if (!modified && body.message && typeof body.message === 'string') {
                 console.log('[Engram Network Injector] Found body.message');
-                if (body.message.trim() === queuedInjection.originalPrompt.trim()) {
+                if (promptsMatch(body.message, queuedInjection.originalPrompt)) {
                   body.message = queuedInjection.enrichedPrompt;
                   modified = true;
                   console.log('[Engram Network Injector] ✅ Replaced body.message');
                 }
               }
 
-              if (body.text) {
+              if (!modified && body.text && typeof body.text === 'string') {
                 console.log('[Engram Network Injector] Found body.text');
-                if (body.text.trim() === queuedInjection.originalPrompt.trim()) {
+                if (promptsMatch(body.text, queuedInjection.originalPrompt)) {
                   body.text = queuedInjection.enrichedPrompt;
                   modified = true;
                   console.log('[Engram Network Injector] ✅ Replaced body.text');
                 }
               }
 
-              // Check for nested structures
-              if (body.messages && Array.isArray(body.messages) && body.messages.length > 0) {
+              // Check for nested structures – handles string, {text}, and [{type:"text",text}]
+              if (!modified && body.messages && Array.isArray(body.messages) && body.messages.length > 0) {
                 console.log('[Engram Network Injector] Found body.messages array');
                 const lastMsg = body.messages[body.messages.length - 1];
 
-                if (lastMsg.content) {
-                  const content = typeof lastMsg.content === 'string' ? lastMsg.content : lastMsg.content.text;
-                  if (content && content.trim() === queuedInjection.originalPrompt.trim()) {
-                    if (typeof lastMsg.content === 'string') {
-                      lastMsg.content = queuedInjection.enrichedPrompt;
-                    } else {
-                      lastMsg.content.text = queuedInjection.enrichedPrompt;
-                    }
+                if (lastMsg.content != null) {
+                  const extracted = extractText(lastMsg.content);
+                  console.log('[Engram Network Injector] Extracted text from messages[].content:', extracted && extracted.substring(0, 80));
+                  if (extracted && promptsMatch(extracted, queuedInjection.originalPrompt)) {
+                    lastMsg.content = writeText(lastMsg.content, queuedInjection.enrichedPrompt);
                     modified = true;
                     console.log('[Engram Network Injector] ✅ Replaced body.messages[].content');
                   }
