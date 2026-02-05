@@ -9,6 +9,47 @@ export interface MessageToInject {
   timestamp: number;
 }
 
+/**
+ * Extract the plain-text string from a Claude-style content value.
+ * Handles: string | { text: string } | [{ type: "text", text: string }, …]
+ */
+export function extractText(content: unknown): string | null {
+  if (typeof content === 'string') return content;
+  if (Array.isArray(content)) {
+    const textBlock = content.find((b: any) => b && b.type === 'text');
+    return textBlock?.text ?? null;
+  }
+  if (content && typeof content === 'object' && 'text' in (content as any)) {
+    return (content as any).text ?? null;
+  }
+  return null;
+}
+
+/**
+ * Write enriched text back into content, preserving its original shape.
+ */
+export function writeText(content: unknown, enriched: string): unknown {
+  if (typeof content === 'string') return enriched;
+  if (Array.isArray(content)) {
+    return content.map((b: any) =>
+      b && b.type === 'text' ? { ...b, text: enriched } : b
+    );
+  }
+  if (content && typeof content === 'object' && 'text' in (content as any)) {
+    return { ...(content as any), text: enriched };
+  }
+  return enriched;
+}
+
+/**
+ * Loose prompt match: true when either side contains the other after trimming.
+ */
+export function promptsMatch(bodyValue: string, original: string): boolean {
+  const a = bodyValue.trim();
+  const b = original.trim();
+  return a === b || a.includes(b) || b.includes(a);
+}
+
 export class NetworkInterceptor {
   private messageToInject: MessageToInject | null = null;
   private originalFetch: typeof fetch;
@@ -112,65 +153,39 @@ export class NetworkInterceptor {
               const body = JSON.parse(bodyText);
               console.log('[Network Interceptor] Parsed body keys:', Object.keys(body));
 
-              // Find and replace the prompt in the request
-              if (body.prompt) {
+              let modified = false;
+
+              // Try body.prompt
+              if (body.prompt && typeof body.prompt === 'string') {
                 console.log('[Network Interceptor] Found prompt in body.prompt');
-                // Check if it matches our original prompt (might be trimmed)
-                if (body.prompt.trim() === injection.originalPrompt.trim()) {
-                  console.log('[Network Interceptor] Replacing prompt with enriched version');
+                if (promptsMatch(body.prompt, injection.originalPrompt)) {
                   body.prompt = injection.enrichedPrompt;
-
-                  // Update the request config
-                  const modifiedConfig = {
-                    ...config,
-                    body: JSON.stringify(body),
-                  };
-
-                  // Clear the injection
-                  this.clearInjection();
-
-                  // Send modified request
-                  return originalFetch.call(window, resource, modifiedConfig);
-                } else {
-                  console.log('[Network Interceptor] Prompt mismatch, not injecting');
-                  console.log('[Network Interceptor] Expected:', injection.originalPrompt.substring(0, 50));
-                  console.log('[Network Interceptor] Got:', body.prompt.substring(0, 50));
+                  modified = true;
+                  console.log('[Network Interceptor] ✅ Replaced body.prompt');
                 }
               }
 
-              // Check for messages array (alternative format)
-              if (body.messages && Array.isArray(body.messages)) {
+              // Try body.messages[] – handles string, {text}, and [{type:"text",text}] content
+              if (!modified && body.messages && Array.isArray(body.messages)) {
                 console.log('[Network Interceptor] Found messages array');
                 const lastMessage = body.messages[body.messages.length - 1];
-                if (lastMessage && lastMessage.content) {
-                  const content = typeof lastMessage.content === 'string'
-                    ? lastMessage.content
-                    : lastMessage.content.text || lastMessage.content[0]?.text;
-
-                  if (content && content.trim() === injection.originalPrompt.trim()) {
-                    console.log('[Network Interceptor] Replacing message content with enriched version');
-
-                    if (typeof lastMessage.content === 'string') {
-                      lastMessage.content = injection.enrichedPrompt;
-                    } else if (lastMessage.content.text) {
-                      lastMessage.content.text = injection.enrichedPrompt;
-                    } else if (lastMessage.content[0]?.text) {
-                      lastMessage.content[0].text = injection.enrichedPrompt;
-                    }
-
-                    // Update the request config
-                    const modifiedConfig = {
-                      ...config,
-                      body: JSON.stringify(body),
-                    };
-
-                    // Clear the injection
-                    this.clearInjection();
-
-                    // Send modified request
-                    return originalFetch.call(window, resource, modifiedConfig);
+                if (lastMessage && lastMessage.content != null) {
+                  const extracted = extractText(lastMessage.content);
+                  if (extracted && promptsMatch(extracted, injection.originalPrompt)) {
+                    lastMessage.content = writeText(lastMessage.content, injection.enrichedPrompt);
+                    modified = true;
+                    console.log('[Network Interceptor] ✅ Replaced body.messages[].content');
                   }
                 }
+              }
+
+              if (modified) {
+                const modifiedConfig = {
+                  ...config,
+                  body: JSON.stringify(body),
+                };
+                this.clearInjection();
+                return originalFetch.call(window, resource, modifiedConfig);
               }
             } catch (error) {
               console.error('[Network Interceptor] Error modifying request:', error);

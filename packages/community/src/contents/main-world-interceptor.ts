@@ -48,6 +48,54 @@ window.addEventListener('message', (event) => {
   }
 });
 
+/**
+ * Extract the plain-text string from a Claude-style content value.
+ * Handles three forms:
+ *   • string          – returned as-is
+ *   • { text: string } – object with a text property
+ *   • [{ type: "text", text: string }, …] – content-block array (Claude API)
+ */
+function extractText(content: unknown): string | null {
+  if (typeof content === 'string') return content;
+  if (Array.isArray(content)) {
+    const textBlock = content.find((b: any) => b && b.type === 'text');
+    return textBlock?.text ?? null;
+  }
+  if (content && typeof content === 'object' && 'text' in (content as any)) {
+    return (content as any).text ?? null;
+  }
+  return null;
+}
+
+/**
+ * Write the enriched prompt back into a content value, preserving its original
+ * shape so the API accepts the modified body unchanged.
+ */
+function writeText(content: unknown, enriched: string): unknown {
+  if (typeof content === 'string') return enriched;
+  if (Array.isArray(content)) {
+    return content.map((b: any) =>
+      b && b.type === 'text' ? { ...b, text: enriched } : b
+    );
+  }
+  if (content && typeof content === 'object' && 'text' in (content as any)) {
+    return { ...(content as any), text: enriched };
+  }
+  return enriched;
+}
+
+/**
+ * Loose prompt match: returns true when either side contains the other
+ * (after trimming).  This handles the common mismatch where
+ * contenteditable textContent collapses whitespace differently from what
+ * React serialises into the request body.
+ */
+function promptsMatch(bodyValue: string, original: string): boolean {
+  const a = bodyValue.trim();
+  const b = original.trim();
+  return a === b || a.includes(b) || b.includes(a);
+}
+
 // Override fetch in main world
 window.fetch = async function(...args: Parameters<typeof fetch>): Promise<Response> {
   const [resource, config] = args;
@@ -123,46 +171,43 @@ window.fetch = async function(...args: Parameters<typeof fetch>): Promise<Respon
         let modified = false;
 
         // Try different prompt locations in request body
-        if (body.prompt) {
+        if (body.prompt && typeof body.prompt === 'string') {
           console.log('[Engram Main World] Found body.prompt');
-          if (body.prompt.trim() === queuedInjection.originalPrompt.trim()) {
+          if (promptsMatch(body.prompt, queuedInjection.originalPrompt)) {
             body.prompt = queuedInjection.enrichedPrompt;
             modified = true;
             console.log('[Engram Main World] ✅ Replaced body.prompt');
           }
         }
 
-        if (body.message && typeof body.message === 'string') {
+        if (!modified && body.message && typeof body.message === 'string') {
           console.log('[Engram Main World] Found body.message');
-          if (body.message.trim() === queuedInjection.originalPrompt.trim()) {
+          if (promptsMatch(body.message, queuedInjection.originalPrompt)) {
             body.message = queuedInjection.enrichedPrompt;
             modified = true;
             console.log('[Engram Main World] ✅ Replaced body.message');
           }
         }
 
-        if (body.text) {
+        if (!modified && body.text && typeof body.text === 'string') {
           console.log('[Engram Main World] Found body.text');
-          if (body.text.trim() === queuedInjection.originalPrompt.trim()) {
+          if (promptsMatch(body.text, queuedInjection.originalPrompt)) {
             body.text = queuedInjection.enrichedPrompt;
             modified = true;
             console.log('[Engram Main World] ✅ Replaced body.text');
           }
         }
 
-        // Check for nested structures
-        if (body.messages && Array.isArray(body.messages) && body.messages.length > 0) {
+        // Check for nested structures – handles string, {text}, and [{type:"text",text}] content
+        if (!modified && body.messages && Array.isArray(body.messages) && body.messages.length > 0) {
           console.log('[Engram Main World] Found body.messages array');
           const lastMsg = body.messages[body.messages.length - 1];
 
-          if (lastMsg.content) {
-            const content = typeof lastMsg.content === 'string' ? lastMsg.content : lastMsg.content.text;
-            if (content && content.trim() === queuedInjection.originalPrompt.trim()) {
-              if (typeof lastMsg.content === 'string') {
-                lastMsg.content = queuedInjection.enrichedPrompt;
-              } else {
-                lastMsg.content.text = queuedInjection.enrichedPrompt;
-              }
+          if (lastMsg.content != null) {
+            const extracted = extractText(lastMsg.content);
+            console.log('[Engram Main World] Extracted text from messages[].content:', extracted?.substring(0, 80));
+            if (extracted && promptsMatch(extracted, queuedInjection.originalPrompt)) {
+              lastMsg.content = writeText(lastMsg.content, queuedInjection.enrichedPrompt);
               modified = true;
               console.log('[Engram Main World] ✅ Replaced body.messages[].content');
             }
