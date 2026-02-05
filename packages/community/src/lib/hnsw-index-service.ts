@@ -56,6 +56,7 @@ export class HNSWIndexService {
   private readonly dbName = 'engram-hnsw-index'; // IndexedDB name for EdgeVec persistence
   private masterKeyProvider?: () => { key: Uint8Array } | null; // For embedding decryption
   private embeddingCache: Map<string, Float32Array> = new Map(); // Decrypted embedding cache
+  private static readonly CACHE_MAX_SIZE = 5000; // Evict oldest when exceeded
 
   // Static WASM initialization state (shared across all instances)
   private static wasmInitialized: boolean = false;
@@ -162,6 +163,9 @@ export class HNSWIndexService {
         );
 
         const embedding = new Float32Array(decryptedBytes.buffer);
+        if (this.embeddingCache.size >= HNSWIndexService.CACHE_MAX_SIZE) {
+          this.embeddingCache.delete(this.embeddingCache.keys().next().value as string);
+        }
         this.embeddingCache.set(memory.id, embedding);
 
         return embedding;
@@ -173,6 +177,9 @@ export class HNSWIndexService {
 
     // Handle unencrypted embeddings (v1 or legacy)
     if (memory.embedding) {
+      if (this.embeddingCache.size >= HNSWIndexService.CACHE_MAX_SIZE) {
+        this.embeddingCache.delete(this.embeddingCache.keys().next().value as string);
+      }
       this.embeddingCache.set(memory.id, memory.embedding);
       return memory.embedding;
     }
