@@ -149,7 +149,7 @@ describe('full replacement round-trip (Claude content-block array)', () => {
     expect(extracted).toBe(originalPrompt);
     expect(promptsMatch(extracted as string, originalPrompt)).toBe(true);
 
-    lastMsg.content = writeText(lastMsg.content, enrichedPrompt);
+    lastMsg.content = writeText(lastMsg.content, enrichedPrompt) as typeof lastMsg.content;
 
     // Shape is preserved – still an array with a text block
     expect(lastMsg.content).toEqual([{ type: 'text', text: enrichedPrompt }]);
@@ -171,7 +171,7 @@ describe('full replacement round-trip (Claude content-block array)', () => {
     expect(extracted).toBe(originalPrompt);
     expect(promptsMatch(extracted as string, originalPrompt)).toBe(true);
 
-    lastMsg.content = writeText(lastMsg.content, enrichedPrompt);
+    lastMsg.content = writeText(lastMsg.content, enrichedPrompt) as typeof lastMsg.content;
     expect(lastMsg.content).toBe(enrichedPrompt);
   });
 
