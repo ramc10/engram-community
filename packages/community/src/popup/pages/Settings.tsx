@@ -50,7 +50,7 @@ const SettingsPageComponent: React.FC<SettingsPageProps> = ({
   const [errorReportingEnabled, setErrorReportingEnabled] = useState(false);
   const [isUpdatingErrorReporter, setIsUpdatingErrorReporter] = useState(false);
 
-  const { success, error: showError, info } = useToast();
+  const { success, error: showError } = useToast();
   const { colors } = useTheme();
 
   const loadSyncStatus = useCallback(async () => {
@@ -1233,7 +1233,7 @@ const SettingsPageComponent: React.FC<SettingsPageProps> = ({
           border: `1px solid ${colors.border}`
         }}>
           <div style={{ fontSize: '12px', fontWeight: 600, color: colors.text.primary, marginBottom: '8px' }}>
-            What's collected:
+            What&apos;s collected:
           </div>
           <ul style={{ fontSize: '11px', color: colors.text.secondary, margin: '0', paddingLeft: '20px', lineHeight: '1.8' }}>
             <li>Error messages (sanitized)</li>
@@ -1252,7 +1252,7 @@ const SettingsPageComponent: React.FC<SettingsPageProps> = ({
           border: `1px solid ${colors.border}`
         }}>
           <div style={{ fontSize: '12px', fontWeight: 600, color: colors.text.primary, marginBottom: '8px' }}>
-            What's NOT collected:
+            What&apos;s NOT collected:
           </div>
           <ul style={{ fontSize: '11px', color: colors.text.secondary, margin: '0', paddingLeft: '20px', lineHeight: '1.8' }}>
             <li>Your conversations</li>

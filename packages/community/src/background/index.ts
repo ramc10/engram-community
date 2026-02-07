@@ -618,7 +618,7 @@ async function showErrorReportingConsent(): Promise<void> {
     }
 
     // Create notification
-    const notificationId: string = await new Promise((resolve, reject) => {
+    const notificationId: string = await new Promise((resolve, _reject) => {
       chrome.notifications.create({
         type: 'basic',
         iconUrl: chrome.runtime.getManifest().icons?.['128'] || '',
@@ -733,28 +733,6 @@ chrome.runtime.onStartup.addListener(async () => {
     }
   }
 });
-
-/**
- * Check if URL is a known AI chat platform with a dedicated adapter
- */
-function isAIPlatform(url?: string): boolean {
-  if (!url) return false;
-
-  const aiDomains = [
-    'chat.openai.com',
-    'chatgpt.com',
-    'claude.ai',
-    'www.perplexity.ai',
-    'gemini.google.com',
-  ];
-
-  try {
-    const urlObj = new URL(url);
-    return aiDomains.some(domain => urlObj.hostname === domain);
-  } catch {
-    return false;
-  }
-}
 
 /**
  * Check if URL is a valid web page (not a browser internal page)

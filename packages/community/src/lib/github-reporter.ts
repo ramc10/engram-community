@@ -7,7 +7,7 @@ import { createLogger } from './logger';
 import { generateErrorFingerprint, type ErrorFingerprint } from './error-fingerprint';
 import { sanitizeError, validateSanitization, type SanitizedErrorData } from './error-sanitizer';
 // Import and re-export error types from separate file for tree-shaking
-import { ErrorSeverity, type ErrorContext } from './error-types';
+import { type ErrorContext } from './error-types';
 export { ErrorSeverity, type ErrorContext } from './error-types';
 
 const logger = createLogger('GitHubReporter');

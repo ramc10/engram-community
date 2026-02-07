@@ -104,7 +104,7 @@ export class HNSWIndexService {
             testConfig.metric = 'cosine';
             testConfig.m = 16;
             testConfig.ef_construction = 200;
-            const testInstance = new EdgeVec(testConfig);
+            new EdgeVec(testConfig);
             console.log('[HNSW] EdgeVec WASM module initialized via test instance');
           }
         } catch (importError) {
@@ -114,7 +114,7 @@ export class HNSWIndexService {
           testConfig.metric = 'cosine';
           testConfig.m = 16;
           testConfig.ef_construction = 200;
-          const testInstance = new EdgeVec(testConfig);
+          new EdgeVec(testConfig);
           console.log('[HNSW] EdgeVec WASM module initialized via test instance (fallback)');
         }
 

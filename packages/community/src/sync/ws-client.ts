@@ -18,7 +18,6 @@ import {
   OperationMessage,
   AckMessage,
   ErrorMessage,
-  HeartbeatMessage,
 } from '@engram/core';
 import { RetryManager } from './retry-manager';
 
@@ -375,7 +374,7 @@ export class WebSocketClient {
   /**
    * Request sync
    */
-  requestSync(since: number, vectorClock: Record<string, number>, limit: number = 100): void {
+  requestSync(since: number, vectorClock: Record<string, number>, _limit: number = 100): void {
     if (!this.deviceId) {
       throw new Error('Cannot request sync: deviceId not set. Call connect() first.');
     }
