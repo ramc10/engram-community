@@ -2,7 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased] - 2026-01-12
+## [1.0.0] - 2026-02-07
+
+### Architecture
+- **Refactored sidepanel.tsx** from a 1950-line monolith into focused components:
+  - `AuthenticationView` - Login and signup forms
+  - `PlatformLogo` - Platform-specific icons (ChatGPT, Claude, Perplexity, Gemini)
+  - `MemoryCard` - Individual memory display with expansion, links, and evolution timeline
+  - `MemoriesTab` - Search and memory list with semantic search
+  - `SettingsTab` - Account, cloud sync, and enrichment configuration
+
+### Added
+- Error boundaries around MemoriesTab and SettingsTab for isolated crash recovery
+- Onboarding flag on first install for future welcome flow
+- Version migration system for data transitions between releases
+- Content script command handler for background-to-content communication (toggle UI, refresh, ping)
+- Gemini platform logo in PlatformLogo component
 
 ### Fixed
 - Fixed HNSW vector index WASM loading in Chrome extension service worker

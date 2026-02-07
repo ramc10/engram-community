@@ -1,6 +1,6 @@
 # Engram Community Edition - Roadmap
 
-**Last Updated**: January 11, 2026
+**Last Updated**: February 7, 2026
 
 This document tracks current status, immediate priorities, and future enhancements for Engram.
 
@@ -224,31 +224,33 @@ This document tracks current status, immediate priorities, and future enhancemen
 
 ---
 
-## Release Schedule (Tentative)
+## Release Schedule
 
-### v0.1.0 (Current)
+### v0.1.x (Completed)
 - Core functionality
 - Local + cloud enrichment
 - Basic UI
+- Critical bug fixes (HNSW persistence, vector clock merge, prompt injection)
 
-### v0.2.0 (Post-launch, +1 month)
+### v1.0.0 (Current)
+- Modular component architecture (sidepanel refactored into focused components)
+- Error boundaries for crash isolation
+- Version migration system
+- Content script command protocol
+- Feature-complete for individual users
+- Stable API
+
+### v1.1.0 (Next)
 - UI/UX improvements based on user feedback
-- Bug fixes from initial launch
 - Performance optimizations
-
-### v0.3.0 (+2 months)
-- Advanced search features
+- Advanced search filters
 - Memory organization (tags, folders)
 - Bulk actions
 
-### v0.4.0 (+3 months)
+### v1.2.0 (Future)
 - Knowledge graph visualization
 - Analytics dashboard
 - Additional platform support
-
-### v1.0.0 (+6 months)
-- Feature-complete for individual users
-- Stable API
 - Comprehensive documentation
 - Ready for enterprise pilot
 

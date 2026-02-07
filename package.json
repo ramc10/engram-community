@@ -1,6 +1,6 @@
 {
   "name": "engram-community",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Privacy-first AI conversation memory - Open Source Edition",
   "private": true,
   "workspaces": [
