@@ -10,10 +10,10 @@
     "dev": "npm run dev -w packages/community",
     "build": "npm run build -w packages/community",
     "build:all": "npm run build --workspaces",
-    "test": "npm run test --workspaces",
+    "test": "npm run build -w packages/core && npm run test --workspaces",
     "lint": "npm run lint --workspaces",
     "format": "prettier --write \"packages/**/*.{ts,tsx,json,md}\"",
-    "typecheck": "npm run typecheck --workspaces",
+    "typecheck": "npm run build -w packages/core && npm run typecheck --workspaces",
     "setup": "npm install && npm run build -w packages/core",
     "package": "npm run package -w packages/community",
     "postinstall": "patch-package"

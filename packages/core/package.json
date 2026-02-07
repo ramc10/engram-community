@@ -8,7 +8,9 @@
   "scripts": {
     "build": "tsc",
     "watch": "tsc --watch",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist",
+    "typecheck": "tsc --noEmit",
+    "test": "echo \"No tests yet\""
   },
   "dependencies": {},
   "devDependencies": {
