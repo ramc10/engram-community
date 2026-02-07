@@ -76,6 +76,7 @@ module.exports = {
 
   // Test environment configuration
   testTimeout: 10000,
+  forceExit: true,
   transformIgnorePatterns: [
     'node_modules/(?!(dexie|@noble|hash-wasm)/)',
   ],

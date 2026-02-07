@@ -24,24 +24,16 @@
     "paths": {
       "~*": [
         "./src/*"
-      ],
-      "@engram/shared": [
-        "../shared/src/index"
-      ],
-      "engram-shared/*": [
-        "../shared/src/*"
       ]
     }
   },
   "include": [
     ".plasmo/index.d.ts",
-    "src/**/*",
-    "../shared/src/types/libsodium.d.ts"
+    "src/**/*"
   ],
   "exclude": [
     "node_modules",
     "dist",
-    "build",
-    "../shared"
+    "build"
   ]
 }
