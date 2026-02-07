@@ -10,6 +10,7 @@
     "watch": "tsc --watch",
     "clean": "rm -rf dist",
     "typecheck": "tsc --noEmit",
+    "lint": "echo \"No lint configured\"",
     "test": "echo \"No tests yet\""
   },
   "dependencies": {},

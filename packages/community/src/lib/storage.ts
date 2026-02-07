@@ -10,14 +10,11 @@ import {
   Device,
   SyncOperation,
   UUID,
-  Timestamp,
   IStorage,
   MemoryFilter,
   ConversationFilter,
   StorageStats,
   DB_NAME,
-  DB_VERSION,
-  METADATA_KEYS,
   MemoryWithMemA,
   EnrichmentConfig,
 } from '@engram/core';
@@ -94,7 +91,7 @@ class EngramDatabase extends Dexie {
       metadata: 'key',
       searchIndex: 'tag',
       hnswIndex: 'key', // HNSW index persistence (graph, metadata)
-    }).upgrade(async (tx) => {
+    }).upgrade(async (_tx) => {
       logger.log('Migrating to v2: Adding HNSW index table...');
       // Table is created automatically by Dexie
       // Initial index build will happen in initialize()
