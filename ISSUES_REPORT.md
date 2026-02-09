@@ -7,43 +7,39 @@
 
 ## Summary
 
-| Severity | Count |
-|----------|-------|
-| Critical | 12 |
-| High | 16 |
-| Medium | 22 |
-| Low | 12 |
-| **Total** | **62** |
+| Severity | Count | Fixed |
+|----------|-------|-------|
+| Critical | 12 | 2 |
+| High | 16 | 0 |
+| Medium | 22 | 0 |
+| Low | 12 | 0 |
+| **Total** | **62** | **2** |
 
 ---
 
 ## CRITICAL Issues
 
-### 1. [Security] GitHub API token exposed in client-side bundle
+### 1. ~~[Security] GitHub API token exposed in client-side bundle~~ FIXED
 
-**File:** `packages/community/src/lib/github-reporter.ts:34`
+**File:** `packages/community/src/lib/github-reporter.ts`
 
-The `PLASMO_PUBLIC_GITHUB_REPORTER_TOKEN` env var uses the `PLASMO_PUBLIC_` prefix, which means it is bundled into the client-side extension code. Anyone inspecting the built extension can extract this token and use it to create issues or perform other actions on the repository.
+**Status:** Fixed in commit `d711a1c`
 
-```typescript
-token: process.env.PLASMO_PUBLIC_GITHUB_REPORTER_TOKEN || '',
-```
+The `PLASMO_PUBLIC_GITHUB_REPORTER_TOKEN` env var used the `PLASMO_PUBLIC_` prefix, which caused it to be bundled into the client-side extension code. Anyone inspecting the built extension could extract this token.
 
-**Fix:** Use a proxy server or serverless function to relay GitHub API calls without exposing the token.
+**Resolution:** Removed `PLASMO_PUBLIC_` prefix from all GitHub reporter env vars (`GITHUB_REPORTER_TOKEN`, `GITHUB_REPO_OWNER`, `GITHUB_REPO_NAME`) so they are no longer bundled by Plasmo. Added a server-side proxy pattern (`PLASMO_PUBLIC_ERROR_REPORT_PROXY_URL`) where the extension POSTs error reports to a proxy endpoint that holds the GitHub token server-side. Direct GitHub API access is preserved as a fallback for development/testing only.
 
 ---
 
-### 2. [Security] Supabase SERVICE_ROLE_KEY in client-side config
+### 2. ~~[Security] Supabase SERVICE_ROLE_KEY in client-side config~~ FIXED
 
-**File:** `packages/core/src/config.ts:41`
+**File:** `packages/core/src/config.ts`
 
-```typescript
-SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY || 'your-service-role-key',
-```
+**Status:** Fixed in commit `d711a1c`
 
-The service role key (which has full admin database access) is referenced in the shared `@engram/core` package which is bundled into the browser extension. Even though the fallback is a placeholder, this pattern is dangerous -- if the env var is ever set during build, the real key ships to all users.
+The service role key (which has full admin database access) was referenced in the shared `@engram/core` package which is bundled into the browser extension.
 
-**Fix:** Remove `SERVICE_ROLE_KEY` from the core config entirely. It should only exist on the server side.
+**Resolution:** Removed `SERVICE_ROLE_KEY` from the core config entirely. It was unused in the community package and must only exist on the server side.
 
 ---
 
