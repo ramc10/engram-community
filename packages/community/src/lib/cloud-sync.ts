@@ -19,6 +19,7 @@ export class CloudSyncService {
   private subscription: RealtimeChannel | null = null;
   private syncInterval: number | null = null;
   private onRemoteChangeCallback: ((change: any) => void) | null = null;
+  private lastSyncTimestamp: number = 0;
 
   constructor(userId: string, crypto: CryptoService, masterKey: MasterKey) {
     this.userId = userId;
@@ -95,19 +96,36 @@ export class CloudSyncService {
   }
 
   /**
-   * Upload all local memories to cloud
+   * Upload modified local memories to cloud (delta sync)
+   * Only uploads memories that are pending sync or were created since the last sync.
    */
   private async uploadLocalMemories(
     getLocalMemories: () => Promise<Memory[]>
   ): Promise<void> {
     try {
       const memories = await getLocalMemories();
-      console.log(`[CloudSync] Uploading ${memories.length} memories to cloud`);
 
-      for (const memory of memories) {
+      // Filter to only memories needing sync:
+      // - syncStatus is 'pending' or 'failed' (modified/new memories)
+      // - Or created after last sync timestamp (catches any missed)
+      const memoriesToSync = this.lastSyncTimestamp === 0
+        ? memories // First sync: upload all
+        : memories.filter(m =>
+            m.syncStatus !== 'synced' || m.timestamp > this.lastSyncTimestamp
+          );
+
+      if (memoriesToSync.length === 0) {
+        console.log('[CloudSync] No modified memories to upload');
+        return;
+      }
+
+      console.log(`[CloudSync] Uploading ${memoriesToSync.length} modified memories (of ${memories.length} total)`);
+
+      for (const memory of memoriesToSync) {
         await this.uploadMemory(memory);
       }
 
+      this.lastSyncTimestamp = Date.now();
       console.log('[CloudSync] Upload complete');
     } catch (err) {
       console.error('[CloudSync] Error uploading memories:', err);

@@ -11,7 +11,11 @@
 export function formatDate(timestamp: number): string {
   const date = new Date(timestamp);
   const now = new Date();
-  const diffInDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
+
+  // Compare calendar dates, not 24-hour periods
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const dateStart = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+  const diffInDays = Math.round((todayStart - dateStart) / (1000 * 60 * 60 * 24));
 
   // Today
   if (diffInDays === 0) {

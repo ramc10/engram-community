@@ -41,6 +41,10 @@ export class SyncManager implements ISyncManager {
   private syncInProgress: boolean = false;
   private devicePrivateKey: Uint8Array | null = null; // Ed25519 private key for signing
 
+  // Pending pull resolution for request-response correlation
+  private pullResolver: (() => void) | null = null;
+  private pullRejecter: ((err: Error) => void) | null = null;
+
   // Event callbacks
   private stateChangeCallbacks: Set<(state: SyncState) => void> = new Set();
   private remoteChangeCallbacks: Set<(op: SyncOperation) => void> = new Set();
@@ -302,9 +306,25 @@ export class SyncManager implements ISyncManager {
   private async pullOperations(): Promise<void> {
     console.log('[SyncManager] Pulling operations from server...');
 
+    const PULL_TIMEOUT_MS = 30000;
+
+    // Create a promise that resolves when the sync response is fully handled
+    const pullPromise = new Promise<void>((resolve, reject) => {
+      this.pullResolver = resolve;
+      this.pullRejecter = reject;
+
+      setTimeout(() => {
+        if (this.pullRejecter) {
+          this.pullResolver = null;
+          this.pullRejecter = null;
+          reject(new Error('Pull operations timed out'));
+        }
+      }, PULL_TIMEOUT_MS);
+    });
+
     this.wsClient.requestSync(this.lastSyncTime, this.vectorClock, 100);
 
-    // Wait for sync response (handled in handleWebSocketMessage)
+    await pullPromise;
   }
 
   /**
@@ -369,24 +389,43 @@ export class SyncManager implements ISyncManager {
 
     console.log(`[SyncManager] Received ${operations.length} operations from server`);
 
-    for (const operation of operations) {
-      // Apply operation to local storage
-      await this.applyRemoteOperation(operation);
+    try {
+      for (const operation of operations) {
+        // Apply operation to local storage
+        await this.applyRemoteOperation(operation);
 
-      // Merge vector clock (take max per device to preserve causality)
-      const merged: Record<string, number> = { ...this.vectorClock };
-      for (const [device, version] of Object.entries(operation.vectorClock || {})) {
-        merged[device] = Math.max(merged[device] || 0, version as number);
+        // Merge vector clock (take max per device to preserve causality)
+        const merged: Record<string, number> = { ...this.vectorClock };
+        for (const [device, version] of Object.entries(operation.vectorClock || {})) {
+          merged[device] = Math.max(merged[device] || 0, version as number);
+        }
+        this.vectorClock = merged;
       }
-      this.vectorClock = merged;
-    }
 
-    // Save updated vector clock
-    await this.storage.setMetadata('vectorClock', this.vectorClock);
+      // Save updated vector clock
+      await this.storage.setMetadata('vectorClock', this.vectorClock);
 
-    // If there are more operations, request them
-    if (hasMore) {
-      this.wsClient.requestSync(this.lastSyncTime, this.vectorClock, 100);
+      // If there are more operations, request the next page
+      if (hasMore) {
+        this.wsClient.requestSync(this.lastSyncTime, this.vectorClock, 100);
+        // Don't resolve yet — wait for next SYNC_RESPONSE
+        return;
+      }
+
+      // All pages received — resolve the pull promise
+      if (this.pullResolver) {
+        const resolve = this.pullResolver;
+        this.pullResolver = null;
+        this.pullRejecter = null;
+        resolve();
+      }
+    } catch (error) {
+      if (this.pullRejecter) {
+        const reject = this.pullRejecter;
+        this.pullResolver = null;
+        this.pullRejecter = null;
+        reject(error as Error);
+      }
     }
   }
 
