@@ -740,7 +740,10 @@ async function handleAuthLoginGoogle(
 
     // Set master key in service
     service.setMasterKey(masterKey);
-    console.log('[Engram] Master key generated and set for Google OAuth user');
+
+    // Persist master key (encrypted with device key) for auto-restore on reload
+    await service.persistMasterKey(masterKey);
+    console.log('[Engram] Master key generated, set, and persisted for Google OAuth user');
 
     return {
       type: MessageType.AUTH_LOGIN_GOOGLE_RESPONSE,
