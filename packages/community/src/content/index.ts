@@ -251,14 +251,33 @@ window.addEventListener('beforeunload', () => {
   contentScript.cleanup();
 });
 
-// Listen for messages from background (for future features)
+// Listen for commands from the background service worker
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  console.log('[Engram Content] Received message from background:', message);
-  
-  // TODO: Handle commands from background
-  // e.g., show/hide memory UI, refresh memories, etc.
-  
-  sendResponse({ received: true });
+  switch (message.type) {
+    case 'TOGGLE_MEMORY_UI':
+      console.log('[Engram Content] Toggle memory UI visibility');
+      contentScript.cleanup();
+      contentScript.initialize();
+      sendResponse({ received: true, action: 'toggled' });
+      break;
+
+    case 'REFRESH_MEMORIES':
+      console.log('[Engram Content] Refresh memories requested');
+      // Re-initialize to pick up any new conversation data
+      contentScript.cleanup();
+      contentScript.initialize();
+      sendResponse({ received: true, action: 'refreshed' });
+      break;
+
+    case 'PING':
+      // Health check from background
+      sendResponse({ received: true, action: 'pong', active: true });
+      break;
+
+    default:
+      console.log('[Engram Content] Unknown message type:', message.type);
+      sendResponse({ received: true });
+  }
   return true;
 });
 

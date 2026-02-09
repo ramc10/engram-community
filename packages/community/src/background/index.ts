@@ -687,6 +687,41 @@ async function showErrorReportingConsent(): Promise<void> {
 }
 
 /**
+ * Run data migrations between extension versions
+ */
+async function runMigrations(previousVersion: string): Promise<void> {
+  console.log('[Engram] Checking migrations from version', previousVersion);
+
+  const [prevMajor, prevMinor] = previousVersion.split('.').map(Number);
+
+  // Migration: pre-1.0.0 → 1.0.0
+  // Store the migration version so we don't re-run
+  const result = await chrome.storage.local.get('engram_migration_version');
+  const lastMigration = result.engram_migration_version || '0.0.0';
+
+  if (lastMigration < '1.0.0') {
+    console.log('[Engram] Running v1.0.0 migration...');
+
+    // Clean up any stale enrichment cache entries from pre-1.0 versions
+    try {
+      const storageData = await chrome.storage.local.get(null);
+      const staleKeys = Object.keys(storageData).filter(
+        key => key.startsWith('enrichment_cache_') || key.startsWith('temp_')
+      );
+      if (staleKeys.length > 0) {
+        await chrome.storage.local.remove(staleKeys);
+        console.log(`[Engram] Cleaned up ${staleKeys.length} stale cache entries`);
+      }
+    } catch (err) {
+      console.warn('[Engram] Cache cleanup migration failed:', err);
+    }
+
+    await chrome.storage.local.set({ engram_migration_version: '1.0.0' });
+    console.log('[Engram] v1.0.0 migration complete');
+  }
+}
+
+/**
  * Extension installation handler
  */
 chrome.runtime.onInstalled.addListener(async (details) => {
@@ -699,12 +734,25 @@ chrome.runtime.onInstalled.addListener(async (details) => {
       console.log('[Engram] First-time installation');
       // Show error reporting consent notification
       await showErrorReportingConsent();
-      // TODO: Open onboarding page
+      // Open the side panel as onboarding entry point
+      try {
+        // Store onboarding flag so side panel can show welcome state
+        await chrome.storage.local.set({ engram_onboarding: true });
+        console.log('[Engram] Onboarding flag set for first launch');
+      } catch (err) {
+        console.error('[Engram] Failed to set onboarding flag:', err);
+      }
     } else if (details.reason === 'update') {
-      console.log('[Engram] Extension updated');
+      console.log('[Engram] Extension updated from', details.previousVersion);
       // Show consent if not shown before (for existing users)
       await showErrorReportingConsent();
-      // TODO: Handle migrations if needed
+      // Run migrations for version transitions
+      try {
+        const prev = details.previousVersion || '0.0.0';
+        await runMigrations(prev);
+      } catch (err) {
+        console.error('[Engram] Migration failed:', err);
+      }
     }
   } catch (error) {
     console.error('[Engram] Failed to initialize on install:', error);
