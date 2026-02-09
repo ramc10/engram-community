@@ -199,15 +199,15 @@ const mockFetch = jest.fn<any>();
 jest.mock('@supabase/supabase-js', () => {
     const mockAuth = {
         getSession: jest.fn(() => Promise.resolve({ data: { session: { access_token: 'tk', expires_in: 3600, user: { id: 'u1', email: 'test@flow.com' } } }, error: null })),
-        getUser: jest.fn(() => Promise.resolve({ data: { user: { id: 'u1', email: 'test@flow.com', user_metadata: { engram_salt: 'c2FsdA=='.padEnd(24, 'A') } } }, error: null })),
+        getUser: jest.fn(() => Promise.resolve({ data: { user: { id: 'u1', email: 'test@flow.com', user_metadata: { engram_salt: 'dGVzdHNhbHQxMjM0NTY3OA==' } } }, error: null })),
         updateUser: jest.fn(() => Promise.resolve({ data: { user: { id: 'u1' } }, error: null })),
         updateUserMetadata: jest.fn(() => Promise.resolve({ data: { user: { id: 'u1' } }, error: null })),
         signUp: jest.fn((creds: any) => Promise.resolve({
-            data: { user: { id: 'u1', email: creds.email, user_metadata: { engram_salt: 'c2FsdA=='.padEnd(24, 'A') } }, session: { access_token: 'tk', expires_in: 3600, user: { id: 'u1', email: creds.email } } },
+            data: { user: { id: 'u1', email: creds.email, user_metadata: { engram_salt: 'dGVzdHNhbHQxMjM0NTY3OA==' } }, session: { access_token: 'tk', expires_in: 3600, user: { id: 'u1', email: creds.email } } },
             error: null
         })),
         signInWithPassword: jest.fn((creds: any) => Promise.resolve({
-            data: { user: { id: 'u1', email: creds.email, user_metadata: { engram_salt: 'c2FsdA=='.padEnd(24, 'A') } }, session: { access_token: 'tk', expires_in: 3600, user: { id: 'u1', email: creds.email } } },
+            data: { user: { id: 'u1', email: creds.email, user_metadata: { engram_salt: 'dGVzdHNhbHQxMjM0NTY3OA==' } }, session: { access_token: 'tk', expires_in: 3600, user: { id: 'u1', email: creds.email } } },
             error: null
         })),
         signOut: jest.fn(() => Promise.resolve({ error: null })),

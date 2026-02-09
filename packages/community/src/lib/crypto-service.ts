@@ -329,19 +329,23 @@ export class CryptoService implements ICryptoService {
 }
 
 /**
- * Global singleton instance
+ * Global singleton initialization promise -- prevents race conditions
+ * when multiple callers invoke getCryptoService() concurrently.
  */
-let cryptoServiceInstance: CryptoService | null = null;
+let cryptoInitPromise: Promise<CryptoService> | null = null;
 
 /**
  * Get the global CryptoService instance
  */
-export async function getCryptoService(): Promise<CryptoService> {
-  if (!cryptoServiceInstance) {
-    cryptoServiceInstance = new CryptoService();
-    await cryptoServiceInstance.initialize();
+export function getCryptoService(): Promise<CryptoService> {
+  if (!cryptoInitPromise) {
+    cryptoInitPromise = (async () => {
+      const instance = new CryptoService();
+      await instance.initialize();
+      return instance;
+    })();
   }
-  return cryptoServiceInstance;
+  return cryptoInitPromise;
 }
 
 /**

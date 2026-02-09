@@ -54,7 +54,9 @@ export class EmbeddingMigration {
         }
 
         // Encrypt the embedding
-        const embeddingBytes = new Uint8Array(memory.embedding.buffer);
+        // Use byteOffset and byteLength to handle potential buffer sharing/slicing
+        const emb = memory.embedding;
+        const embeddingBytes = new Uint8Array(emb.buffer, emb.byteOffset, emb.byteLength);
         const encryptedEmbedding = await crypto.encrypt(embeddingBytes, masterKey.key);
 
         // Update memory

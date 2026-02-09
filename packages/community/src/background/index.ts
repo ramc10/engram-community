@@ -101,7 +101,11 @@ class BackgroundService {
       return this.initializationPromise;
     }
 
-    this.initializationPromise = this._initialize();
+    this.initializationPromise = this._initialize().catch((e) => {
+      // Clear the cached promise so subsequent calls can retry initialization
+      this.initializationPromise = null;
+      throw e;
+    });
     return this.initializationPromise;
   }
 

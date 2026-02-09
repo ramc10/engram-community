@@ -343,7 +343,7 @@ describe('Auth Encryption Consistency Integration', () => {
         expect(masterKey!.salt).toBeDefined();
     });
 
-    test('should handle salt corruption gracefully by generating a new one', async () => {
+    test('should reject login when salt is corrupted to prevent data loss', async () => {
         const EMAIL = 'corrupt@example.com';
         const PASSWORD = 'password123';
 
@@ -361,12 +361,10 @@ describe('Auth Encryption Consistency Integration', () => {
             password: PASSWORD,
         } as any, mockSender, backgroundService);
 
-        expect(loginResponse.success).toBe(true);
-
-        // Should have generated a new valid salt
-        const finalSalt = fakeUserDb[EMAIL].metadata.engram_salt;
-        expect(finalSalt).not.toBe('!!!NOT_BASE64!!!');
-        expect(finalSalt).toBeDefined();
+        // Login should fail rather than silently replacing the salt,
+        // which would make all previously encrypted data permanently unreadable
+        expect(loginResponse.success).toBe(false);
+        expect(loginResponse.error).toContain('salt');
     });
 
     test('should handle metadata update failure during registration gracefully', async () => {

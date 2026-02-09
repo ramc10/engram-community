@@ -1207,11 +1207,28 @@ export class StorageService implements IStorage {
         // Create bidirectional links
         await this.linkDetectionService.createBidirectionalLinks(memory, links, allMemories);
 
-        // Save target memories with reverse links (NOT the source memory)
-        // The source memory will be saved later with a proper version check to avoid
-        // overwriting newer versions that may have been saved during async enrichment
-        const memoriesToSave = allMemories.filter(m => m.id !== memory.id);
-        await this.db.memories.bulkPut(memoriesToSave);
+        // Only save the specific memories that were modified (reverse links or evolution),
+        // NOT all memories. Saving all would overwrite data with potentially stale copies.
+        const modifiedIds = new Set<string>();
+        // Memories that received reverse links
+        for (const link of links) {
+          modifiedIds.add(link.memoryId);
+        }
+        // Memories that were evolved
+        if (this.evolutionService && links.length > 0) {
+          const topLinks = links
+            .filter(link => link.score > 0.8)
+            .sort((a, b) => b.score - a.score)
+            .slice(0, 5);
+          for (const link of topLinks) {
+            modifiedIds.add(link.memoryId);
+          }
+        }
+        modifiedIds.delete(memory.id); // Never overwrite the source memory here
+        const memoriesToSave = allMemories.filter(m => modifiedIds.has(m.id));
+        if (memoriesToSave.length > 0) {
+          await this.db.memories.bulkPut(memoriesToSave);
+        }
 
         // Persist HNSW index after bulk updates (Phase 4)
         if (this.hnswIndexService?.isReady()) {
@@ -1355,17 +1372,21 @@ export class StorageService implements IStorage {
 }
 
 /**
- * Global singleton instance
+ * Global singleton initialization promise -- prevents race conditions
+ * when multiple callers invoke getStorageService() concurrently.
  */
-let storageInstance: StorageService | null = null;
+let storageInitPromise: Promise<StorageService> | null = null;
 
 /**
  * Get the global StorageService instance
  */
-export async function getStorageService(): Promise<StorageService> {
-  if (!storageInstance) {
-    storageInstance = new StorageService();
-    await storageInstance.initialize();
+export function getStorageService(): Promise<StorageService> {
+  if (!storageInitPromise) {
+    storageInitPromise = (async () => {
+      const instance = new StorageService();
+      await instance.initialize();
+      return instance;
+    })();
   }
-  return storageInstance;
+  return storageInitPromise;
 }

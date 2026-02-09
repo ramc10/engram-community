@@ -162,7 +162,12 @@ export class HNSWIndexService {
           masterKey.key
         );
 
-        const embedding = new Float32Array(decryptedBytes.buffer);
+        // Use byteOffset and byteLength to handle potential buffer sharing/slicing
+        const embedding = new Float32Array(
+          decryptedBytes.buffer,
+          decryptedBytes.byteOffset,
+          decryptedBytes.byteLength / 4
+        );
         if (this.embeddingCache.size >= HNSWIndexService.CACHE_MAX_SIZE) {
           this.embeddingCache.delete(this.embeddingCache.keys().next().value as string);
         }

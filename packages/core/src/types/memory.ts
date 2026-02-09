@@ -147,7 +147,7 @@ export interface SyncOperation {
   memoryId: UUID;
   vectorClock: VectorClock;
   payload: Memory | Partial<Memory> | null;
-  signature: string; // Ed25519 signature
+  signature?: string; // Ed25519 signature (optional until signing is fully implemented)
   timestamp: Timestamp;
 }
 
