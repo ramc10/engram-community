@@ -41,14 +41,14 @@ describe('GitHubReporter', () => {
     jest.clearAllMocks();
 
     // Save original environment variables
-    originalToken = process.env.PLASMO_PUBLIC_GITHUB_REPORTER_TOKEN;
-    originalOwner = process.env.PLASMO_PUBLIC_GITHUB_REPO_OWNER;
-    originalRepo = process.env.PLASMO_PUBLIC_GITHUB_REPO_NAME;
+    originalToken = process.env.GITHUB_REPORTER_TOKEN;
+    originalOwner = process.env.GITHUB_REPO_OWNER;
+    originalRepo = process.env.GITHUB_REPO_NAME;
 
     // Set test environment variables
-    process.env.PLASMO_PUBLIC_GITHUB_REPORTER_TOKEN = 'ghp_test_token';
-    process.env.PLASMO_PUBLIC_GITHUB_REPO_OWNER = 'ramc10';
-    process.env.PLASMO_PUBLIC_GITHUB_REPO_NAME = 'engram-community';
+    process.env.GITHUB_REPORTER_TOKEN = 'ghp_test_token';
+    process.env.GITHUB_REPO_OWNER = 'ramc10';
+    process.env.GITHUB_REPO_NAME = 'engram-community';
 
     // Default mock implementations
     mockChromeStorage.storage.local.get.mockResolvedValue({});
@@ -60,21 +60,21 @@ describe('GitHubReporter', () => {
   afterEach(() => {
     // Restore original environment variables
     if (originalToken !== undefined) {
-      process.env.PLASMO_PUBLIC_GITHUB_REPORTER_TOKEN = originalToken;
+      process.env.GITHUB_REPORTER_TOKEN = originalToken;
     } else {
-      delete process.env.PLASMO_PUBLIC_GITHUB_REPORTER_TOKEN;
+      delete process.env.GITHUB_REPORTER_TOKEN;
     }
 
     if (originalOwner !== undefined) {
-      process.env.PLASMO_PUBLIC_GITHUB_REPO_OWNER = originalOwner;
+      process.env.GITHUB_REPO_OWNER = originalOwner;
     } else {
-      delete process.env.PLASMO_PUBLIC_GITHUB_REPO_OWNER;
+      delete process.env.GITHUB_REPO_OWNER;
     }
 
     if (originalRepo !== undefined) {
-      process.env.PLASMO_PUBLIC_GITHUB_REPO_NAME = originalRepo;
+      process.env.GITHUB_REPO_NAME = originalRepo;
     } else {
-      delete process.env.PLASMO_PUBLIC_GITHUB_REPO_NAME;
+      delete process.env.GITHUB_REPO_NAME;
     }
   });
 
@@ -184,7 +184,7 @@ describe('GitHubReporter', () => {
 
     it('should not report when GitHub config is missing', async () => {
       // Clear environment variables
-      delete process.env.PLASMO_PUBLIC_GITHUB_REPORTER_TOKEN;
+      delete process.env.GITHUB_REPORTER_TOKEN;
 
       const error = new Error('Test error');
       const result = await reporter.reportError(error);
@@ -288,14 +288,15 @@ describe('GitHubReporter', () => {
 
     it('should detect missing GitHub configuration', async () => {
       // Clear environment variables
-      delete process.env.PLASMO_PUBLIC_GITHUB_REPORTER_TOKEN;
-      delete process.env.PLASMO_PUBLIC_GITHUB_REPO_OWNER;
-      delete process.env.PLASMO_PUBLIC_GITHUB_REPO_NAME;
+      delete process.env.GITHUB_REPORTER_TOKEN;
+      delete process.env.GITHUB_REPO_OWNER;
+      delete process.env.GITHUB_REPO_NAME;
 
       const result = await reporter.testConfiguration();
 
       expect(result.success).toBe(false);
       expect(result.message).toContain('GitHub configuration missing');
+      expect(result.message).toContain('GITHUB_REPORTER_TOKEN');
 
       // Note: Environment will be restored by afterEach
     });
