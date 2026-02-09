@@ -688,9 +688,9 @@ describe('EvolutionService', () => {
 
       const result = await service.checkEvolution(targetMemory, newMemory);
 
-      // Should gracefully handle missing fields
-      expect(result.shouldEvolve).toBe(false);
-      expect(result.reason).toContain('Error');
+      // With the usage null-check fix, missing optional fields (keywords, tags, context)
+      // no longer cause a crash -- the LLM response is accepted as-is
+      expect(result.shouldEvolve).toBe(true);
     });
   });
 

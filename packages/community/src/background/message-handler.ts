@@ -653,15 +653,14 @@ async function handleAuthLogin(
 
         console.log('[Engram] Found existing user salt');
       } catch (e) {
-        console.warn('[Engram] Failed to decode user salt or invalid salt, generating new one:', e);
-        salt = crypto.generateSalt();
-        // Save the fresh salt since the old one was corrupt or invalid
-        try {
-          await authClient.updateUserMetadata({ engram_salt: uint8ArrayToBase64(salt) });
-          console.log('[Engram] Replaced invalid salt with new one');
-        } catch (metadataError) {
-          console.warn('[Engram] Failed to store replacement salt:', metadataError);
-        }
+        console.error('[Engram] Failed to decode user salt or salt is invalid:', e);
+        // Do NOT replace the salt -- generating a new salt would derive a different
+        // master key and make all previously encrypted memories permanently unreadable.
+        return {
+          type: MessageType.AUTH_LOGIN_RESPONSE,
+          success: false,
+          error: 'Your encryption salt is corrupted. Previously encrypted data cannot be decrypted with a new salt. Please contact support for recovery options.',
+        };
       }
     } else {
       console.log('[Engram] No user salt found, generating new one');

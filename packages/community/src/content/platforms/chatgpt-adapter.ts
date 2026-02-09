@@ -58,7 +58,7 @@ export class ChatGPTAdapter implements IPlatformAdapter {
     return {
       platformId: 'chatgpt' as Platform,
       selectors: SELECTORS,
-      urlPattern: /^https:\/\/chat(?:gpt)?\.openai\.com/,
+      urlPattern: /^https:\/\/(chatgpt\.com|chat(?:gpt)?\.openai\.com)/,
       conversationIdExtractor: this.extractConversationIdFromUrl,
       features: FEATURES,
     };

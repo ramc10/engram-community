@@ -114,8 +114,6 @@ export class LinkDetectionService {
   private totalTokens = 0;
   private linksCreated = 0;
   private memoryCount = 0;
-  private currentRequest: LinkDetectionRequest | null = null;
-
   constructor(private config: EnrichmentConfig) {
     // 60 calls per minute (conservative, same as enrichment)
     this.rateLimiter = new RateLimiter(60, 60000);
@@ -294,11 +292,8 @@ export class LinkDetectionService {
           })),
         };
 
-        // Store request for premium provider to access structured data
-        this.currentRequest = request;
-
         const prompt = this.buildPrompt(request);
-        const response = await this.callLLM(prompt);
+        const response = await this.callLLM(prompt, request);
 
         // Convert LLM response to LinkScore format
         const batchLinks: LinkScore[] = response.links.map(link => ({
@@ -396,9 +391,9 @@ Return valid JSON only:
    * Call LLM API for link detection
    * Handles OpenAI, Anthropic, local, and premium providers
    */
-  private async callLLM(prompt: string): Promise<LinkDetectionResponse> {
+  private async callLLM(prompt: string, request?: LinkDetectionRequest): Promise<LinkDetectionResponse> {
     if ((this.config.provider as string) === 'premium') {
-      return this.callPremium(prompt);
+      return this.callPremium(prompt, request);
     } else if (this.config.provider === 'openai') {
       return this.callOpenAI(prompt);
     } else if (this.config.provider === 'anthropic') {
@@ -414,19 +409,19 @@ Return valid JSON only:
    * Call Premium API
    * Routes link detection to premium server with LM Studio backend
    */
-  private async callPremium(_prompt: string): Promise<LinkDetectionResponse> {
+  private async callPremium(_prompt: string, request?: LinkDetectionRequest): Promise<LinkDetectionResponse> {
     const client = getPremiumClient();
 
     if (!client.isAuthenticated()) {
       throw new Error('Not authenticated with premium API. Please configure your license key in settings.');
     }
 
-    if (!this.currentRequest) {
-      throw new Error('No current request available for premium API call');
+    if (!request) {
+      throw new Error('No request data available for premium API call');
     }
 
     try {
-      const source = this.currentRequest.sourceMemory;
+      const source = request.sourceMemory;
 
       // Build request in premium API format
       const newMemory = {
@@ -435,7 +430,7 @@ Return valid JSON only:
         context: source.context,
       };
 
-      const existingMemories = this.currentRequest.candidates.map(candidate => ({
+      const existingMemories = request.candidates.map(candidate => ({
         id: candidate.id,
         content: candidate.content,
         context: candidate.context,
@@ -497,7 +492,10 @@ Return valid JSON only:
       this.totalCost += this.calculateOpenAICost(data.usage.total_tokens, this.config.model);
     }
 
-    const content = data.choices[0].message.content;
+    const content = data.choices?.[0]?.message?.content;
+    if (!content) {
+      throw new Error('Empty or malformed OpenAI response: no choices');
+    }
     return JSON.parse(content) as LinkDetectionResponse;
   }
 
@@ -543,7 +541,10 @@ Return valid JSON only:
       );
     }
 
-    const content = data.content[0].text;
+    const content = data.content?.[0]?.text;
+    if (!content) {
+      throw new Error('Empty or malformed Anthropic response: no content');
+    }
 
     // Anthropic doesn't have structured output, so parse JSON from text
     const jsonMatch = content.match(/\{[\s\S]*\}/);
@@ -606,7 +607,10 @@ Return valid JSON only:
     const data = await response.json();
 
     // Local models don't have usage tracking, so we don't update costs
-    const content = data.choices[0].message.content;
+    const content = data.choices?.[0]?.message?.content;
+    if (!content) {
+      throw new Error('Empty or malformed local model response: no choices');
+    }
 
     // Try to parse JSON from the response
     try {

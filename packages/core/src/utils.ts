@@ -102,7 +102,15 @@ export function compareVectorClocks(
  * Convert Uint8Array to base64 string
  */
 export function uint8ArrayToBase64(array: Uint8Array): string {
-  return btoa(String.fromCharCode(...array));
+  // Process in chunks to avoid exceeding max call stack size with spread operator
+  // on large arrays (e.g., encrypted blobs > 65536 bytes).
+  const CHUNK_SIZE = 8192;
+  let binary = '';
+  for (let i = 0; i < array.length; i += CHUNK_SIZE) {
+    const chunk = array.subarray(i, Math.min(i + CHUNK_SIZE, array.length));
+    binary += String.fromCharCode.apply(null, chunk as unknown as number[]);
+  }
+  return btoa(binary);
 }
 
 /**

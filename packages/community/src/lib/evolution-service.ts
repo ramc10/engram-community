@@ -85,9 +85,6 @@ export class EvolutionService {
   private totalTokens = 0;
   private evolutionsApplied = 0;
   private checksPerformed = 0;
-  private currentTargetMemory: MemoryWithMemA | null = null;
-  private currentNewMemory: MemoryWithMemA | null = null;
-
   constructor(private config: EnrichmentConfig) {
     // 60 calls per minute (same as other services)
     this.rateLimiter = new RateLimiter(60, 60000);
@@ -141,12 +138,8 @@ export class EvolutionService {
         currentContext: targetMemory.context || '',
       };
 
-      // Store memories for premium provider to access
-      this.currentTargetMemory = targetMemory;
-      this.currentNewMemory = newMemory;
-
       const prompt = this.buildEvolutionPrompt(targetMemory, newMemory, request);
-      const response = await this.callLLM(prompt);
+      const response = await this.callLLM(prompt, targetMemory, newMemory);
 
       console.log(`[Evolution] Check result for ${targetMemory.id}: shouldEvolve=${response.shouldEvolve}, reason="${response.reason}"`);
 
@@ -340,9 +333,9 @@ Return valid JSON only:
    * Call LLM API (OpenAI/Anthropic/Local/Premium)
    * Same pattern as EnrichmentService and LinkDetectionService
    */
-  private async callLLM(prompt: string): Promise<EvolutionCheckResponse> {
+  private async callLLM(prompt: string, targetMemory?: MemoryWithMemA, newMemory?: MemoryWithMemA): Promise<EvolutionCheckResponse> {
     if ((this.config.provider as string) === 'premium') {
-      return this.callPremium(prompt);
+      return this.callPremium(prompt, targetMemory, newMemory);
     } else if (this.config.provider === 'openai') {
       return this.callOpenAI(prompt);
     } else if (this.config.provider === 'anthropic') {
@@ -358,25 +351,25 @@ Return valid JSON only:
    * Call Premium API
    * Routes evolution check to premium server with LM Studio backend
    */
-  private async callPremium(_prompt: string): Promise<EvolutionCheckResponse> {
+  private async callPremium(_prompt: string, targetMemory?: MemoryWithMemA, newMemory?: MemoryWithMemA): Promise<EvolutionCheckResponse> {
     const client = getPremiumClient();
 
     if (!client.isAuthenticated()) {
       throw new Error('Not authenticated with premium API. Please configure your license key in settings.');
     }
 
-    if (!this.currentTargetMemory || !this.currentNewMemory) {
-      throw new Error('No current memories available for premium API call');
+    if (!targetMemory || !newMemory) {
+      throw new Error('No memory data available for premium API call');
     }
 
     try {
       const memory = {
-        id: this.currentTargetMemory.id,
-        content: this.currentTargetMemory.content.text,
-        timestamp: this.currentTargetMemory.timestamp,
+        id: targetMemory.id,
+        content: targetMemory.content.text,
+        timestamp: targetMemory.timestamp,
       } as any;
 
-      const newInformation = this.currentNewMemory.content.text || '';
+      const newInformation = newMemory.content.text || '';
 
       const result = await client.checkEvolution(memory, newInformation);
 
@@ -426,12 +419,17 @@ Return valid JSON only:
     }
 
     const data = await response.json();
-    const content = data.choices[0].message.content;
+    const content = data.choices?.[0]?.message?.content;
+    if (!content) {
+      throw new Error('Empty or malformed OpenAI response: no choices');
+    }
 
     // Track cost
-    const tokens = data.usage.total_tokens;
-    this.totalTokens += tokens;
-    this.totalCost += this.calculateOpenAICost(tokens, this.config.model || 'gpt-4o-mini');
+    if (data.usage) {
+      const tokens = data.usage.total_tokens;
+      this.totalTokens += tokens;
+      this.totalCost += this.calculateOpenAICost(tokens, this.config.model || 'gpt-4o-mini');
+    }
 
     return JSON.parse(content);
   }
@@ -466,17 +464,22 @@ Return valid JSON only:
     }
 
     const data = await response.json();
-    const content = data.content[0].text;
+    const content = data.content?.[0]?.text;
+    if (!content) {
+      throw new Error('Empty or malformed Anthropic response: no content');
+    }
 
     // Track cost
-    const inputTokens = data.usage.input_tokens;
-    const outputTokens = data.usage.output_tokens;
-    this.totalTokens += inputTokens + outputTokens;
-    this.totalCost += this.calculateAnthropicCost(
-      inputTokens,
-      outputTokens,
-      this.config.model || 'claude-3-haiku-20240307'
-    );
+    if (data.usage) {
+      const inputTokens = data.usage.input_tokens;
+      const outputTokens = data.usage.output_tokens;
+      this.totalTokens += inputTokens + outputTokens;
+      this.totalCost += this.calculateAnthropicCost(
+        inputTokens,
+        outputTokens,
+        this.config.model || 'claude-3-haiku-20240307'
+      );
+    }
 
     // Extract JSON from response (Anthropic may wrap it in text)
     const jsonMatch = content.match(/\{[\s\S]*\}/);
@@ -519,7 +522,10 @@ Return valid JSON only:
     }
 
     const data = await response.json();
-    const content = data.choices[0].message.content;
+    const content = data.choices?.[0]?.message?.content;
+    if (!content) {
+      throw new Error('Empty or malformed local model response: no choices');
+    }
 
     // Try to parse directly first
     try {

@@ -539,7 +539,10 @@ Return valid JSON only:
       this.totalCost += this.calculateOpenAICost(data.usage.total_tokens, this.config.model);
     }
 
-    const content = data.choices[0].message.content;
+    const content = data.choices?.[0]?.message?.content;
+    if (!content) {
+      throw new Error('Empty or malformed OpenAI response: no choices');
+    }
     return JSON.parse(content) as EnrichmentResponse;
   }
 
@@ -585,7 +588,10 @@ Return valid JSON only:
       );
     }
 
-    const content = data.content[0].text;
+    const content = data.content?.[0]?.text;
+    if (!content) {
+      throw new Error('Empty or malformed Anthropic response: no content');
+    }
 
     // Anthropic doesn't have structured output, so parse JSON from text
     const jsonMatch = content.match(/\{[\s\S]*\}/);
@@ -649,7 +655,10 @@ Return valid JSON only:
 
     // Local models don't have usage tracking, so we don't update costs
     // The response format should match OpenAI's structure
-    const content = data.choices[0].message.content;
+    const content = data.choices?.[0]?.message?.content;
+    if (!content) {
+      throw new Error('Empty or malformed local model response: no choices');
+    }
 
     // Try to parse JSON from the response
     try {
