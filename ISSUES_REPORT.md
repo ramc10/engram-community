@@ -7,13 +7,15 @@
 
 ## Summary
 
-| Severity | Count |
-|----------|-------|
-| Critical | 12 |
-| High | 16 |
-| Medium | 22 |
-| Low | 12 |
-| **Total** | **62** |
+| Severity | Count | Resolved |
+|----------|-------|----------|
+| Critical | 12 | 0 |
+| High | 16 | 1 |
+| Medium | 22 | 0 |
+| Low | 12 | 0 |
+| **Total** | **62** | **1** |
+
+> **Note:** Issue #16 (overly broad manifest permissions) has been resolved. The manifest `host_permissions` are now scoped to specific domains (`chatgpt.com`, `claude.ai`, `perplexity.ai`, `gemini.google.com`, `*.supabase.co`).
 
 ---
 
@@ -227,13 +229,13 @@ User-derived keywords are interpolated into `new RegExp()` without escaping. Key
 
 ---
 
-### 16. [Security] Manifest has overly broad permissions
+### 16. [Security] ~~Manifest has overly broad permissions~~ **RESOLVED**
 
-**File:** `packages/community/manifest.json:13-15, 21-23`
+**File:** `packages/community/package.json` (manifest section)
 
-Both `host_permissions` and `content_scripts.matches` use `<all_urls>`. The extension only works on ChatGPT, Claude, Perplexity, and Gemini.
+~~Both `host_permissions` and `content_scripts.matches` use `<all_urls>`.~~
 
-**Fix:** Narrow to specific domain patterns: `*://chatgpt.com/*`, `*://claude.ai/*`, `*://perplexity.ai/*`, `*://gemini.google.com/*`
+**Status:** Fixed. `host_permissions` are now scoped to: `chatgpt.com`, `claude.ai`, `perplexity.ai`, `gemini.google.com`, and `*.supabase.co`.
 
 ---
 

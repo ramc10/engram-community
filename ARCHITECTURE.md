@@ -53,21 +53,29 @@ engram-community/                    # Public Repository (GitHub)
 │   ├── core/                        # MIT License
 │   │   ├── src/
 │   │   │   ├── types/              # Type definitions
-│   │   │   └── interfaces/         # API contracts
+│   │   │   ├── crdt-utils.ts       # CRDT conflict resolution
+│   │   │   ├── crypto.ts           # Crypto service exports
+│   │   │   └── utils.ts            # Shared utilities
 │   │   └── package.json
 │   │
 │   └── community/                   # AGPL-3.0 License
 │       ├── src/
 │       │   ├── background/         # Service worker
-│       │   ├── content/            # Content scripts
+│       │   ├── content/            # Content scripts (platform adapters)
+│       │   ├── contents/           # Main world interceptor scripts
 │       │   ├── lib/                # Core services
-│       │   │   ├── storage.ts      # Local storage
-│       │   │   └── *-service.ts    # Service implementations
-│       │   ├── components/         # React UI
+│       │   │   ├── storage.ts      # IndexedDB + encryption
+│       │   │   ├── crypto-service.ts  # E2E encryption
+│       │   │   └── *-service.ts    # AI service implementations
+│       │   ├── sync/               # Sync engine (WebSocket, state machine)
+│       │   ├── components/         # React UI (modular components)
 │       │   └── popup/              # Extension popup
+│       ├── tests/                  # Unit, integration, E2E, API contract tests
 │       └── package.json
 │
-└── public/                          # Landing page
+├── public/                          # Landing page & legal docs
+├── store-assets/                    # Chrome Web Store assets
+└── patches/                         # Dependency patches
 ```
 
 ---

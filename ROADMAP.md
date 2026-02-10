@@ -1,6 +1,6 @@
 # Engram Community Edition - Roadmap
 
-**Last Updated**: February 7, 2026
+**Last Updated**: February 10, 2026
 
 This document tracks current status, immediate priorities, and future enhancements for Engram.
 
@@ -22,10 +22,10 @@ This document tracks current status, immediate priorities, and future enhancemen
 
 
 ### 📊 Progress Metrics
-- **Phase 4 Progress**: 25% complete
+- **Phase 4 Progress**: 50% complete
 - **API Test Coverage**: 37% (15/41 tests)
-- **Known Critical Bugs**: 1 (initialization blocker - fix applied)
-- **Days to Target Launch**: 31 days (Feb 10, 2026)
+- **Known Critical Bugs**: See [ISSUES_REPORT.md](ISSUES_REPORT.md) for full review (62 issues identified)
+- **Current Version**: v1.0.0 (released Feb 7, 2026)
 
 ---
 
@@ -154,7 +154,7 @@ This document tracks current status, immediate priorities, and future enhancemen
 - [ ] AI-powered insights ("You often ask about X")
 
 #### Integration Enhancements
-- [ ] Support for more AI platforms (Gemini, Copilot, etc.)
+- [ ] Support for more AI platforms (Copilot, Grok, etc.)
 - [ ] Browser-wide memory capture (any webpage)
 - [ ] Desktop app with system-wide shortcuts
 - [ ] Mobile companion app
@@ -187,22 +187,22 @@ This document tracks current status, immediate priorities, and future enhancemen
 
 ### High Priority
 - [x] Fix HNSW vector index WASM loading in service worker (Fixed Jan 12, 2026)
+- [x] Add comprehensive error boundaries (Done in v1.0.0)
 - [ ] Improve bundle size (currently 1.6MB background, can optimize)
-- [ ] Add comprehensive error boundaries
 - [ ] Implement retry logic for failed enrichments
 - [ ] Add telemetry for error tracking (opt-in)
+- [ ] Address critical issues from code review (see [ISSUES_REPORT.md](ISSUES_REPORT.md))
 
 ### Medium Priority
 - [ ] Migrate from Dexie to native IndexedDB for better control
 - [ ] Implement background sync for offline support
-- [ ] Add comprehensive unit tests (current coverage: minimal)
-- [ ] Add E2E tests with Playwright
-- [ ] Set up CI/CD pipeline
+- [ ] Expand unit test coverage
+- [ ] Add Storybook for component development
 
 ### Low Priority
-- [ ] Refactor sidepanel.tsx (currently 2000+ lines)
-- [ ] Split into smaller components
-- [ ] Add Storybook for component development
+- [x] Refactor sidepanel.tsx into modular components (Done in v1.0.0)
+- [x] Set up CI/CD pipeline (Done)
+- [x] Add E2E tests with Playwright (Done)
 - [ ] Improve TypeScript strictness
 - [ ] Add JSDoc comments
 
@@ -262,7 +262,7 @@ This document tracks current status, immediate priorities, and future enhancemen
 - **UI/UX Redesign**: Deferred to post-launch (Jan 4, 2026)
   - Reason: Focus on core functionality and launch first
   - Will gather user feedback before major UI changes
-  - Target: v0.2.0 release
+  - Target: v1.1.0 release
 
 ---
 

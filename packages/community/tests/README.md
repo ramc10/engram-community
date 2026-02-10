@@ -353,8 +353,8 @@ When adding new tests:
 
 ## 📖 Related Documentation
 
-- [Testing Framework Plan](../../../TESTING_FRAMEWORK_PLAN.md) - Complete testing strategy
-- [Testing Best Practices](../../../TESTING_BEST_PRACTICES.md) - Detailed best practices guide
+- [E2E Testing Guide](e2e/README.md) - Playwright E2E test documentation
+- [Extension Tests Guide](e2e/EXTENSION_TESTS_README.md) - Local extension testing guide
 - [Jest Documentation](https://jestjs.io/docs/getting-started)
 - [Testing Library](https://testing-library.com/docs/)
 - [MSW Documentation](https://mswjs.io/docs/)

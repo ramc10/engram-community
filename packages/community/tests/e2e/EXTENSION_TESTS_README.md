@@ -188,6 +188,8 @@ For now, **local headed testing provides comprehensive coverage** of all extensi
 
 ## 📖 Additional Resources
 
+- [E2E Test Overview](README.md) - General E2E testing documentation
+- [Testing Framework](../README.md) - Full testing framework documentation
 - [Playwright Documentation](https://playwright.dev)
 - [Testing Chrome Extensions](https://playwright.dev/docs/chrome-extensions)
 - [Playwright UI Mode](https://playwright.dev/docs/test-ui-mode)

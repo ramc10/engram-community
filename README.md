@@ -33,16 +33,19 @@ This repository is structured as a **monorepo** with multiple packages:
 ```
 engram-community/
 ├── packages/
-│   ├── core/         # @engram/core (MIT License)
-│   │   └── Type definitions and interfaces
+│   ├── core/           # @engram/core (MIT License)
+│   │   └── Type definitions, interfaces, CRDT utilities
 │   │
-│   └── community/    # Main extension (AGPL-3.0)
+│   └── community/      # Main extension (AGPL-3.0)
 │       ├── Storage & encryption
 │       ├── Platform adapters
 │       ├── Memory injection
+│       ├── Sync engine
 │       └── UI components
 │
-└── public/          # Landing page & legal docs
+├── public/             # Landing page & legal docs
+├── store-assets/       # Chrome Web Store assets
+└── patches/            # Dependency patches
 ```
 
 ### Package Boundaries
@@ -50,7 +53,8 @@ engram-community/
 **@engram/core** (MIT):
 - Pure TypeScript types
 - API client interfaces
-- No business logic
+- CRDT utilities for conflict resolution
+- Crypto service exports
 - Can be used in any project
 
 **community** (AGPL-3.0):
@@ -136,14 +140,28 @@ packages/community/src/
 │   ├── platforms/        # ChatGPT, Claude, Perplexity, Gemini
 │   └── shared/           # Prompt interceptor, UI injector
 │
+├── contents/             # Main world interceptor scripts
+│
 ├── lib/                  # Core services
 │   ├── storage.ts        # IndexedDB + encryption
+│   ├── crypto-service.ts # E2E encryption
 │   ├── embedding-service.ts
-│   ├── enrichment-service.ts  # Enriches memories
+│   ├── enrichment-service.ts
 │   ├── link-detection-service.ts
-│   └── evolution-service.ts
+│   ├── evolution-service.ts
+│   └── cloud-sync.ts     # Optional cloud sync
+│
+├── sync/                 # Synchronization engine
+│   ├── sync-manager.ts
+│   ├── ws-client.ts
+│   └── state-machine.ts
 │
 ├── components/           # React UI
+│   ├── AuthenticationView.tsx
+│   ├── MemoriesTab.tsx
+│   ├── MemoryCard.tsx
+│   ├── SettingsTab.tsx
+│   ├── ErrorBoundary.tsx
 │   └── ui/               # Reusable components
 │
 └── popup/                # Extension popup
@@ -202,7 +220,7 @@ PLASMO_PUBLIC_SUPABASE_ANON_KEY=xxx
 
 ```
 
-**⚠️ Important for Google OAuth**: If you're setting up Google Sign-In, please see **[SUPABASE_SETUP.md](SUPABASE_SETUP.md)** for detailed configuration instructions to avoid redirect URL issues.
+**⚠️ Important for Google OAuth**: If you're setting up Google Sign-In, see the Supabase documentation and the community extension README for detailed configuration instructions to avoid redirect URL issues.
 
 ---
 
@@ -250,18 +268,22 @@ For commercial licensing inquiries: artha360.live@gmail.com
 
 ## 🗺️ Roadmap
 
-### Current (v0.1.0)
-- ✅ Multi-platform capture
-- ✅ E2E encryption
-- ✅ Semantic search
+### Current (v1.0.0)
+- ✅ Multi-platform capture (ChatGPT, Claude, Perplexity, Gemini)
+- ✅ E2E encryption (XChaCha20-Poly1305)
+- ✅ Semantic search (BGE-Small + HNSW)
 - ✅ Memory injection
+- ✅ Modular component architecture
+- ✅ Error boundaries and crash isolation
+- ✅ Version migration system
 
-
-### Coming Soon
+### Coming Soon (v1.1.0+)
+- 🔜 UI/UX improvements
+- 🔜 Advanced search filters
+- 🔜 Memory organization (tags, folders)
+- 🔜 Knowledge graph visualization
 - 🔜 Firefox support
-- 🔜 Safari support
 - 🔜 Mobile companion app
-- 🔜 Team workspaces
 - 🔜 API for third-party integrations
 
 See [ROADMAP.md](ROADMAP.md) for full roadmap.

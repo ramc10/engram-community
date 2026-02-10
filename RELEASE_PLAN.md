@@ -6,11 +6,11 @@ This document outlines the steps to prepare and publish a new version of the Eng
 
 ### 1.1 Update Version
 Modify `packages/community/package.json` to bump the version number.
-- Current version: `0.1.0`
-- Target version: `0.1.1` (Patch release for recent fixes)
+- Current version: `1.0.0`
+- Use [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH
 
 ### 1.2 Documentation
-- Create/Update `CHANGELOG.md` to document the changes (Code cleanup, bug fixes).
+- Update `CHANGELOG.md` to document the changes in the new version.
 
 ## 2. Verification
 
@@ -19,6 +19,9 @@ Ensure the codebase is stable before packaging.
 ```bash
 # Run Linting
 npm run lint
+
+# Run Type Checking
+npm run typecheck
 
 # Run Tests
 npm run test
@@ -43,22 +46,28 @@ This command runs `plasmo package`, which builds the extension and creates a zip
     -   Click "Upload new package".
     -   Select the `.zip` file generated in Step 3.
 4.  **Update Listings**:
-    -   Update description or screenshots if necessary (optional for this release).
+    -   Update description or screenshots if necessary.
 5.  **Submit**:
     -   Click "Submit for Review".
 
 ## 5. Post-Release
 - Create a Git tag for the release:
   ```bash
-  git tag v0.1.1
-  git push origin v0.1.1
+  git tag v<VERSION>
+  git push origin v<VERSION>
   ```
-- Create a GitHub Release with the changelog.
+- Create a GitHub Release with the changelog entry.
 
 ---
 
-## Action Items for Assistant
+## Checklist
 
-- [ ] Bump version in `packages/community/package.json` to `0.1.1`
-- [ ] Create `CHANGELOG.md`
+- [ ] Bump version in `packages/community/package.json`
+- [ ] Update `CHANGELOG.md` with new version entry
+- [ ] Run `npm run lint` and fix any issues
+- [ ] Run `npm run typecheck` and fix any issues
+- [ ] Run `npm run test` and ensure all tests pass
 - [ ] Run `npm run package` and verify output
+- [ ] Upload to Chrome Web Store
+- [ ] Tag the release in git
+- [ ] Create GitHub Release
