@@ -11,7 +11,12 @@
 export function formatDate(timestamp: number): string {
   const date = new Date(timestamp);
   const now = new Date();
-  const diffInDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
+
+  // Compare calendar dates, not 24-hour periods
+  // Calculate midnight timestamps without modifying the original date objects
+  const todayStart = now.getTime() - (now.getHours() * 3600000 + now.getMinutes() * 60000 + now.getSeconds() * 1000 + now.getMilliseconds());
+  const dateStart = date.getTime() - (date.getHours() * 3600000 + date.getMinutes() * 60000 + date.getSeconds() * 1000 + date.getMilliseconds());
+  const diffInDays = Math.round((todayStart - dateStart) / (1000 * 60 * 60 * 24));
 
   // Today
   if (diffInDays === 0) {

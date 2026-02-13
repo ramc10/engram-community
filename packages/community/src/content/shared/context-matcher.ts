@@ -106,7 +106,8 @@ export class ContextMatcher {
     const matched: string[] = [];
 
     for (const { term, weight } of keywords) {
-      const regex = new RegExp(`\\b${term}\\b`, 'gi');
+      const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const regex = new RegExp(`\\b${escaped}\\b`, 'gi');
       const matches = memoryText.match(regex);
 
       if (matches) {
