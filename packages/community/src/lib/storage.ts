@@ -24,6 +24,8 @@ import { EvolutionService } from './evolution-service';
 import { decryptApiKey, isEncrypted } from './api-key-crypto';
 import { getEmbeddingService } from './embedding-service';
 import type { HNSWIndexEntry, HNSWIndexService, HNSWStats } from './hnsw-index-service';
+import { InvertedIndexService } from './inverted-index-service';
+import type { InvertedIndexStats } from './inverted-index-service';
 import { createLogger } from './logger';
 import { getCryptoService } from './crypto-service';
 
@@ -112,10 +114,12 @@ export class StorageService implements IStorage {
   private linkDetectionService: LinkDetectionService | null = null;
   private evolutionService: EvolutionService | null = null;
   private hnswIndexService: HNSWIndexService | null = null; // Phase 4: Vector index
+  private invertedIndexService: InvertedIndexService = new InvertedIndexService(); // Issue #78: Keyword fallback
   public forceEnrichmentInTests = false;
   private masterKeyProvider?: () => { key: Uint8Array } | null; // For embedding encryption
   private pendingEnrichments: Map<string, Promise<void>> = new Map(); // Track pending enrichInBackground operations
   private hnswPersistCounter: number = 0; // Deterministic batch counter for HNSW persistence
+  private invertedIndexPersistCounter: number = 0; // Batch counter for inverted index persistence
 
   constructor() {
     this.db = new EngramDatabase();
@@ -233,6 +237,15 @@ export class StorageService implements IStorage {
       logger.warn('HNSW index initialization failed (non-critical):', error);
       logger.warn('Extension will work with basic search instead of vector search');
       // Continue without HNSW - basic search will still work
+    }
+
+    // Initialize inverted index for keyword fallback search (Issue #78)
+    // Non-blocking: If it fails, the old brute-force fallback still works
+    try {
+      await this.initializeInvertedIndex();
+    } catch (error) {
+      logger.warn('Inverted index initialization failed (non-critical):', error);
+      logger.warn('Extension will fall back to brute-force keyword search');
     }
   }
 
@@ -395,6 +408,47 @@ export class StorageService implements IStorage {
     embeddingService.setHNSWIndex(this.hnswIndexService);
 
     logger.log('HNSW index built and persisted');
+  }
+
+  /**
+   * Initialize inverted index for keyword fallback search (Issue #78)
+   * Loads existing index from IndexedDB or builds from enriched memories
+   */
+  private async initializeInvertedIndex(): Promise<void> {
+    // Try to load existing index from IndexedDB
+    const loaded = await this.invertedIndexService.load(this.db);
+
+    if (loaded) {
+      logger.log('Inverted index loaded from IndexedDB');
+      return;
+    }
+
+    // Build new index from enriched memories
+    const memories = await this.db.memories.toArray();
+    const enrichedMemories = memories.filter(
+      m => (m as MemoryWithMemA).keywords || (m as MemoryWithMemA).context
+    ) as MemoryWithMemA[];
+
+    if (enrichedMemories.length === 0) {
+      logger.log('No enriched memories found, inverted index ready for incremental adds');
+      return;
+    }
+
+    logger.log(`Building inverted index for ${enrichedMemories.length} enriched memories...`);
+
+    this.invertedIndexService.build(
+      enrichedMemories,
+      (current, total) => {
+        if (current % 100 === 0 || current === total) {
+          logger.log(`Inverted index build progress: ${current}/${total}`);
+        }
+      }
+    );
+
+    // Persist to IndexedDB
+    await this.invertedIndexService.persist(this.db);
+
+    logger.log('Inverted index built and persisted');
   }
 
   /**
@@ -578,6 +632,12 @@ export class StorageService implements IStorage {
       await this.hnswIndexService.persist(this.db);
     }
 
+    // Remove from inverted index (Issue #78)
+    if (this.invertedIndexService.isReady()) {
+      this.invertedIndexService.removeMemory(id);
+      await this.invertedIndexService.persist(this.db);
+    }
+
     // Update conversation metadata
     await this.updateConversationMetadata(memory);
   }
@@ -682,7 +742,28 @@ export class StorageService implements IStorage {
       }
     }
 
-    // 2. Fallback: Simple keyword search on decrypted content (expensive for large DB)
+    // 2. Try inverted index for fast keyword fallback (Issue #78)
+    if (this.invertedIndexService.isReady()) {
+      try {
+        const indexResults = this.invertedIndexService.search(normalizedQuery, limit);
+
+        if (indexResults.length > 0) {
+          const memories: Memory[] = [];
+          for (const res of indexResults) {
+            const memory = await this.getMemory(res.memoryId);
+            if (memory) {
+              memories.push(memory);
+            }
+          }
+          logger.log(`Inverted index returned ${memories.length} results for "${normalizedQuery}"`);
+          return memories;
+        }
+      } catch (error) {
+        logger.error('Inverted index search failed, falling back to brute-force:', error);
+      }
+    }
+
+    // 3. Last resort: Brute-force keyword search on decrypted content (expensive for large DB)
     const allMemories = await this.db.memories.toArray();
 
     // SECURITY: Decrypt memories for keyword search
@@ -727,8 +808,6 @@ export class StorageService implements IStorage {
     }
 
     const results = decryptedMemories.filter((memory) => {
-      // Note: in a real extension, we would use a proper search index
-      // For now, we search on content if it's already decrypted or known
       const text = memory.content?.text?.toLowerCase() || "";
       const tags = (memory.tags || []).map((t) => t.toLowerCase());
 
@@ -764,6 +843,22 @@ export class StorageService implements IStorage {
    */
   getHNSWStats(): HNSWStats | null {
     return this.hnswIndexService?.getStats() || null;
+  }
+
+  /**
+   * Get inverted index service (internal use)
+   */
+  getInvertedIndex(): InvertedIndexService {
+    return this.invertedIndexService;
+  }
+
+  /**
+   * Get inverted index statistics
+   */
+  getInvertedIndexStats(): InvertedIndexStats | null {
+    return this.invertedIndexService.isReady()
+      ? this.invertedIndexService.getStats()
+      : null;
   }
 
   /**
@@ -1066,6 +1161,20 @@ export class StorageService implements IStorage {
       // Don't fail if embedding fails
       logger.error(`[Storage] Failed to regenerate embedding for memory ${memory.id}:`, err);
     }
+
+    // Update inverted index with enriched metadata (Issue #78)
+    try {
+      this.invertedIndexService.addMemory(memory.id, memory);
+
+      // Batch persist (every 10 updates to reduce I/O)
+      this.invertedIndexPersistCounter++;
+      if (this.invertedIndexPersistCounter >= 10) {
+        this.invertedIndexPersistCounter = 0;
+        await this.invertedIndexService.persist(this.db);
+      }
+    } catch (err) {
+      logger.error(`[Storage] Failed to update inverted index for memory ${memory.id}:`, err);
+    }
   }
 
   /**
@@ -1128,6 +1237,17 @@ export class StorageService implements IStorage {
     // NOTE: Embedding regeneration and HNSW indexing is now handled in onEnrichmentComplete
     // This ensures embeddings capture enriched metadata (keywords, tags, context)
     // and fixes the race condition (issue #87) where tests checked HNSW before indexing completed
+
+    // Update inverted index with full plaintext content (Issue #78)
+    // This re-indexes with plaintext content that isn't available in onEnrichmentComplete
+    // (where content is already cleared). addMemory() handles deduplication internally.
+    if (plaintextContent?.text) {
+      try {
+        this.invertedIndexService.addMemory(memory.id, memory, plaintextContent.text);
+      } catch (err) {
+        logger.error(`[Storage] Failed to update inverted index with plaintext for ${memory.id}:`, err);
+      }
+    }
 
     // Detect semantic links (Phase 2)
     if (this.linkDetectionService) {
@@ -1264,7 +1384,7 @@ export class StorageService implements IStorage {
       // Use atomic transaction if requested
       if (options?.useAtomicTransaction) {
         try {
-          await this.db.transaction('rw', [this.db.memories, this.db.conversations, this.db.hnswIndex], async () => {
+          await this.db.transaction('rw', [this.db.memories, this.db.conversations, this.db.hnswIndex, this.db.searchIndex], async () => {
             // 1. Save fully enriched memory
             await this.db.memories.put(memory);
 
@@ -1275,6 +1395,11 @@ export class StorageService implements IStorage {
             if (this.hnswIndexService?.isReady()) {
               await this.hnswIndexService.persist(this.db);
             }
+
+            // 4. Persist inverted index (Issue #78)
+            if (this.invertedIndexService.isReady()) {
+              await this.invertedIndexService.persist(this.db);
+            }
           });
           console.log(`[Storage] Atomically saved enriched memory ${memory.id}`);
         } catch (transactionError) {
@@ -1284,6 +1409,9 @@ export class StorageService implements IStorage {
           await this.updateConversationMetadata(memory);
           if (this.hnswIndexService?.isReady()) {
             await this.hnswIndexService.persist(this.db);
+          }
+          if (this.invertedIndexService.isReady()) {
+            await this.invertedIndexService.persist(this.db);
           }
           console.log(`[Storage] Non-transactionally saved enriched memory ${memory.id}`);
         }
