@@ -6,11 +6,11 @@ This document outlines the steps to prepare and publish a new version of the Eng
 
 ### 1.1 Update Version
 Modify `packages/community/package.json` to bump the version number.
-- Current version: `0.1.0`
-- Target version: `0.1.1` (Patch release for recent fixes)
+- Current version: `1.0.0`
+- Target version: `1.1.0` (Minor release for new features)
 
 ### 1.2 Documentation
-- Create/Update `CHANGELOG.md` to document the changes (Code cleanup, bug fixes).
+- Update `CHANGELOG.md` to document the changes (new features, improvements, bug fixes).
 
 ## 2. Verification
 
@@ -50,15 +50,18 @@ This command runs `plasmo package`, which builds the extension and creates a zip
 ## 5. Post-Release
 - Create a Git tag for the release:
   ```bash
-  git tag v0.1.1
-  git push origin v0.1.1
+  git tag v1.1.0
+  git push origin v1.1.0
   ```
 - Create a GitHub Release with the changelog.
+- Update documentation to reference the new version.
 
 ---
 
-## Action Items for Assistant
+## Action Items for Next Release
 
-- [ ] Bump version in `packages/community/package.json` to `0.1.1`
-- [ ] Create `CHANGELOG.md`
+- [ ] Bump version in `packages/community/package.json` to `1.1.0`
+- [ ] Update `CHANGELOG.md` with new changes
+- [ ] Run tests: `npm run test` and `npm run lint`
 - [ ] Run `npm run package` and verify output
+- [ ] Test the packaged extension manually before publishing

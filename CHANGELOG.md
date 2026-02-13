@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+### Planned
+- UI/UX improvements for memory cards and search interface
+- Advanced search filters (date range, tags, platform)
+- Memory organization features (tags, folders, collections)
+- Knowledge graph visualization
+- Firefox extension support
+
+---
+
 ## [1.0.0] - 2026-02-07
 
 ### Architecture
@@ -18,11 +32,25 @@ All notable changes to this project will be documented in this file.
 - Version migration system for data transitions between releases
 - Content script command handler for background-to-content communication (toggle UI, refresh, ping)
 - Gemini platform logo in PlatformLogo component
+- MCP (Model Context Protocol) server package for third-party AI integrations
+- Comprehensive code review documentation (62 issues identified and prioritized)
 
 ### Fixed
-- Fixed HNSW vector index WASM loading in Chrome extension service worker
+- **Critical**: Fixed Google OAuth master key persistence issue (prevented data loss on restart)
+- **Critical**: Fixed HNSW vector index WASM loading in Chrome extension service worker
+- **High Priority**: Resolved 10+ critical and high-severity security issues
 - Added proper WASM module initialization for EdgeVec in service worker context
 - Implemented fallback initialization mechanism for robustness
+- Fixed unchecked array access on LLM API responses
+- Improved error handling in enrichment, link detection, and evolution services
+- Fixed regex injection vulnerabilities in user-derived text
+- Enhanced message origin validation for prompt injection prevention
+
+### Security
+- Enhanced encryption key derivation and storage
+- Improved salt management and recovery mechanisms
+- Fixed potential race conditions in singleton initialization
+- Better error boundaries to prevent crash propagation
 
 ## [0.1.3] - 2026-01-11
 

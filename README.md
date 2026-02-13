@@ -73,7 +73,7 @@ engram-community/
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/ramc10/Engram.git
+   git clone https://github.com/ramc10/engram-community.git
    cd engram-community
    ```
 
@@ -250,18 +250,24 @@ For commercial licensing inquiries: artha360.live@gmail.com
 
 ## 🗺️ Roadmap
 
-### Current (v0.1.0)
-- ✅ Multi-platform capture
-- ✅ E2E encryption
-- ✅ Semantic search
-- ✅ Memory injection
+### Current (v1.0.0)
+- ✅ Multi-platform capture (ChatGPT, Claude, Perplexity, Gemini)
+- ✅ End-to-end encryption (XChaCha20-Poly1305)
+- ✅ Local semantic search (BGE-Small + HNSW)
+- ✅ Memory injection and context awareness
+- ✅ Modular component architecture
+- ✅ Error boundaries and crash recovery
+- ✅ Version migration system
 
-
-### Coming Soon
-- 🔜 Firefox support
-- 🔜 Safari support
+### Coming Soon (v1.1.0+)
+- 🔜 Enhanced UI/UX with improved memory card design
+- 🔜 Advanced search filters and saved searches
+- 🔜 Memory organization (tags, folders, collections)
+- 🔜 Knowledge graph visualization
+- 🔜 Firefox and Safari support
 - 🔜 Mobile companion app
 - 🔜 Team workspaces
+- 🔜 MCP (Model Context Protocol) server integration
 - 🔜 API for third-party integrations
 
 See [ROADMAP.md](ROADMAP.md) for full roadmap.
@@ -272,7 +278,7 @@ See [ROADMAP.md](ROADMAP.md) for full roadmap.
 
 - **Email:** artha360.live@gmail.com
 - **Website:** [theengram.tech](https://theengram.tech)
-- **Issues:** [GitHub Issues](https://github.com/ramc10/Engram/issues)
+- **Issues:** [GitHub Issues](https://github.com/ramc10/engram-community/issues)
 - **Docs:** See architecture documentation in `ARCHITECTURE.md`
 
 ---

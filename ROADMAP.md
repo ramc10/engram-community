@@ -1,31 +1,29 @@
 # Engram Community Edition - Roadmap
 
-**Last Updated**: February 7, 2026
+**Last Updated**: February 13, 2026
 
 This document tracks current status, immediate priorities, and future enhancements for Engram.
 
 ---
 
-## 🎯 Current Status (Phase 4: Testing & Deployment)
+## 🎯 Current Status (v1.0.0 Released)
 
-### ✅ Completed (Last 7 Days)
-- **Security**: Fixed critical plaintext storage vulnerability (Jan 5)
+### ✅ Completed Recently
+- **v1.0.0 Release** (Feb 7, 2026): Modular architecture with focused components
+- **Security Fixes**: Resolved 10+ critical and high-severity issues
+- **Critical Bug Fix**: Google OAuth master key persistence
+- **Code Review**: Comprehensive 62-issue audit completed
+- **MCP Integration**: Added MCP server package for AI conversation memory access
+- **HNSW Vector Index**: Fixed WASM loading in service worker
+- **Error Handling**: Added error boundaries for crash isolation
+- **Version Migration**: Implemented data migration system
 
-- **API Testing**: 15/41 tests passing (37% coverage)
-- **CORS**: Chrome extension support enabled
-
-- **Infrastructure**: PostgreSQL + Redis + LM Studio integration
-
-
-
-### 📋 Immediate Priorities (This Week)
-
-
-### 📊 Progress Metrics
-- **Phase 4 Progress**: 25% complete
-- **API Test Coverage**: 37% (15/41 tests)
-- **Known Critical Bugs**: 1 (initialization blocker - fix applied)
-- **Days to Target Launch**: 31 days (Feb 10, 2026)
+### 📊 Current Metrics
+- **Latest Version**: v1.0.0
+- **Test Coverage**: 37% (growing)
+- **Critical Issues Resolved**: 10+
+- **Platforms Supported**: 4 (ChatGPT, Claude, Perplexity, Gemini)
+- **Active Development**: Ongoing improvements and bug fixes
 
 ---
 
@@ -226,43 +224,68 @@ This document tracks current status, immediate priorities, and future enhancemen
 
 ## Release Schedule
 
-### v0.1.x (Completed)
+### v0.1.x (Completed - Jan 2026)
 - Core functionality
 - Local + cloud enrichment
 - Basic UI
 - Critical bug fixes (HNSW persistence, vector clock merge, prompt injection)
+- End-to-end encryption implementation
+- Multi-platform support (ChatGPT, Claude, Perplexity, Gemini)
 
-### v1.0.0 (Current)
-- Modular component architecture (sidepanel refactored into focused components)
-- Error boundaries for crash isolation
-- Version migration system
-- Content script command protocol
-- Feature-complete for individual users
-- Stable API
+### v1.0.0 (Released - Feb 7, 2026)
+- ✅ Modular component architecture (sidepanel refactored into focused components)
+- ✅ Error boundaries for crash isolation
+- ✅ Version migration system
+- ✅ Content script command protocol
+- ✅ Feature-complete for individual users
+- ✅ Stable API
+- ✅ Critical security fixes (10+ issues resolved)
+- ✅ MCP server package for third-party integrations
 
-### v1.1.0 (Next)
-- UI/UX improvements based on user feedback
-- Performance optimizations
-- Advanced search filters
-- Memory organization (tags, folders)
-- Bulk actions
+### v1.1.0 (In Progress - Target: March 2026)
+- 🔜 UI/UX improvements based on user feedback
+- 🔜 Performance optimizations (bundle size reduction, lazy loading)
+- 🔜 Advanced search filters (date range, tags, platform)
+- 🔜 Memory organization (tags, folders, collections)
+- 🔜 Bulk actions (select, delete, export multiple memories)
+- 🔜 Comprehensive error tracking and telemetry (opt-in)
+- 🔜 Enhanced MCP server capabilities
 
-### v1.2.0 (Future)
-- Knowledge graph visualization
-- Analytics dashboard
-- Additional platform support
-- Comprehensive documentation
-- Ready for enterprise pilot
+### v1.2.0 (Future - Target: April 2026)
+- 🔜 Knowledge graph visualization
+- 🔜 Analytics dashboard (memory stats, usage patterns)
+- 🔜 Additional platform support (Gemini Advanced, Copilot)
+- 🔜 Firefox extension support
+- 🔜 Comprehensive developer documentation
+- 🔜 API for third-party integrations
+- 🔜 Team workspaces (collaborative features)
 
 ---
 
 ## Decision Log
 
+### Recent Decisions
+
+**Feb 13, 2026**: Documentation Update
+- Updated all markdown files to reflect v1.0.0 release
+- Standardized version references across documentation
+- Enhanced architectural documentation with recent improvements
+
+**Feb 7, 2026**: v1.0.0 Release
+- Completed modular architecture refactoring
+- Released with critical security fixes
+- Added MCP server for third-party integrations
+
 ### Deferred Decisions
-- **UI/UX Redesign**: Deferred to post-launch (Jan 4, 2026)
-  - Reason: Focus on core functionality and launch first
+- **UI/UX Redesign**: Deferred to v1.1.0 (Target: March 2026)
+  - Reason: Focus on core functionality and stability first
   - Will gather user feedback before major UI changes
-  - Target: v0.2.0 release
+  - Prioritizing performance and security fixes
+
+- **Firefox/Safari Support**: Deferred to v1.2.0 (Target: April 2026)
+  - Reason: Chrome extension needs to be stable first
+  - Will require platform-specific adaptations
+  - Community can contribute once Chrome version is mature
 
 ---
 

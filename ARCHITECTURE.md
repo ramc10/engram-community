@@ -56,16 +56,22 @@ engram-community/                    # Public Repository (GitHub)
 │   │   │   └── interfaces/         # API contracts
 │   │   └── package.json
 │   │
-│   └── community/                   # AGPL-3.0 License
-│       ├── src/
-│       │   ├── background/         # Service worker
-│       │   ├── content/            # Content scripts
-│       │   ├── lib/                # Core services
-│       │   │   ├── storage.ts      # Local storage
-│       │   │   └── *-service.ts    # Service implementations
-│       │   ├── components/         # React UI
-│       │   └── popup/              # Extension popup
-│       └── package.json
+│   ├── community/                   # AGPL-3.0 License
+│   │   ├── src/
+│   │   │   ├── background/         # Service worker
+│   │   │   ├── content/            # Content scripts
+│   │   │   ├── lib/                # Core services
+│   │   │   │   ├── storage.ts      # Local storage
+│   │   │   │   └── *-service.ts    # Service implementations
+│   │   │   ├── components/         # React UI components
+│   │   │   │   └── ui/             # Reusable UI elements
+│   │   │   ├── popup/              # Extension popup
+│   │   │   └── sidepanel/          # Side panel interface
+│   │   └── package.json
+│   │
+│   └── mcp-server/                  # MIT License
+│       ├── src/                     # MCP server implementation
+│       └── package.json             # Model Context Protocol server
 │
 └── public/                          # Landing page
 ```
@@ -138,6 +144,33 @@ engram-community/                    # Public Repository (GitHub)
 
 ---
 
+## Recent Architectural Improvements (v1.0.0)
+
+### Component Architecture
+- Refactored monolithic `sidepanel.tsx` (1950 lines) into focused, reusable components
+- Implemented error boundaries for isolated crash recovery
+- Added version migration system for seamless data transitions
+- Content script command protocol for background-to-content communication
+
+### Security Enhancements
+- Fixed critical master key persistence for Google OAuth users
+- Resolved 10+ critical and high-severity security issues
+- Enhanced encryption key derivation and storage
+- Improved salt management and recovery
+
+### Performance Optimizations
+- Fixed HNSW vector index WASM loading in service worker
+- Optimized embedding service with caching
+- Improved IndexedDB query performance
+- Reduced bundle size and lazy loading
+
+### Integration Capabilities
+- **MCP Server**: Model Context Protocol server for AI conversation memory access
+- Third-party integrations via standardized API
+- Enhanced platform adapter extensibility
+
+---
+
 ## Future Enhancements
 
 ### Planned Features
@@ -150,6 +183,17 @@ engram-community/                    # Public Repository (GitHub)
 2. **Advanced Analytics**
    - Memory usage patterns
    - Search quality metrics
+   - Knowledge graph visualization
+
+3. **Enhanced Sync**
+   - Conflict resolution improvements
+   - CRDT-based merging
+   - Multi-device coordination
+
+4. **Browser Support**
+   - Firefox extension
+   - Safari extension
+   - Mobile companion app
 
 ---
 
