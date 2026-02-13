@@ -26,14 +26,31 @@ export interface GitHubReporterConfig {
 }
 
 /**
- * Get GitHub configuration for error reporting
- * This is evaluated at runtime to allow for testing and env var changes
+ * Error report proxy endpoint for server-side GitHub issue creation.
+ * The extension sends error reports to this proxy instead of directly to GitHub,
+ * so no GitHub token needs to be bundled into the client-side code.
+ *
+ * SECURITY: We intentionally do NOT use PLASMO_PUBLIC_ prefixed env vars for the
+ * GitHub token because that prefix causes Plasmo to bundle the value into the
+ * client-side extension code, exposing it to anyone who inspects the built extension.
+ */
+const ERROR_REPORT_PROXY_URL = process.env.PLASMO_PUBLIC_ERROR_REPORT_PROXY_URL || '';
+
+/**
+ * Get GitHub configuration for error reporting.
+ * In production, error reports are sent via a server-side proxy so no token is needed.
+ * Direct GitHub API access (with token) is only available in development when the
+ * non-public env vars are set at build time (these are NOT bundled by Plasmo).
  */
 function getGitHubConfig() {
   return {
-    token: process.env.PLASMO_PUBLIC_GITHUB_REPORTER_TOKEN || '',
-    owner: process.env.PLASMO_PUBLIC_GITHUB_REPO_OWNER || 'ramc10',
-    repo: process.env.PLASMO_PUBLIC_GITHUB_REPO_NAME || 'engram-community',
+    // These env vars intentionally lack the PLASMO_PUBLIC_ prefix so they are
+    // NOT bundled into the client-side extension. They are only available during
+    // development/testing when running directly in Node.
+    token: process.env.GITHUB_REPORTER_TOKEN || '',
+    owner: process.env.GITHUB_REPO_OWNER || 'ramc10',
+    repo: process.env.GITHUB_REPO_NAME || 'engram-community',
+    proxyUrl: ERROR_REPORT_PROXY_URL,
   };
 }
 
@@ -152,10 +169,10 @@ export class GitHubReporter {
         return { success: false, reason: 'GitHub reporter is disabled' };
       }
 
-      // Validate hardcoded configuration
+      // Validate configuration: need either a proxy URL or direct GitHub token
       const githubConfig = getGitHubConfig();
-      if (!githubConfig.token || !githubConfig.owner || !githubConfig.repo) {
-        logger.warn('GitHub reporter not configured with token/repo. Set PLASMO_PUBLIC_GITHUB_REPORTER_TOKEN env var.');
+      if (!githubConfig.proxyUrl && !githubConfig.token) {
+        logger.warn('GitHub reporter not configured. Set PLASMO_PUBLIC_ERROR_REPORT_PROXY_URL or GITHUB_REPORTER_TOKEN env var.');
         return { success: false, reason: 'GitHub reporter not configured' };
       }
 
@@ -319,6 +336,17 @@ export class GitHubReporter {
   private async isIssueOpen(issueNumber: number): Promise<boolean> {
     try {
       const githubConfig = getGitHubConfig();
+
+      // When using proxy, skip the open check (the proxy deduplicates server-side)
+      if (githubConfig.proxyUrl && !githubConfig.token) {
+        return true;
+      }
+
+      // Direct GitHub API check (dev/testing only)
+      if (!githubConfig.token) {
+        return false;
+      }
+
       const response = await fetch(
         `https://api.github.com/repos/${githubConfig.owner}/${githubConfig.repo}/issues/${issueNumber}`,
         {
@@ -342,7 +370,7 @@ export class GitHubReporter {
   }
 
   /**
-   * Create a GitHub issue
+   * Create a GitHub issue via proxy or direct API
    */
   private async createGitHubIssue(
     sanitizedData: SanitizedErrorData,
@@ -354,6 +382,48 @@ export class GitHubReporter {
     const labels = this.generateLabels(context);
 
     const githubConfig = getGitHubConfig();
+
+    // Prefer the server-side proxy (no token needed in client)
+    if (githubConfig.proxyUrl) {
+      return this.createIssueViaProxy(githubConfig.proxyUrl, { title, body, labels, fingerprint: fingerprint.hash });
+    }
+
+    // Fallback: direct GitHub API (dev/testing only, token not bundled in production)
+    return this.createIssueDirectly(githubConfig, { title, body, labels });
+  }
+
+  /**
+   * Create a GitHub issue via the server-side proxy endpoint.
+   * The proxy holds the GitHub token server-side so it never ships to clients.
+   */
+  private async createIssueViaProxy(
+    proxyUrl: string,
+    payload: { title: string; body: string; labels: string[]; fingerprint: string }
+  ): Promise<string> {
+    const response = await fetch(proxyUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Error report proxy error: ${response.status} ${errorText}`);
+    }
+
+    const result = await response.json();
+    return result.html_url || result.issueUrl || '';
+  }
+
+  /**
+   * Create a GitHub issue directly via the GitHub API.
+   * Only used in development/testing where GITHUB_REPORTER_TOKEN is available
+   * in the environment (NOT bundled by Plasmo).
+   */
+  private async createIssueDirectly(
+    githubConfig: ReturnType<typeof getGitHubConfig>,
+    payload: { title: string; body: string; labels: string[] }
+  ): Promise<string> {
     const response = await fetch(
       `https://api.github.com/repos/${githubConfig.owner}/${githubConfig.repo}/issues`,
       {
@@ -363,11 +433,7 @@ export class GitHubReporter {
           'Accept': 'application/vnd.github.v3+json',
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-          title,
-          body,
-          labels
-        })
+        body: JSON.stringify(payload)
       }
     );
 
@@ -602,14 +668,32 @@ export class GitHubReporter {
   async testConfiguration(): Promise<{ success: boolean; message: string }> {
     try {
       const githubConfig = getGitHubConfig();
-      if (!githubConfig.token || !githubConfig.owner || !githubConfig.repo) {
+
+      // Test proxy endpoint if configured
+      if (githubConfig.proxyUrl) {
+        const response = await fetch(githubConfig.proxyUrl, {
+          method: 'OPTIONS',
+        });
+        if (!response.ok && response.status !== 204) {
+          return {
+            success: false,
+            message: `Error report proxy unreachable: ${response.status}`
+          };
+        }
         return {
-          success: false,
-          message: 'GitHub configuration missing. Set PLASMO_PUBLIC_GITHUB_REPORTER_TOKEN environment variable.'
+          success: true,
+          message: 'Configuration valid (proxy mode)'
         };
       }
 
-      // Test GitHub API access
+      // Test direct GitHub API access (dev/testing only)
+      if (!githubConfig.token || !githubConfig.owner || !githubConfig.repo) {
+        return {
+          success: false,
+          message: 'GitHub configuration missing. Set PLASMO_PUBLIC_ERROR_REPORT_PROXY_URL or GITHUB_REPORTER_TOKEN environment variable.'
+        };
+      }
+
       const response = await fetch(
         `https://api.github.com/repos/${githubConfig.owner}/${githubConfig.repo}`,
         {
