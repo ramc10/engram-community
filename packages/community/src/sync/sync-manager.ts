@@ -44,6 +44,7 @@ export class SyncManager implements ISyncManager {
   // Pending pull resolution for request-response correlation
   private pullResolver: (() => void) | null = null;
   private pullRejecter: ((err: Error) => void) | null = null;
+  private pullTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
   // Event callbacks
   private stateChangeCallbacks: Set<(state: SyncState) => void> = new Set();
@@ -313,18 +314,41 @@ export class SyncManager implements ISyncManager {
       this.pullResolver = resolve;
       this.pullRejecter = reject;
 
-      setTimeout(() => {
-        if (this.pullRejecter) {
-          this.pullResolver = null;
-          this.pullRejecter = null;
-          reject(new Error('Pull operations timed out'));
-        }
-      }, PULL_TIMEOUT_MS);
+      this.resetPullTimeout(PULL_TIMEOUT_MS, reject);
     });
 
     this.wsClient.requestSync(this.lastSyncTime, this.vectorClock, 100);
 
     await pullPromise;
+  }
+
+  /**
+   * Reset (or start) the pull timeout timer.
+   * Called on initial pull and after each paginated SYNC_RESPONSE so the
+   * timeout is per-page rather than for the entire pagination sequence.
+   */
+  private resetPullTimeout(timeoutMs: number, reject: (err: Error) => void): void {
+    if (this.pullTimeoutId !== null) {
+      clearTimeout(this.pullTimeoutId);
+    }
+    this.pullTimeoutId = setTimeout(() => {
+      if (this.pullRejecter) {
+        this.pullResolver = null;
+        this.pullRejecter = null;
+        this.pullTimeoutId = null;
+        reject(new Error('Pull operations timed out'));
+      }
+    }, timeoutMs);
+  }
+
+  /**
+   * Clear the pull timeout timer (called when pull completes or fails)
+   */
+  private clearPullTimeout(): void {
+    if (this.pullTimeoutId !== null) {
+      clearTimeout(this.pullTimeoutId);
+      this.pullTimeoutId = null;
+    }
   }
 
   /**
@@ -407,12 +431,17 @@ export class SyncManager implements ISyncManager {
 
       // If there are more operations, request the next page
       if (hasMore) {
+        // Reset timeout for next page so large paginated syncs don't time out
+        if (this.pullRejecter) {
+          this.resetPullTimeout(30000, this.pullRejecter);
+        }
         this.wsClient.requestSync(this.lastSyncTime, this.vectorClock, 100);
         // Don't resolve yet — wait for next SYNC_RESPONSE
         return;
       }
 
-      // All pages received — resolve the pull promise
+      // All pages received — clear timeout and resolve the pull promise
+      this.clearPullTimeout();
       if (this.pullResolver) {
         const resolve = this.pullResolver;
         this.pullResolver = null;
@@ -420,6 +449,7 @@ export class SyncManager implements ISyncManager {
         resolve();
       }
     } catch (error) {
+      this.clearPullTimeout();
       if (this.pullRejecter) {
         const reject = this.pullRejecter;
         this.pullResolver = null;
@@ -628,6 +658,9 @@ export class SyncManager implements ISyncManager {
     console.log('[SyncManager] Destroying...');
 
     await this.disconnect();
+
+    // Cleanup pull timeout
+    this.clearPullTimeout();
 
     // Cleanup operation queue timers to prevent leaks
     if (this.operationQueue) {

@@ -20,6 +20,7 @@ export class CloudSyncService {
   private syncInterval: number | null = null;
   private onRemoteChangeCallback: ((change: any) => void) | null = null;
   private lastSyncTimestamp: number = 0;
+  private onMemorySynced: ((memoryId: string) => Promise<void>) | null = null;
 
   constructor(userId: string, crypto: CryptoService, masterKey: MasterKey) {
     this.userId = userId;
@@ -42,9 +43,19 @@ export class CloudSyncService {
    * - Subscribes to real-time changes
    * - Starts periodic sync (every 5 minutes)
    */
-  async start(getLocalMemories: () => Promise<Memory[]>): Promise<void> {
+  async start(
+    getLocalMemories: () => Promise<Memory[]>,
+    onMemorySynced?: (memoryId: string) => Promise<void>
+  ): Promise<void> {
     try {
       console.log('[CloudSync] Starting cloud sync for user:', this.userId);
+
+      if (onMemorySynced) {
+        this.onMemorySynced = onMemorySynced;
+      }
+
+      // Load persisted lastSyncTimestamp from Supabase profile
+      await this.loadLastSyncTimestamp();
 
       // 1. Upload existing local memories
       await this.uploadLocalMemories(getLocalMemories);
@@ -123,9 +134,18 @@ export class CloudSyncService {
 
       for (const memory of memoriesToSync) {
         await this.uploadMemory(memory);
+        // Mark memory as synced so it won't be re-uploaded next cycle
+        if (this.onMemorySynced) {
+          try {
+            await this.onMemorySynced(memory.id);
+          } catch (err) {
+            console.warn('[CloudSync] Failed to mark memory as synced:', memory.id, err);
+          }
+        }
       }
 
       this.lastSyncTimestamp = Date.now();
+      await this.persistLastSyncTimestamp();
       console.log('[CloudSync] Upload complete');
     } catch (err) {
       console.error('[CloudSync] Error uploading memories:', err);
@@ -300,6 +320,40 @@ export class CloudSyncService {
    */
   onRemoteChange(callback: (change: any) => void): void {
     this.onRemoteChangeCallback = callback;
+  }
+
+  /**
+   * Load lastSyncTimestamp from Supabase profile
+   */
+  private async loadLastSyncTimestamp(): Promise<void> {
+    try {
+      const { data: profile } = await this.supabase
+        .from('profiles')
+        .select('last_sync_at')
+        .eq('id', this.userId)
+        .single();
+
+      if (profile?.last_sync_at) {
+        this.lastSyncTimestamp = new Date(profile.last_sync_at).getTime();
+        console.log('[CloudSync] Loaded lastSyncTimestamp:', this.lastSyncTimestamp);
+      }
+    } catch (err) {
+      console.warn('[CloudSync] Failed to load lastSyncTimestamp:', err);
+    }
+  }
+
+  /**
+   * Persist lastSyncTimestamp to Supabase profile
+   */
+  private async persistLastSyncTimestamp(): Promise<void> {
+    try {
+      await this.supabase
+        .from('profiles')
+        .update({ last_sync_at: new Date(this.lastSyncTimestamp).toISOString() })
+        .eq('id', this.userId);
+    } catch (err) {
+      console.warn('[CloudSync] Failed to persist lastSyncTimestamp:', err);
+    }
   }
 
   /**
