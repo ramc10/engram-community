@@ -33,7 +33,8 @@ export const MemoryCard: React.FC<MemoryCardProps> = ({
   const highlightKeywords = (text: string): React.ReactNode => {
     if (matchedKeywords.length === 0) return text;
 
-    const regex = new RegExp(`(${matchedKeywords.join('|')})`, 'gi');
+    const escapedKeywords = matchedKeywords.map(kw => kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+    const regex = new RegExp(`(${escapedKeywords.join('|')})`, 'gi');
     const parts = text.split(regex);
 
     return parts.map((part, i) => {

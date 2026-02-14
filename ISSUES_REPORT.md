@@ -7,13 +7,16 @@
 
 ## Summary
 
-| Severity | Count | Fixed |
-|----------|-------|-------|
-| Critical | 12 | 2 |
-| High | 16 | 0 |
-| Medium | 22 | 0 |
-| Low | 12 | 0 |
-| **Total** | **62** | **2** |
+| Severity | Count | Fixed | Remaining |
+|----------|-------|-------|-----------|
+| Critical | 12 | 8 | 4 |
+| High | 16 | 4 | 12 |
+| Medium | 22 | 1 | 21 |
+| Low | 12 | 0 | 12 |
+| **Total** | **62** | **13** | **49** |
+
+> Issues marked with **[FIXED]** have been resolved in the codebase.
+> Issue #12 was **partially addressed** (signature field made optional).
 
 ---
 
@@ -43,7 +46,7 @@ The service role key (which has full admin database access) was referenced in th
 
 ---
 
-### 3. [Bug] Google OAuth master key not persisted -- data loss on restart
+### 3. [FIXED] [Bug] Google OAuth master key not persisted -- data loss on restart
 
 **File:** `packages/community/src/background/message-handler.ts:741-744`
 
@@ -53,7 +56,7 @@ In `handleAuthLoginGoogle`, `service.setMasterKey(masterKey)` is called but `ser
 
 ---
 
-### 4. [Bug] Salt replacement on login destroys existing encrypted data
+### 4. [FIXED] [Bug] Salt replacement on login destroys existing encrypted data
 
 **File:** `packages/community/src/background/message-handler.ts:655-664`
 
@@ -68,7 +71,7 @@ await authClient.updateUserMetadata({ engram_salt: uint8ArrayToBase64(salt) });
 
 ---
 
-### 5. [Bug] Sync `pullOperations()` is fire-and-forget -- sync falsely reports completion
+### 5. [FIXED] [Bug] Sync `pullOperations()` is fire-and-forget -- sync falsely reports completion
 
 **File:** `packages/community/src/sync/sync-manager.ts:300-308`
 
@@ -80,7 +83,7 @@ await authClient.updateUserMetadata({ engram_salt: uint8ArrayToBase64(salt) });
 
 ---
 
-### 6. [Bug] Sync `pushOperations()` never removes operations from the queue
+### 6. [FIXED] [Bug] Sync `pushOperations()` never removes operations from the queue
 
 **File:** `packages/community/src/sync/sync-manager.ts:313-339`
 
@@ -100,7 +103,7 @@ When the HNSW path is unavailable, keyword search loads ALL memories into memory
 
 ---
 
-### 8. [Bug] bulkPut of ALL memories after link detection
+### 8. [FIXED] [Bug] bulkPut of ALL memories after link detection
 
 **File:** `packages/community/src/lib/storage.ts:1213-1214`
 
@@ -115,7 +118,7 @@ await this.db.memories.bulkPut(memoriesToSave);
 
 ---
 
-### 9. [Bug] Race condition in singleton initialization (CryptoService, StorageService)
+### 9. [FIXED] [Bug] Race condition in singleton initialization (CryptoService, StorageService)
 
 **Files:**
 - `packages/community/src/lib/crypto-service.ts:339-345`
@@ -146,7 +149,7 @@ export function getCryptoService(): Promise<CryptoService> {
 
 ---
 
-### 10. [Bug] BackgroundService initialization never retries after failure
+### 10. [FIXED] [Bug] BackgroundService initialization never retries after failure
 
 **File:** `packages/community/src/background/index.ts:98-106`
 
@@ -162,7 +165,7 @@ this.initializationPromise = this._initialize().catch(e => {
 
 ---
 
-### 11. [Performance] Cloud sync re-uploads ALL memories every 5 minutes
+### 11. [FIXED] [Performance] Cloud sync re-uploads ALL memories every 5 minutes
 
 **File:** `packages/community/src/lib/cloud-sync.ts:107-109`
 
@@ -172,7 +175,7 @@ Every sync cycle uploads ALL local memories, re-encrypting each one. No delta tr
 
 ---
 
-### 12. [Bug] SyncOperation.signature required but never populated
+### 12. [PARTIAL] [Bug] SyncOperation.signature required but never populated
 
 **File:** `packages/core/src/types/memory.ts:150` and `packages/community/src/sync/sync-manager.ts:238-256`
 
@@ -211,7 +214,7 @@ Using `'*'` as the target origin allows any frame on the page to receive sensiti
 
 ---
 
-### 15. [Security] Regex injection from user-derived text
+### 15. [FIXED] [Security] Regex injection from user-derived text
 
 **Files:**
 - `packages/community/src/content/shared/context-matcher.ts:109`
@@ -233,7 +236,7 @@ Both `host_permissions` and `content_scripts.matches` use `<all_urls>`. The exte
 
 ---
 
-### 17. [Bug] Unchecked array access on LLM API responses (9 locations)
+### 17. [FIXED] [Bug] Unchecked array access on LLM API responses (9 locations)
 
 **Files:**
 - `packages/community/src/lib/enrichment-service.ts:542, 588, 652`
@@ -326,7 +329,7 @@ On any non-message DOM mutation, `getAllMessageElements()` queries the entire DO
 
 ---
 
-### 25. [Bug] ChatGPT adapter URL regex doesn't match chatgpt.com
+### 25. [FIXED] [Bug] ChatGPT adapter URL regex doesn't match chatgpt.com
 
 **File:** `packages/community/src/content/platforms/chatgpt-adapter.ts:61`
 
@@ -350,7 +353,7 @@ Matches `chat.openai.com` and `chatgpt.openai.com` but NOT `chatgpt.com` (the ac
 
 ---
 
-### 27. [Security] `uint8ArrayToBase64` crashes on large arrays
+### 27. [FIXED] [Security] `uint8ArrayToBase64` crashes on large arrays
 
 **File:** `packages/core/src/utils.ts:105`
 
@@ -416,7 +419,7 @@ Global retry counters mean one memory exhausting retries blocks all other memori
 
 ---
 
-### 33. [Bug] evolution-service callOpenAI missing usage null check
+### 33. [FIXED] [Bug] evolution-service callOpenAI missing usage null check
 
 **File:** `packages/community/src/lib/evolution-service.ts:432-434`
 
@@ -426,7 +429,7 @@ Unlike enrichment-service and link-detection-service which check `if (data.usage
 
 ---
 
-### 34. [Bug] `formatDate` uses 24-hour periods instead of calendar days
+### 34. [FIXED] [Bug] `formatDate` uses 24-hour periods instead of calendar days
 
 **File:** `packages/community/src/lib/formatters.ts:14-17`
 
