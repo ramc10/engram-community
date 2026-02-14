@@ -1,0 +1,94 @@
+name: Release to Chrome Web Store
+
+# Triggers automatically when you push a version tag (e.g. git tag v1.1.0 && git push origin v1.1.0)
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    name: Build, Package & Publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # required to create GitHub Releases
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build core package
+        run: npm run build --workspace=packages/core
+
+      - name: Run linter
+        run: npm run lint
+        working-directory: packages/community
+
+      - name: Run unit tests
+        run: npm run test:unit
+        working-directory: packages/community
+
+      - name: Package extension
+        run: npm run package
+        working-directory: packages/community
+
+      - name: Locate packaged zip
+        id: zip
+        run: |
+          ZIP=$(find packages/community/build -name "*.zip" | head -1)
+          if [ -z "$ZIP" ]; then
+            echo "ERROR: No zip file found in packages/community/build/"
+            exit 1
+          fi
+          echo "path=$ZIP" >> "$GITHUB_OUTPUT"
+          echo "Found zip: $ZIP"
+
+      - name: Save zip as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: chrome-extension-${{ github.ref_name }}
+          path: ${{ steps.zip.outputs.path }}
+          retention-days: 30
+
+      - name: Upload to Chrome Web Store
+        env:
+          CHROME_EXTENSION_ID: ${{ secrets.CHROME_EXTENSION_ID }}
+          CHROME_CLIENT_ID: ${{ secrets.CHROME_CLIENT_ID }}
+          CHROME_CLIENT_SECRET: ${{ secrets.CHROME_CLIENT_SECRET }}
+          CHROME_REFRESH_TOKEN: ${{ secrets.CHROME_REFRESH_TOKEN }}
+        run: |
+          npx chrome-webstore-upload-cli@3 upload \
+            --source "${{ steps.zip.outputs.path }}" \
+            --extension-id "$CHROME_EXTENSION_ID" \
+            --client-id "$CHROME_CLIENT_ID" \
+            --client-secret "$CHROME_CLIENT_SECRET" \
+            --refresh-token "$CHROME_REFRESH_TOKEN" \
+            --auto-publish
+
+      - name: Extract release notes from CHANGELOG
+        id: changelog
+        run: |
+          VERSION="${{ github.ref_name }}"
+          VERSION="${VERSION#v}"
+          NOTES=$(awk "/^## \[${VERSION}\]/{flag=1; next} /^## \[/{flag=0} flag" CHANGELOG.md | sed '/^[[:space:]]*$/d' | head -60)
+          echo "notes<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$NOTES" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Engram ${{ github.ref_name }}
+          body: ${{ steps.changelog.outputs.notes }}
+          files: ${{ steps.zip.outputs.path }}
+          draft: false
+          prerelease: false

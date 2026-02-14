@@ -77,17 +77,59 @@ For detailed validation documentation, see: [docs/CHROME_RELEASE_VALIDATION.md](
 
 ## 5. Publishing to Chrome Web Store
 
-1.  **Login**: Go to the [Chrome Web Store Developer Dashboard](https://chrome.google.com/webstore/developer/dashboard).
-2.  **Select Item**: Click on the existing Engram extension item (or "New Item" if first time).
-3.  **Upload Package**:
-    -   Click "Package" on the left menu.
-    -   Click "Upload new package".
-    -   Select the `.zip` file generated in Step 3.
-4.  **Update Listings**:
-    -   Update description or screenshots if necessary (optional for this release).
-5.  **Submit**:
-    -   Click "Submit for Review".
+Publishing is handled automatically by the GitHub Actions workflow in `.github/workflows/release.yml`.
+Just push a version tag and the workflow will package, upload, and publish the extension.
 
+```bash
+git tag v1.1.0
+git push origin v1.1.0
+```
+
+The workflow will:
+1. Run linter and unit tests
+2. Run `plasmo package` to produce the production zip
+3. Upload the zip to the Chrome Web Store and auto-publish
+4. Create a GitHub Release with notes from `CHANGELOG.md`
+5. Attach the zip as a release asset
+
+### One-time Setup: GitHub Secrets
+
+Before the workflow can publish, add these four secrets to your GitHub repository
+(**Settings → Secrets and variables → Actions → New repository secret**):
+
+| Secret name | Where to get it |
+|---|---|
+| `CHROME_EXTENSION_ID` | Chrome Web Store Developer Dashboard → your extension's URL (the `…/detail/<ID>` part) |
+| `CHROME_CLIENT_ID` | Google Cloud Console → OAuth 2.0 credentials (see below) |
+| `CHROME_CLIENT_SECRET` | Same OAuth 2.0 credential as above |
+| `CHROME_REFRESH_TOKEN` | Generated via the OAuth flow (see below) |
+
+#### Getting Chrome Web Store API credentials
+
+1. Go to [Google Cloud Console](https://console.cloud.google.com/) and create (or select) a project.
+2. Enable the **Chrome Web Store API** for the project.
+3. Create an **OAuth 2.0 Client ID** (Application type: **Desktop app**) and note the `client_id` and `client_secret`.
+4. Run the following to obtain a `refresh_token`:
+   ```bash
+   npx chrome-webstore-upload-cli@3 get-token \
+     --client-id YOUR_CLIENT_ID \
+     --client-secret YOUR_CLIENT_SECRET
+   ```
+   A browser window will open — sign in with the account that owns the developer dashboard.
+   Copy the printed `refresh_token` and save it as `CHROME_REFRESH_TOKEN`.
+5. Grant your Google account access: in the Cloud Console, add your Google account as a **test user** under the OAuth consent screen.
+
+#### Manual fallback (no automation)
+
+If you need to publish without the workflow:
+1. Login to the [Chrome Web Store Developer Dashboard](https://chrome.google.com/webstore/developer/dashboard).
+2. Select the Engram extension item (or click "New Item" if first time).
+3. Click **Package → Upload new package** and select the zip from step 3.
+4. Update description or screenshots if necessary, then click **Submit for Review**.
+
+## 5. Post-Release
+- The GitHub Release is created automatically by the workflow.
+- Update documentation to reference the new version if needed.
 ## 6. Post-Release
 - Create a Git tag for the release:
   ```bash
