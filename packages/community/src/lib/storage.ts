@@ -1007,11 +1007,11 @@ export class StorageService implements IStorage {
     const totalConversations = await this.db.conversations.count();
     const pendingSyncOps = await this.db.syncQueue.count();
 
-    // Get oldest and newest memory timestamps
-    const allMemories = await this.db.memories.toArray();
-    const timestamps = allMemories.map((m) => m.timestamp);
-    const oldestMemory = timestamps.length > 0 ? Math.min(...timestamps) : Date.now();
-    const newestMemory = timestamps.length > 0 ? Math.max(...timestamps) : Date.now();
+    // Get oldest and newest memory timestamps efficiently without loading all memories
+    const oldestMemoryRecord = await this.db.memories.orderBy('timestamp').first();
+    const newestMemoryRecord = await this.db.memories.orderBy('timestamp').last();
+    const oldestMemory = oldestMemoryRecord ? oldestMemoryRecord.timestamp : Date.now();
+    const newestMemory = newestMemoryRecord ? newestMemoryRecord.timestamp : Date.now();
 
     // Estimate storage used (rough estimate)
     const storageUsedBytes = await this.estimateStorageSize();
