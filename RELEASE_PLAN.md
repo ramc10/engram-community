@@ -24,17 +24,58 @@ npm run lint
 npm run test
 ```
 
-## 3. Packaging
+## 3. Building and Packaging
+
+### 3.1 Build All Packages
+
+For the monorepo structure, build all packages first:
+
+```bash
+# From repository root
+npm run build --workspaces
+```
+
+### 3.2 Package the Extension
 
 Generate the production-ready zip file for the Chrome Web Store.
 
 ```bash
+# Navigate to community package
+cd packages/community
+
 # Build and Package
 npm run package
 ```
+
 This command runs `plasmo package`, which builds the extension and creates a zip file in the `build/` directory (e.g., `build/chrome-mv3-prod.zip`).
 
-## 4. Publishing to Chrome Web Store
+## 4. Validation
+
+**IMPORTANT:** Always validate the package before submitting to Chrome Web Store.
+
+```bash
+# From repository root
+./scripts/validate-chrome-release.sh
+```
+
+The validation script performs 12 comprehensive checks:
+- ✅ Package configuration and version consistency
+- ✅ Manifest V3 compliance
+- ✅ Required icons (16x16, 32x32, 48x48, 64x64, 128x128)
+- ✅ Background service worker
+- ✅ Content scripts
+- ✅ Package size (must be < 128 MB)
+- ✅ No suspicious or unnecessary files
+
+**Expected Output:**
+```
+✓ All critical checks passed!
+Package is ready for Chrome Web Store submission
+```
+
+For detailed validation documentation, see: [docs/CHROME_RELEASE_VALIDATION.md](docs/CHROME_RELEASE_VALIDATION.md)
+
+## 5. Publishing to Chrome Web Store
 
 Publishing is handled automatically by the GitHub Actions workflow in `.github/workflows/release.yml`.
 Just push a version tag and the workflow will package, upload, and publish the extension.
@@ -89,6 +130,14 @@ If you need to publish without the workflow:
 ## 5. Post-Release
 - The GitHub Release is created automatically by the workflow.
 - Update documentation to reference the new version if needed.
+## 6. Post-Release
+- Create a Git tag for the release:
+  ```bash
+  git tag v1.1.0
+  git push origin v1.1.0
+  ```
+- Create a GitHub Release with the changelog.
+- Update documentation to reference the new version.
 
 ---
 
@@ -97,5 +146,8 @@ If you need to publish without the workflow:
 - [ ] Bump version in `packages/community/package.json` to `1.1.0`
 - [ ] Update `CHANGELOG.md` with new changes
 - [ ] Run tests: `npm run test` and `npm run lint`
-- [ ] Run `npm run package` and verify output
+- [ ] Build all packages: `npm run build --workspaces`
+- [ ] Build and package extension: `cd packages/community && npm run package`
+- [ ] **Validate package: `./scripts/validate-chrome-release.sh`**
 - [ ] Test the packaged extension manually before publishing
+- [ ] Submit to Chrome Web Store Developer Dashboard
