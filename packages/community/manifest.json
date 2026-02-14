@@ -11,7 +11,12 @@
     "activeTab"
   ],
   "host_permissions": [
-    "<all_urls>"
+    "*://chatgpt.com/*",
+    "*://chat.openai.com/*",
+    "*://claude.ai/*",
+    "*://perplexity.ai/*",
+    "*://www.perplexity.ai/*",
+    "*://gemini.google.com/*"
   ],
   "background": {
     "service_worker": "background.js",
@@ -20,7 +25,12 @@
   "content_scripts": [
     {
       "matches": [
-        "<all_urls>"
+        "*://chatgpt.com/*",
+        "*://chat.openai.com/*",
+        "*://claude.ai/*",
+        "*://perplexity.ai/*",
+        "*://www.perplexity.ai/*",
+        "*://gemini.google.com/*"
       ],
       "js": [
         "content.js"

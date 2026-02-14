@@ -55,6 +55,7 @@ export class EmbeddingService {
   private isInitializing = false;
   private initPromise: Promise<void> | null = null;
   private memoryEmbeddings: Map<string, number[]> = new Map();
+  private static readonly EMBEDDING_CACHE_MAX_SIZE = 5000; // Evict oldest when exceeded (~15MB at 3KB/entry)
   private hnswIndex: import('./hnsw-index-service').HNSWIndexService | null = null; // Phase 4
 
   /**
@@ -224,7 +225,10 @@ export class EmbeddingService {
         // Generate embedding for enhanced text
         const embedding = await this.embed(enhancedText);
 
-        // Cache it
+        // Cache it (evict oldest entry if at capacity)
+        if (this.memoryEmbeddings.size >= EmbeddingService.EMBEDDING_CACHE_MAX_SIZE) {
+          this.memoryEmbeddings.delete(this.memoryEmbeddings.keys().next().value as string);
+        }
         this.memoryEmbeddings.set(memory.id, embedding);
 
         memoriesWithEmbeddings.push({
@@ -276,7 +280,10 @@ export class EmbeddingService {
     // Generate new embedding
     const embedding = await this.embed(enhancedText);
 
-    // Cache it
+    // Cache it (evict oldest entry if at capacity)
+    if (this.memoryEmbeddings.size >= EmbeddingService.EMBEDDING_CACHE_MAX_SIZE) {
+      this.memoryEmbeddings.delete(this.memoryEmbeddings.keys().next().value as string);
+    }
     this.memoryEmbeddings.set(memory.id, embedding);
 
     return {

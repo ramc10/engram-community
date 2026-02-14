@@ -9,11 +9,11 @@
 
 | Severity | Count | Fixed | Remaining |
 |----------|-------|-------|-----------|
-| Critical | 12 | 8 | 4 |
-| High | 16 | 4 | 12 |
-| Medium | 22 | 1 | 21 |
+| Critical | 12 | 10 | 2 |
+| High | 16 | 8 | 8 |
+| Medium | 22 | 2 | 20 |
 | Low | 12 | 0 | 12 |
-| **Total** | **62** | **13** | **49** |
+| **Total** | **62** | **20** | **42** |
 
 > Issues marked with **[FIXED]** have been resolved in the codebase.
 > Issue #12 was **partially addressed** (signature field made optional).
@@ -226,7 +226,7 @@ User-derived keywords are interpolated into `new RegExp()` without escaping. Key
 
 ---
 
-### 16. [Security] Manifest has overly broad permissions
+### 16. [FIXED] [Security] Manifest has overly broad permissions
 
 **File:** `packages/community/manifest.json:13-15, 21-23`
 
@@ -249,7 +249,7 @@ All three services access `data.choices[0].message.content` or `data.content[0].
 
 ---
 
-### 18. [Memory Leak] Unbounded embedding cache in EmbeddingService
+### 18. [FIXED] [Memory Leak] Unbounded embedding cache in EmbeddingService
 
 **File:** `packages/community/src/lib/embedding-service.ts:57`
 
@@ -297,7 +297,7 @@ If `decryptedBytes` has a non-zero `byteOffset` (from ArrayBuffer sharing/slicin
 
 ---
 
-### 22. [Performance] getStats and estimateStorageSize load ALL memories
+### 22. [FIXED] [Performance] getStats and estimateStorageSize load ALL memories
 
 **Files:**
 - `packages/community/src/lib/storage.ts:916-919` (getStats)
@@ -309,7 +309,7 @@ If `decryptedBytes` has a non-zero `byteOffset` (from ArrayBuffer sharing/slicin
 
 ---
 
-### 23. [Performance] Navigation MutationObserver on entire document body
+### 23. [FIXED] [Performance] Navigation MutationObserver on entire document body
 
 **File:** `packages/community/src/contents/index.ts:327-345`
 

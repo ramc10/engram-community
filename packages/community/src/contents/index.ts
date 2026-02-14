@@ -321,30 +321,7 @@ async function initialize() {
 function setupNavigationMonitoring() {
   console.log('[Engram] Setting up navigation monitoring...');
 
-  let lastUrl = window.location.href;
-
-  // Monitor URL changes using MutationObserver on the URL bar
-  const urlObserver = new MutationObserver(() => {
-    const currentUrl = window.location.href;
-    if (currentUrl !== lastUrl) {
-      console.log('[Engram] URL changed:', currentUrl);
-      lastUrl = currentUrl;
-
-      const newConversationId = extractConversationId(currentUrl);
-      if (newConversationId !== currentConversationId) {
-        console.log('[Engram] New conversation detected, re-initializing...');
-        initializeChatGPT();
-      }
-    }
-  });
-
-  // Observe the entire document for changes
-  urlObserver.observe(document.body, {
-    childList: true,
-    subtree: true
-  });
-
-  // Also listen for popstate (back/forward navigation)
+  // Listen for popstate (back/forward navigation)
   window.addEventListener('popstate', () => {
     console.log('[Engram] Popstate event detected');
     const newConversationId = extractConversationId(window.location.href);
