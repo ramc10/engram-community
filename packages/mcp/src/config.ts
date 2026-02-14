@@ -43,8 +43,40 @@ function loadConfigFile(): ConfigFile {
   return {};
 }
 
-function generateDeviceId(): string {
-  return `mcp-${crypto.randomUUID()}`;
+function getDeviceIdPath(): string {
+  return path.join(os.homedir(), '.engram', 'device-id');
+}
+
+/**
+ * Loads the persistent device ID from ~/.engram/device-id, creating it on
+ * first run. A stable device ID is required for vector clock consistency —
+ * regenerating it on every start would create a new logical device identity
+ * and break causal ordering across restarts.
+ */
+function loadOrCreateDeviceId(): string {
+  const deviceIdPath = getDeviceIdPath();
+
+  // Ensure the directory exists before trying to read/write
+  const dir = path.dirname(deviceIdPath);
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+
+  try {
+    if (fs.existsSync(deviceIdPath)) {
+      const stored = fs.readFileSync(deviceIdPath, 'utf-8').trim();
+      if (stored && stored.startsWith('mcp-')) {
+        return stored;
+      }
+    }
+  } catch {
+    // Fall through to generate a new one
+  }
+
+  // First run (or corrupted file) — generate and persist
+  const newId = `mcp-${crypto.randomUUID()}`;
+  fs.writeFileSync(deviceIdPath, newId, { encoding: 'utf-8', mode: 0o600 });
+  return newId;
 }
 
 export function loadConfig(): EngramMcpConfig {
@@ -70,6 +102,6 @@ export function loadConfig(): EngramMcpConfig {
       fileConfig.enableEmbeddings ||
       false,
     debug: process.env.ENGRAM_DEBUG === 'true' || fileConfig.debug || false,
-    deviceId: generateDeviceId(),
+    deviceId: loadOrCreateDeviceId(),
   };
 }
