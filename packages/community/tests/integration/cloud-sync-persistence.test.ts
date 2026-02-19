@@ -120,7 +120,23 @@ jest.mock('../../src/lib/auth-client', () => ({
         email: 'test@example.com',
       })
     ),
-    getSupabaseClient: jest.fn(() => ({})),
+    getSupabaseClient: jest.fn(() => ({
+      from: jest.fn(() => ({
+        select: jest.fn().mockReturnThis(),
+        eq: jest.fn().mockReturnThis(),
+        is: jest.fn().mockReturnThis(),
+        gt: jest.fn(() => Promise.resolve({ data: [], error: null })),
+        single: jest.fn(() => Promise.resolve({ data: { tier: 'premium', sync_enabled: true }, error: null })),
+        maybeSingle: jest.fn(() => Promise.resolve({ data: null, error: null })),
+        upsert: jest.fn(() => Promise.resolve({ error: null })),
+        update: jest.fn().mockReturnThis(),
+      })),
+      channel: jest.fn(() => ({
+        on: jest.fn(function (this: any) { return this; }),
+        subscribe: jest.fn(function (this: any) { return this; }),
+        unsubscribe: jest.fn(() => Promise.resolve()),
+      })),
+    })),
   },
 }));
 

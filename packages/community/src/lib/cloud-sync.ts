@@ -21,19 +21,23 @@ export class CloudSyncService {
   private onRemoteChangeCallback: ((change: any) => void) | null = null;
   private lastSyncTimestamp: number = 0;
 
-  constructor(userId: string, crypto: CryptoService, masterKey: MasterKey) {
+  constructor(userId: string, crypto: CryptoService, masterKey: MasterKey, authenticatedClient?: SupabaseClient) {
     this.userId = userId;
     this.crypto = crypto;
     this.masterKey = masterKey;
 
-    const supabaseUrl = process.env.PLASMO_PUBLIC_SUPABASE_URL;
-    const supabaseKey = process.env.PLASMO_PUBLIC_SUPABASE_ANON_KEY;
+    if (authenticatedClient) {
+      this.supabase = authenticatedClient;
+    } else {
+      const supabaseUrl = process.env.PLASMO_PUBLIC_SUPABASE_URL;
+      const supabaseKey = process.env.PLASMO_PUBLIC_SUPABASE_ANON_KEY;
 
-    if (!supabaseUrl || !supabaseKey) {
-      throw new Error('Supabase credentials not found in environment');
+      if (!supabaseUrl || !supabaseKey) {
+        throw new Error('Supabase credentials not found in environment');
+      }
+
+      this.supabase = createClient(supabaseUrl, supabaseKey);
     }
-
-    this.supabase = createClient(supabaseUrl, supabaseKey);
   }
 
   /**

@@ -429,7 +429,8 @@ class BackgroundService {
       this.cloudSync = new CloudSyncService(
         authState.userId,
         this.crypto,
-        this.getMasterKey()!
+        this.getMasterKey()!,
+        supabaseClient
       );
 
       // Download memories from cloud
