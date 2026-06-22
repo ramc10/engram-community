@@ -15,40 +15,19 @@ import { CryptoService } from '../lib/crypto-service';
 import { StorageService } from '../lib/storage';
 import { Message, createErrorResponse } from '../lib/messages';
 import { handleMessage } from './message-handler';
-// LAZY LOADED: premiumService, getPremiumClient, EmbeddingMigration
-// These are loaded dynamically to reduce initial bundle size (~500KB savings)
+// LAZY LOADED: EmbeddingMigration — loaded dynamically to reduce initial bundle size
 import { authClient } from '../lib/auth-client';
 import { getMigrationService } from '../lib/migration-service';
 import { DeviceKeyManager } from '../lib/device-key-manager';
-import type { EnrichmentConfig } from '@engram/core';
-import { decryptApiKey, isEncrypted } from '../lib/api-key-crypto';
 import { createLogger } from '../lib/logger';
 // Import ErrorSeverity from separate file for tree-shaking
 import { ErrorSeverity } from '../lib/error-types';
 
 // Types for lazy-loaded modules
-type PremiumServiceModule = typeof import('../lib/premium-service');
-type PremiumClientModule = typeof import('../lib/premium-api-client');
 type EmbeddingMigrationModule = typeof import('../lib/embedding-migration');
 
 // Lazy module loaders (cached after first load)
-let premiumServiceModule: PremiumServiceModule | null = null;
-let premiumClientModule: PremiumClientModule | null = null;
 let embeddingMigrationModule: EmbeddingMigrationModule | null = null;
-
-async function getPremiumServiceModule(): Promise<PremiumServiceModule> {
-  if (!premiumServiceModule) {
-    premiumServiceModule = await import('../lib/premium-service');
-  }
-  return premiumServiceModule;
-}
-
-async function getPremiumClientModule(): Promise<PremiumClientModule> {
-  if (!premiumClientModule) {
-    premiumClientModule = await import('../lib/premium-api-client');
-  }
-  return premiumClientModule;
-}
 
 async function getEmbeddingMigrationModule(): Promise<EmbeddingMigrationModule> {
   if (!embeddingMigrationModule) {
@@ -125,9 +104,6 @@ class BackgroundService {
 
       // Restore master key if available (needed to decrypt local memories)
       await this.restoreMasterKey();
-
-      // Initialize premium API client if using premium provider
-      await this.initializePremiumClientIfNeeded();
 
       this.isInitialized = true;
       console.log('[Engram] Background service ready');
@@ -334,84 +310,6 @@ class BackgroundService {
       return false;
     }
   }
-
-  /**
-   * Initialize premium API client if enrichment provider is 'premium'
-   * Called on startup and when enrichment settings change
-   * Uses lazy loading for premium client (~100KB savings)
-   */
-  async initializePremiumClientIfNeeded(): Promise<void> {
-    console.log('[PremiumAPI] initializePremiumClientIfNeeded() started');
-    try {
-      // Lazy load premium client module
-      const { getPremiumClient } = await getPremiumClientModule();
-      // Get the premium client singleton
-      const premiumClient = getPremiumClient();
-      console.log('[PremiumAPI] Got premium client singleton');
-
-      // First, try to load existing credentials from storage
-      console.log('[PremiumAPI] Attempting to restore session from storage...');
-      const restored = await premiumClient.initialize();
-      console.log('[PremiumAPI] initialize() returned:', restored);
-
-      if (restored) {
-        console.log('[PremiumAPI] Session restored successfully');
-        return;
-      }
-
-      // No saved session, check if we have a license key to authenticate
-      console.log('[PremiumAPI] No saved session, checking for license key...');
-      const result = await chrome.storage.local.get('enrichmentConfig');
-      console.log('[PremiumAPI] Got enrichmentConfig:', !!result.enrichmentConfig);
-
-      if (!result.enrichmentConfig) {
-        console.log('[PremiumAPI] No enrichment config found');
-        return;
-      }
-
-      const config: EnrichmentConfig = result.enrichmentConfig;
-      console.log('[PremiumAPI] Config provider:', config.provider);
-
-      // Check if using premium provider
-      if ((config.provider as string) !== 'premium') {
-        console.log('[PremiumAPI] Not using premium provider');
-        return;
-      }
-
-      // Check if license key is set (stored in apiKey field for premium)
-      console.log('[PremiumAPI] Config has apiKey:', !!config.apiKey);
-      if (!config.apiKey) {
-        console.log('[PremiumAPI] No license key configured');
-        return;
-      }
-
-      // Decrypt license key if encrypted
-      let licenseKey = config.apiKey;
-      const encrypted = isEncrypted(config.apiKey);
-      console.log('[PremiumAPI] License key is encrypted:', encrypted);
-
-      if (encrypted) {
-        try {
-          console.log('[PremiumAPI] Decrypting license key...');
-          licenseKey = await decryptApiKey(config.apiKey);
-          console.log('[PremiumAPI] License key decrypted successfully');
-        } catch (err) {
-          console.error('[PremiumAPI] Failed to decrypt license key:', err);
-          return;
-        }
-      }
-
-      // Authenticate with premium API using license key
-      console.log('[PremiumAPI] Authenticating with license key...');
-      await premiumClient.authenticate(licenseKey);
-      console.log('[PremiumAPI] Authentication successful');
-    } catch (error) {
-      console.error('[PremiumAPI] Failed to initialize premium client:', error);
-      console.error('[PremiumAPI] Error stack:', error instanceof Error ? error.stack : 'No stack');
-      // Don't throw - allow extension to continue without premium features
-    }
-  }
-
 
   /**
    * Shutdown the service

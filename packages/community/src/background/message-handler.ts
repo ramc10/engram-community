@@ -18,9 +18,6 @@ import {
   AuthLoginGoogleResponse,
   AuthLogoutResponse,
   GetAuthStateResponse,
-  GetPremiumStatusResponse,
-  UpgradeToPremiumResponse,
-  RequestPremiumUpgradeResponse,
   ReinitializeEnrichmentResponse,
   RevertEvolutionResponse,
   AuthState,
@@ -31,17 +28,6 @@ import {
 import { BackgroundService } from './index';
 import { Memory } from '@engram/core';
 import { generateUUID, getPlatformFromUrl, base64ToUint8Array, uint8ArrayToBase64 } from '@engram/core';
-
-// Lazy load premium service for bundle size optimization
-type PremiumServiceModule = typeof import('../lib/premium-service');
-let premiumServiceModule: PremiumServiceModule | null = null;
-
-async function getPremiumServiceModule(): Promise<PremiumServiceModule> {
-  if (!premiumServiceModule) {
-    premiumServiceModule = await import('../lib/premium-service');
-  }
-  return premiumServiceModule;
-}
 
 
 /**
@@ -153,15 +139,6 @@ export async function handleMessage(
 
       case MessageType.GET_AUTH_STATE:
         return await handleGetAuthState(service);
-
-      case MessageType.GET_PREMIUM_STATUS:
-        return await handleGetPremiumStatus(service);
-
-      case MessageType.UPGRADE_TO_PREMIUM:
-        return await handleUpgradeToPremium(service);
-
-      case MessageType.REQUEST_PREMIUM_UPGRADE:
-        return await handleRequestPremiumUpgrade(service);
 
       case MessageType.REINITIALIZE_ENRICHMENT:
         return await handleReinitializeEnrichment(service);
@@ -814,116 +791,6 @@ async function handleGetAuthState(
 }
 
 /**
- * Handle get premium status request
- */
-async function handleGetPremiumStatus(
-  service: BackgroundService
-): Promise<GetPremiumStatusResponse> {
-  try {
-    const authClient = service.getAuthClient();
-    const authState = await authClient.getAuthState();
-
-    if (!authState.isAuthenticated || !authState.userId) {
-      throw new Error('Not authenticated');
-    }
-
-    console.log('[Premium] Getting premium status for user:', authState.userId);
-
-    // Get authenticated Supabase client (has user session for RLS)
-    const supabaseClient = authClient.getSupabaseClient();
-
-    const { premiumService } = await getPremiumServiceModule();
-    const status = await premiumService.getPremiumStatus(authState.userId, supabaseClient);
-
-    return {
-      type: MessageType.GET_PREMIUM_STATUS_RESPONSE,
-      success: true,
-      status,
-    };
-  } catch (error) {
-    console.error('[Premium] Failed to get premium status:', error);
-    return {
-      type: MessageType.GET_PREMIUM_STATUS_RESPONSE,
-      success: false,
-      error: (error as Error).message,
-    };
-  }
-}
-
-/**
- * Handle upgrade to premium request
- */
-async function handleUpgradeToPremium(
-  service: BackgroundService
-): Promise<UpgradeToPremiumResponse> {
-  try {
-    const authClient = service.getAuthClient();
-    const authState = await authClient.getAuthState();
-
-    if (!authState.isAuthenticated || !authState.userId) {
-      throw new Error('Not authenticated');
-    }
-
-    console.log('[Premium] Upgrading user to premium:', authState.userId);
-
-    const { premiumService } = await getPremiumServiceModule();
-    await premiumService.upgradeToPremium(authState.userId);
-
-    console.log('[Premium] User upgraded successfully');
-
-    return {
-      type: MessageType.UPGRADE_TO_PREMIUM_RESPONSE,
-      success: true,
-    };
-  } catch (error) {
-    console.error('[Premium] Failed to upgrade to premium:', error);
-    return {
-      type: MessageType.UPGRADE_TO_PREMIUM_RESPONSE,
-      success: false,
-      error: (error as Error).message,
-    };
-  }
-}
-
-/**
- * Handle request premium upgrade
- */
-async function handleRequestPremiumUpgrade(
-  service: BackgroundService
-): Promise<RequestPremiumUpgradeResponse> {
-  try {
-    const authClient = service.getAuthClient();
-    const authState = await authClient.getAuthState();
-
-    if (!authState.isAuthenticated || !authState.userId || !authState.email) {
-      throw new Error('Not authenticated');
-    }
-
-    console.log('[Premium] Submitting upgrade request for user:', authState.userId);
-
-    // Get authenticated Supabase client (has user session for RLS)
-    const supabaseClient = authClient.getSupabaseClient();
-
-    const { premiumService } = await getPremiumServiceModule();
-    await premiumService.requestPremiumUpgrade(authState.userId, authState.email, supabaseClient);
-
-    console.log('[Premium] Upgrade request submitted successfully');
-
-    return {
-      type: MessageType.REQUEST_PREMIUM_UPGRADE_RESPONSE,
-      success: true,
-    };
-  } catch (error) {
-    console.error('[Premium] Failed to submit upgrade request:', error);
-    return {
-      type: MessageType.REQUEST_PREMIUM_UPGRADE_RESPONSE,
-      success: false,
-      error: (error as Error).message,
-    };
-  }
-}
-
-/**
  * Handle reinitialize enrichment request
  * Called when enrichment settings are changed in the UI
  */
@@ -935,10 +802,6 @@ async function handleReinitializeEnrichment(
 
     const storage = service.getStorage();
     await storage.reinitializeEnrichment();
-
-    // Re-initialize Premium API client if using premium provider
-    // This ensures the client is authenticated after user configures license key in UI
-    await service.initializePremiumClientIfNeeded();
 
     console.log('[Enrichment] Enrichment services reinitialized successfully');
 

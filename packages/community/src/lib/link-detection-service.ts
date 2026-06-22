@@ -13,7 +13,6 @@ import type {
   UUID,
 } from '@engram/core';
 import { getEmbeddingService, type MemoryWithEmbedding, type SimilarityResult } from './embedding-service';
-import { getPremiumClient } from './premium-api-client';
 
 // LinkScore interface - extending core type
 export interface LinkScore {
@@ -143,10 +142,7 @@ export class LinkDetectionService {
 
     // Check credentials based on provider
     let hasCredentials = false;
-    if ((this.config.provider as string) === 'premium') {
-      const client = getPremiumClient();
-      hasCredentials = client.isAuthenticated();
-    } else if (this.config.provider === 'local') {
+    if (this.config.provider === 'local') {
       hasCredentials = !!this.config.localEndpoint;
     } else {
       hasCredentials = !!this.config.apiKey;
@@ -389,12 +385,10 @@ Return valid JSON only:
 
   /**
    * Call LLM API for link detection
-   * Handles OpenAI, Anthropic, local, and premium providers
+   * Handles OpenAI, Anthropic, and local providers (user's own API key)
    */
-  private async callLLM(prompt: string, request?: LinkDetectionRequest): Promise<LinkDetectionResponse> {
-    if ((this.config.provider as string) === 'premium') {
-      return this.callPremium(prompt, request);
-    } else if (this.config.provider === 'openai') {
+  private async callLLM(prompt: string, _request?: LinkDetectionRequest): Promise<LinkDetectionResponse> {
+    if (this.config.provider === 'openai') {
       return this.callOpenAI(prompt);
     } else if (this.config.provider === 'anthropic') {
       return this.callAnthropic(prompt);
@@ -402,53 +396,6 @@ Return valid JSON only:
       return this.callLocal(prompt);
     } else {
       throw new Error(`Unknown provider: ${this.config.provider}`);
-    }
-  }
-
-  /**
-   * Call Premium API
-   * Routes link detection to premium server with LM Studio backend
-   */
-  private async callPremium(_prompt: string, request?: LinkDetectionRequest): Promise<LinkDetectionResponse> {
-    const client = getPremiumClient();
-
-    if (!client.isAuthenticated()) {
-      throw new Error('Not authenticated with premium API. Please configure your license key in settings.');
-    }
-
-    if (!request) {
-      throw new Error('No request data available for premium API call');
-    }
-
-    try {
-      const source = request.sourceMemory;
-
-      // Build request in premium API format
-      const newMemory = {
-        id: source.id,
-        content: source.content.text,
-        context: source.context,
-      };
-
-      const existingMemories = request.candidates.map(candidate => ({
-        id: candidate.id,
-        content: candidate.content,
-        context: candidate.context,
-      }));
-
-      const result = await client.detectLinks(newMemory as any, existingMemories as any);
-
-      // Transform premium API response to LinkDetectionResponse format
-      return {
-        links: result.map(link => ({
-          memoryId: link.targetId,
-          confidence: link.confidence,
-          reason: link.reason,
-        })),
-      };
-    } catch (error) {
-      console.error('[LinkDetection] Premium API error:', error);
-      throw new Error(`Premium API link detection failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 

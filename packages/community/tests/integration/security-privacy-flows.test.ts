@@ -163,13 +163,6 @@ jest.mock('@supabase/supabase-js', () => ({
     })),
 }));
 
-// Mock premium service
-jest.mock('../../src/lib/premium-service', () => ({
-    premiumService: {
-        getPremiumStatus: jest.fn(() => Promise.resolve({ isPremium: true, syncEnabled: true })),
-    },
-}));
-
 // Mock auth client
 jest.mock('../../src/lib/auth-client', () => ({
     authClient: {

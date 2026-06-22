@@ -11,7 +11,6 @@ import type {
   EnrichmentConfig,
   MemoryWithMemA,
 } from '@engram/core';
-import { getPremiumClient } from './premium-api-client';
 import { getEnrichmentRetryQueue } from './enrichment-retry-queue';
 
 // Declare chrome for TypeScript
@@ -143,10 +142,7 @@ export class EnrichmentService {
 
     // Check credentials based on provider
     let hasCredentials = false;
-    if ((this.config.provider as string) === 'premium') {
-      const client = getPremiumClient();
-      hasCredentials = client.isAuthenticated();
-    } else if (this.config.provider === 'local') {
+    if (this.config.provider === 'local') {
       hasCredentials = !!this.config.localEndpoint;
     } else {
       hasCredentials = !!this.config.apiKey;
@@ -450,12 +446,10 @@ Return valid JSON only:
 
   /**
    * Call LLM API for enrichment
-   * Handles OpenAI, Anthropic, local, and premium providers
+   * Handles OpenAI, Anthropic, and local providers (user's own API key)
    */
   private async callLLM(prompt: string): Promise<EnrichmentResponse> {
-    if ((this.config.provider as string) === 'premium') {
-      return this.callPremium(prompt);
-    } else if (this.config.provider === 'openai') {
+    if (this.config.provider === 'openai') {
       return this.callOpenAI(prompt);
     } else if (this.config.provider === 'anthropic') {
       return this.callAnthropic(prompt);
@@ -463,39 +457,6 @@ Return valid JSON only:
       return this.callLocal(prompt);
     } else {
       throw new Error(`Unknown provider: ${this.config.provider}`);
-    }
-  }
-
-  /**
-   * Call Premium API
-   * Routes enrichment to premium server with LM Studio backend
-   */
-  private async callPremium(prompt: string): Promise<EnrichmentResponse> {
-    const client = getPremiumClient();
-
-    if (!client.isAuthenticated()) {
-      throw new Error('Not authenticated with premium API. Please configure your license key in settings.');
-    }
-
-    // Extract content from prompt
-    // The prompt contains the message content on the line after "Content: "
-    // We only want the actual message content, not the extraction instructions
-    const contentMatch = prompt.match(/Content: ([^\n]+)/);
-    const content = contentMatch ? contentMatch[1].trim() : prompt;
-
-    console.log('[Enrichment] Extracted content for Premium API:', content);
-
-    try {
-      const result = await client.enrich(content);
-
-      return {
-        keywords: result.keywords,
-        tags: result.tags,
-        context: result.context,
-      };
-    } catch (error) {
-      console.error('[Enrichment] Premium API error:', error);
-      throw new Error(`Premium API enrichment failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 

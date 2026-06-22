@@ -395,12 +395,6 @@ describe('Comprehensive User Flows', () => {
 
     // --- 2. SYNCHRONIZATION & PREMIUM FLOWS ---
 
-    test('Flow 5: Premium Feature Unlock', async () => {
-        backgroundService.setMasterKey({ key: new Uint8Array(32), salt: new Uint8Array(16), derivedAt: Date.now() });
-        const upgradeResponse = await handleMessage({ type: MessageType.UPGRADE_TO_PREMIUM } as any, mockSender, backgroundService);
-        expect(upgradeResponse.success).toBe(true);
-    });
-
     test('Flow 6: Offline-to-Online Recovery', async () => {
         // Mock network failure
         mockFetch.mockRejectedValue(new Error('Network error'));

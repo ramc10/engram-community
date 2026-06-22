@@ -48,13 +48,6 @@ export enum MessageType {
   GET_AUTH_STATE = 'GET_AUTH_STATE',
   GET_AUTH_STATE_RESPONSE = 'GET_AUTH_STATE_RESPONSE',
 
-  // Premium Tier
-  GET_PREMIUM_STATUS = 'GET_PREMIUM_STATUS',
-  GET_PREMIUM_STATUS_RESPONSE = 'GET_PREMIUM_STATUS_RESPONSE',
-  UPGRADE_TO_PREMIUM = 'UPGRADE_TO_PREMIUM',
-  UPGRADE_TO_PREMIUM_RESPONSE = 'UPGRADE_TO_PREMIUM_RESPONSE',
-  REQUEST_PREMIUM_UPGRADE = 'REQUEST_PREMIUM_UPGRADE',
-  REQUEST_PREMIUM_UPGRADE_RESPONSE = 'REQUEST_PREMIUM_UPGRADE_RESPONSE',
 
   // Enrichment Config
   REINITIALIZE_ENRICHMENT = 'REINITIALIZE_ENRICHMENT',
@@ -227,47 +220,6 @@ export interface GetAuthStateResponse extends BaseMessage {
   error?: string;
 }
 
-/**
- * Premium tier messages
- */
-export interface GetPremiumStatusRequest extends BaseMessage {
-  type: MessageType.GET_PREMIUM_STATUS;
-}
-
-export interface PremiumStatus {
-  tier: 'free' | 'premium';
-  isPremium: boolean;
-  syncEnabled: boolean;
-  premiumSince: string | null;
-  hasPendingRequest: boolean;
-}
-
-export interface GetPremiumStatusResponse extends BaseMessage {
-  type: MessageType.GET_PREMIUM_STATUS_RESPONSE;
-  success: boolean;
-  status?: PremiumStatus;
-  error?: string;
-}
-
-export interface UpgradeToPremiumRequest extends BaseMessage {
-  type: MessageType.UPGRADE_TO_PREMIUM;
-}
-
-export interface UpgradeToPremiumResponse extends BaseMessage {
-  type: MessageType.UPGRADE_TO_PREMIUM_RESPONSE;
-  success: boolean;
-  error?: string;
-}
-
-export interface RequestPremiumUpgradeRequest extends BaseMessage {
-  type: MessageType.REQUEST_PREMIUM_UPGRADE;
-}
-
-export interface RequestPremiumUpgradeResponse extends BaseMessage {
-  type: MessageType.REQUEST_PREMIUM_UPGRADE_RESPONSE;
-  success: boolean;
-  error?: string;
-}
 
 export interface ReinitializeEnrichmentRequest extends BaseMessage {
   type: MessageType.REINITIALIZE_ENRICHMENT;
@@ -327,12 +279,6 @@ export type Message =
   | AuthLogoutResponse
   | GetAuthStateRequest
   | GetAuthStateResponse
-  | GetPremiumStatusRequest
-  | GetPremiumStatusResponse
-  | UpgradeToPremiumRequest
-  | UpgradeToPremiumResponse
-  | RequestPremiumUpgradeRequest
-  | RequestPremiumUpgradeResponse
   | ReinitializeEnrichmentRequest
   | ReinitializeEnrichmentResponse
   | RevertEvolutionRequest
