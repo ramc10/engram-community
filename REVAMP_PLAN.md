@@ -91,11 +91,13 @@ No cloud relay. Memories live only in IndexedDB and the local `engram.db`. Supab
 - Add `conversationId`-change detection via `history.pushState`/`popstate` patching in the content entry to fix the SPA leak (`content/index.ts:250`) — re-init adapter on route change, not just `beforeunload`.
 - **Acceptance:** capture parity tests pass; no duplicate/dropped messages across simulated SPA nav.
 
-### Phase 1 — Delete the injection layer
-- Remove `prompt-interceptor.ts`, `network-interceptor.ts`, `inject-network-interceptor.ts`, `main-world-interceptor.ts`, `context-matcher.ts`, and their wiring in `contents/index.ts`.
-- Drop the `world:"MAIN"` script entirely and the `scripting` permission (Plasmo auto-adds it for injection; verify built manifest no longer needs it).
-- Narrow CSP if `wasm-unsafe-eval` was only for injected code (it's not — embeddings need it; keep).
-- **Acceptance:** extension builds; capture still works on all 4 platforms; built `manifest.json` no longer lists MAIN-world content script; Web Store-relevant surface shrinks.
+### Phase 1 — Delete the injection layer ✅ DONE
+- Removed `prompt-interceptor.ts`, `network-interceptor.ts`, `inject-network-interceptor.ts`, `main-world-interceptor.ts`, and their wiring in `contents/index.ts`.
+- **Correction:** `context-matcher.ts` was mislabeled as injection — it's the memory **panel's** TF-IDF relevance search (`memory-panel.tsx` depends on it). **Kept.**
+- Dropped the `world:"MAIN"` script entirely. `scripting` permission is already absent from the source Plasmo manifest and no `chrome.scripting` calls exist → generated manifest drops it.
+- CSP `wasm-unsafe-eval` retained (embeddings need it).
+- Also removed the now-obsolete `network-interceptor-helpers.test.ts` and `link-aware-retrieval.test.ts.skip` (tested only the interceptor).
+- **Result:** 0 type errors; 650 tests green; no dangling references to deleted modules.
 
 ### Phase 2 — Supabase teardown (auth-preserving)
 Remove all cloud **memory storage/sync**; keep Supabase **auth only**. Done early (right after injection deletion) so every later phase builds against the final cloud-free data path, not soon-deleted sync code.

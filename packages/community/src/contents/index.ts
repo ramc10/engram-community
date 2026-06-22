@@ -24,7 +24,6 @@ import { claudeAdapter } from '../content/platforms/claude-adapter';
 import { perplexityAdapter } from '../content/platforms/perplexity-adapter';
 import { geminiAdapter } from '../content/platforms/gemini-adapter';
 import { sendInitRequest, sendSaveMessage } from '../lib/messages';
-import { PromptInterceptor } from '../content/shared/prompt-interceptor';
 
 /**
  * Navigation/cleanup coordination state.
@@ -32,10 +31,9 @@ import { PromptInterceptor } from '../content/shared/prompt-interceptor';
  * All four target sites are SPAs: route changes happen via history API without a
  * full page load, so observers must be torn down and re-initialized on navigation
  * or they leak across conversations (R6). `activeCleanup` always destroys whichever
- * adapter/interceptor is currently running.
+ * adapter is currently running.
  */
 let currentConversationId: string | null = null;
-let currentInterceptor: PromptInterceptor | null = null;
 let activeCleanup: (() => void) | null = null;
 let lastPath: string = typeof location !== 'undefined' ? location.pathname : '';
 let navMonitorInstalled = false;
@@ -60,13 +58,9 @@ function detectPlatform(url: string): string {
 }
 
 /**
- * Tear down whichever adapter/interceptor is currently active.
+ * Tear down whichever adapter is currently active.
  */
 function cleanupActive(): void {
-  if (currentInterceptor) {
-    try { currentInterceptor.destroy(); } catch (e) { console.error('[Engram] Interceptor cleanup error:', e); }
-    currentInterceptor = null;
-  }
   if (activeCleanup) {
     try { activeCleanup(); } catch (e) { console.error('[Engram] Adapter cleanup error:', e); }
     activeCleanup = null;
@@ -115,16 +109,6 @@ async function initializeChatGPT() {
     await chatGPTAdapter.initialize();
     console.log('[Engram] Adapter initialized');
 
-    // Initialize intelligent prompt interceptor with direct insertion mode
-    currentInterceptor = new PromptInterceptor();
-    await currentInterceptor.initialize(
-      '#prompt-textarea', // ChatGPT textarea selector (contenteditable div)
-      'button[data-testid*="send"], button[type="submit"]:not([disabled])', // ChatGPT send button selector
-      true // Use direct insertion mode for ChatGPT
-    );
-
-    console.log('[Engram] Intelligent auto-injection ready (direct insertion mode)');
-
     // Start observing messages (now async with retries)
     await chatGPTAdapter.observeMessages(async (extractedMessage) => {
       console.log('[Engram] Message extracted:', {
@@ -151,7 +135,7 @@ async function initializeChatGPT() {
       chatGPTAdapter.destroy();
     };
 
-    console.log('[Engram] Ready - monitoring ChatGPT messages (direct insertion mode)');
+    console.log('[Engram] Ready - monitoring ChatGPT messages');
   } catch (error) {
     console.error('[Engram] ChatGPT initialization error:', error);
   }
@@ -179,15 +163,6 @@ async function initializeClaude() {
       // Initialize adapter
       await claudeAdapter.initialize();
       console.log('[Engram] Adapter initialized');
-
-      // Initialize intelligent prompt interceptor
-      currentInterceptor = new PromptInterceptor();
-      await currentInterceptor.initialize(
-        'div[contenteditable="true"]', // Claude contenteditable input
-        'button[aria-label="Send message"]' // Claude send button (note: lowercase 'm')
-      );
-
-      console.log('[Engram] Intelligent auto-injection ready');
 
       // Start observing messages
       await claudeAdapter.observeMessages(async (extractedMessage) => {
