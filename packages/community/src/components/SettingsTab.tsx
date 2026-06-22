@@ -12,31 +12,19 @@ import type { MessageType } from '../lib/messages';
 interface SettingsTabProps {
   email: string;
   userId: string;
-  isPremium: boolean;
-  syncEnabled: boolean;
-  hasPendingRequest: boolean;
   onLogout: () => void;
   isLoggingOut: boolean;
-  onCheckPremiumStatus: () => void;
-  onUpgrade: () => void;
 }
 
 export function SettingsTab({
   email,
   userId,
-  isPremium,
-  syncEnabled: syncEnabledProp,
-  hasPendingRequest,
   onLogout,
   isLoggingOut,
-  onCheckPremiumStatus,
-  onUpgrade,
 }: SettingsTabProps) {
   const { colors } = useTheme();
   const { success, error: showError } = useToast();
 
-  const [syncEnabled, setSyncEnabled] = useState(syncEnabledProp);
-  const [isTogglingSync, setIsTogglingSync] = useState(false);
   const [showApiKey, setShowApiKey] = useState(false);
   const [isUpdatingEnrichment, setIsUpdatingEnrichment] = useState(false);
   const [enrichmentConfig, setEnrichmentConfig] = useState<EnrichmentConfig>({
@@ -46,11 +34,6 @@ export function SettingsTab({
     batchSize: 5,
     enableLinkDetection: false,
   });
-
-  // Sync the prop with local state
-  useEffect(() => {
-    setSyncEnabled(syncEnabledProp);
-  }, [syncEnabledProp]);
 
   // Load enrichment config on mount
   useEffect(() => {
@@ -130,33 +113,6 @@ export function SettingsTab({
       }
     }
     updateEnrichmentConfig({ enabled: !enrichmentConfig.enabled });
-  };
-
-  const handleToggleSync = async () => {
-    if (!isPremium) {
-      showError('Premium subscription required for cloud sync');
-      return;
-    }
-
-    setIsTogglingSync(true);
-    try {
-      const messageType = syncEnabled ? 'STOP_CLOUD_SYNC' : 'START_CLOUD_SYNC';
-      const response = await chrome.runtime.sendMessage({
-        type: messageType as MessageType,
-      });
-
-      if (response.success) {
-        setSyncEnabled(!syncEnabled);
-        success(syncEnabled ? 'Cloud sync disabled' : 'Cloud sync enabled');
-      } else {
-        showError(response.error || 'Failed to toggle sync');
-      }
-    } catch (err) {
-      console.error('[Engram Settings] Failed to toggle sync:', err);
-      showError('Failed to toggle sync');
-    } finally {
-      setIsTogglingSync(false);
-    }
   };
 
   const copyUserId = () => {
@@ -249,78 +205,6 @@ export function SettingsTab({
             Copy User ID
           </Button>
         </div>
-      </div>
-
-      {/* Cloud Sync Settings */}
-      <div style={{
-        marginBottom: '20px',
-        padding: '16px',
-        backgroundColor: colors.surface,
-        borderRadius: '8px',
-        border: `1px solid ${colors.border}`,
-      }}>
-        <h2 style={{
-          fontSize: '14px',
-          fontWeight: 600,
-          color: colors.text.primary,
-          marginBottom: '12px',
-        }}>
-          Cloud Sync
-        </h2>
-
-        {isPremium ? (
-          <>
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              marginBottom: '8px',
-            }}>
-              <div style={{ fontSize: '13px', color: colors.text.primary }}>
-                Enable cloud sync
-              </div>
-              <button
-                onClick={handleToggleSync}
-                disabled={isTogglingSync}
-                style={toggleStyle(syncEnabled, isTogglingSync)}
-              >
-                <div style={toggleKnobStyle(syncEnabled)} />
-              </button>
-            </div>
-            <div style={{ fontSize: '11px', color: colors.text.secondary, lineHeight: '1.5' }}>
-              {syncEnabled
-                ? 'Memories are synced across your devices with end-to-end encryption'
-                : 'Enable to sync memories across devices'}
-            </div>
-          </>
-        ) : (
-          <>
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              marginBottom: '8px',
-            }}>
-              <div style={{ fontSize: '13px', color: colors.text.secondary }}>
-                Cloud sync (Premium only)
-              </div>
-              <div style={{
-                fontSize: '11px',
-                color: colors.text.tertiary,
-                fontWeight: 600,
-                backgroundColor: colors.background,
-                padding: '2px 8px',
-                borderRadius: '4px',
-                border: `1px solid ${colors.border}`,
-              }}>
-                Disabled
-              </div>
-            </div>
-            <div style={{ fontSize: '11px', color: colors.text.secondary, lineHeight: '1.5' }}>
-              Upgrade to Premium to sync memories across devices
-            </div>
-          </>
-        )}
       </div>
 
       {/* Memory Enrichment Settings */}
@@ -418,7 +302,7 @@ export function SettingsTab({
           </div>
           <select
             value={enrichmentConfig.provider}
-            onChange={(e) => updateEnrichmentConfig({ provider: e.target.value as 'openai' | 'anthropic' | 'local' | 'premium' })}
+            onChange={(e) => updateEnrichmentConfig({ provider: e.target.value as 'openai' | 'anthropic' | 'local' })}
             disabled={isUpdatingEnrichment}
             style={{
               width: '100%',
@@ -434,7 +318,6 @@ export function SettingsTab({
           >
             <option value="openai">OpenAI (GPT-4o-mini)</option>
             <option value="anthropic">Anthropic (Claude 3 Haiku)</option>
-            <option value="premium">Premium API (Engram Cloud)</option>
             <option value="local">Local Model (Ollama/LM Studio)</option>
           </select>
         </div>
@@ -516,7 +399,7 @@ export function SettingsTab({
         {enrichmentConfig.provider !== 'local' && (
           <div style={{ marginBottom: '10px' }}>
             <div style={{ fontSize: '11px', color: colors.text.secondary, marginBottom: '4px' }}>
-              {enrichmentConfig.provider === 'premium' ? 'License Key' : 'API Key'}
+              API Key
             </div>
             <div style={{ display: 'flex', gap: '6px' }}>
               <input
@@ -524,7 +407,6 @@ export function SettingsTab({
                 value={enrichmentConfig.apiKey || ''}
                 onChange={(e) => updateEnrichmentConfig({ apiKey: e.target.value })}
                 placeholder={
-                  enrichmentConfig.provider === 'premium' ? 'engram-lic-...' :
                   enrichmentConfig.provider === 'openai' ? 'sk-...' :
                   'sk-ant-...'
                 }

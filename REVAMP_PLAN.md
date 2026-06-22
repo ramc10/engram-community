@@ -110,6 +110,13 @@ Remove all cloud **memory storage/sync**; keep Supabase **auth only**. Done earl
 - **Crypto stays uniform-safe:** OAuth random-key users (`message-handler.ts:731`) remain, but since the bridge decrypts in-SW and never re-derives keys, this is harmless. No crypto changes required.
 - **Acceptance:** extension builds with zero `cloud-sync`/`encrypted_memories` references; login still works; enrichment/link-detection work with a user API key and no account; `grep -ri "encrypted_memories\|CloudSync\|sync-manager" src/` returns nothing.
 
+### Phase 2b — Ungate premium ✅ DONE
+- **Services:** stripped the `provider === 'premium'` branch + `callPremium()` from `enrichment-service`, `link-detection-service`, `evolution-service`. They now run only on the user's own API key (openai/anthropic/local) — already the default; no feature lost.
+- **Deleted:** `premium-service.ts`, `premium-api-client.ts`; premium message types/handlers (`GET_PREMIUM_STATUS`, `UPGRADE_TO_PREMIUM`, `REQUEST_PREMIUM_UPGRADE`); `initializePremiumClientIfNeeded`; premium module loaders.
+- **UI:** deleted `PremiumBadge`/`UpgradeBanner`; removed premium badge, upgrade banner, pending-request block, and the dead cloud-sync toggle section from `sidepanel.tsx` + `SettingsTab.tsx`; dropped the `'premium'` LLM-provider option and license-key labels.
+- **Deferred:** the popup pages under `src/popup/pages/` (Settings/Login/Signup/Welcome) are **orphaned/unmounted** (no popup entry; superseded by the sidepanel). They still contain premium markup but are invisible to users and compile fine. Flagged for the **Phase 6 dead-code cleanup**.
+- 0 type errors; 622 tests green.
+
 ### Phase 3 — Data model for universal capture
 - Extend core `Memory` type (`core/src/types/memory.ts`): add `kind: 'chat' | 'page_visit' | 'selection' | 'article'` and widen capture role to include a `capture` role (or make `role` optional when `kind!=='chat'`).
 - Define synthetic conversation convention: `generic:<hostname>:<yyyy-mm-dd>` so `conversationId NOT NULL` holds.
