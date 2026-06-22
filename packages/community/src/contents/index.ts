@@ -27,18 +27,65 @@ import { sendInitRequest, sendSaveMessage } from '../lib/messages';
 import { PromptInterceptor } from '../content/shared/prompt-interceptor';
 
 /**
- * Track current conversation ID to detect navigation
+ * Navigation/cleanup coordination state.
+ *
+ * All four target sites are SPAs: route changes happen via history API without a
+ * full page load, so observers must be torn down and re-initialized on navigation
+ * or they leak across conversations (R6). `activeCleanup` always destroys whichever
+ * adapter/interceptor is currently running.
  */
 let currentConversationId: string | null = null;
 let currentInterceptor: PromptInterceptor | null = null;
-let cleanupFunction: (() => void) | null = null;
+let activeCleanup: (() => void) | null = null;
+let lastPath: string = typeof location !== 'undefined' ? location.pathname : '';
+let navMonitorInstalled = false;
 
 /**
- * Extract conversation ID from URL
+ * Extract conversation ID from URL (ChatGPT-specific; used for logging only)
  */
 function extractConversationId(url: string): string | null {
   const match = url.match(/\/c\/([a-f0-9-]+)/);
   return match ? match[1] : null;
+}
+
+/**
+ * Detect the active platform from a URL.
+ */
+function detectPlatform(url: string): string {
+  if (url.includes('chat.openai.com') || url.includes('chatgpt.com')) return 'chatgpt';
+  if (url.includes('claude.ai')) return 'claude';
+  if (url.includes('gemini.google.com')) return 'gemini';
+  if (url.includes('perplexity.ai')) return 'perplexity';
+  return 'generic';
+}
+
+/**
+ * Tear down whichever adapter/interceptor is currently active.
+ */
+function cleanupActive(): void {
+  if (currentInterceptor) {
+    try { currentInterceptor.destroy(); } catch (e) { console.error('[Engram] Interceptor cleanup error:', e); }
+    currentInterceptor = null;
+  }
+  if (activeCleanup) {
+    try { activeCleanup(); } catch (e) { console.error('[Engram] Adapter cleanup error:', e); }
+    activeCleanup = null;
+  }
+}
+
+/**
+ * Re-run platform detection + init after an SPA navigation.
+ */
+async function reinitialize(): Promise<void> {
+  cleanupActive();
+  const platform = detectPlatform(window.location.href);
+  switch (platform) {
+    case 'chatgpt': return initializeChatGPT();
+    case 'claude': return initializeClaude();
+    case 'gemini': return initializeGemini();
+    case 'perplexity': return initializePerplexity();
+    default: return initializeGeneric();
+  }
 }
 
 /**
@@ -49,16 +96,7 @@ async function initializeChatGPT() {
     console.log('[Engram] ChatGPT detected, initializing adapter...');
 
     // Cleanup previous instance if exists
-    if (cleanupFunction) {
-      console.log('[Engram] Cleaning up previous instance...');
-      cleanupFunction();
-      cleanupFunction = null;
-    }
-
-    if (currentInterceptor) {
-      currentInterceptor.destroy();
-      currentInterceptor = null;
-    }
+    cleanupActive();
 
     // Update current conversation ID
     currentConversationId = extractConversationId(window.location.href);
@@ -108,7 +146,7 @@ async function initializeChatGPT() {
     });
 
     // Store cleanup function
-    cleanupFunction = () => {
+    activeCleanup = () => {
       chatGPTAdapter.stopObserving();
       chatGPTAdapter.destroy();
     };
@@ -126,6 +164,9 @@ async function initializeClaude() {
   try {
       console.log('[Engram] Claude detected, initializing adapter...');
 
+      // Tear down any previous instance (SPA navigation)
+      cleanupActive();
+
       // Initialize background connection
       const initResponse = await sendInitRequest();
       if (!initResponse.success) {
@@ -140,8 +181,8 @@ async function initializeClaude() {
       console.log('[Engram] Adapter initialized');
 
       // Initialize intelligent prompt interceptor
-      const interceptor = new PromptInterceptor();
-      await interceptor.initialize(
+      currentInterceptor = new PromptInterceptor();
+      await currentInterceptor.initialize(
         'div[contenteditable="true"]', // Claude contenteditable input
         'button[aria-label="Send message"]' // Claude send button (note: lowercase 'm')
       );
@@ -168,6 +209,11 @@ async function initializeClaude() {
         }
       });
 
+      activeCleanup = () => {
+        claudeAdapter.stopObserving();
+        claudeAdapter.destroy();
+      };
+
       console.log('[Engram] Ready - monitoring Claude messages');
   } catch (error) {
     console.error('[Engram] Claude initialization error:', error);
@@ -180,6 +226,9 @@ async function initializeClaude() {
 async function initializeGemini() {
   try {
     console.log('[Engram] Gemini detected, initializing adapter...');
+
+    // Tear down any previous instance (SPA navigation)
+    cleanupActive();
 
     // Initialize background connection
     const initResponse = await sendInitRequest();
@@ -214,6 +263,11 @@ async function initializeGemini() {
       }
     });
 
+    activeCleanup = () => {
+      geminiAdapter.stopObserving();
+      geminiAdapter.destroy();
+    };
+
     console.log('[Engram] Ready - monitoring Gemini messages');
   } catch (error) {
     console.error('[Engram] Gemini initialization error:', error);
@@ -226,6 +280,9 @@ async function initializeGemini() {
 async function initializePerplexity() {
   try {
     console.log('[Engram] Perplexity detected, initializing adapter...');
+
+    // Tear down any previous instance (SPA navigation)
+    cleanupActive();
 
     // Initialize background connection
     const initResponse = await sendInitRequest();
@@ -259,6 +316,11 @@ async function initializePerplexity() {
         console.error('[Engram] Error saving message:', error);
       }
     });
+
+    activeCleanup = () => {
+      perplexityAdapter.stopObserving();
+      perplexityAdapter.destroy();
+    };
 
     console.log('[Engram] Ready - monitoring Perplexity messages');
   } catch (error) {
@@ -295,20 +357,19 @@ async function initialize() {
     const url = window.location.href;
     console.log('[Engram] URL:', url);
 
-    if (url.includes('chat.openai.com') || url.includes('chatgpt.com')) {
-      await initializeChatGPT();
+    const platform = detectPlatform(url);
+    switch (platform) {
+      case 'chatgpt': await initializeChatGPT(); break;
+      case 'claude': await initializeClaude(); break;
+      case 'gemini': await initializeGemini(); break;
+      case 'perplexity': await initializePerplexity(); break;
+      default: await initializeGeneric(); break;
+    }
 
-      // Monitor for navigation changes (ChatGPT is a SPA)
+    // All target sites are SPAs — monitor history navigation so observers are
+    // re-initialized (and the previous one torn down) on every conversation change.
+    if (platform !== 'generic') {
       setupNavigationMonitoring();
-    } else if (url.includes('claude.ai')) {
-      await initializeClaude();
-    } else if (url.includes('gemini.google.com')) {
-      await initializeGemini();
-    } else if (url.includes('perplexity.ai')) {
-      await initializePerplexity();
-    } else {
-      // Generic site - provide memory access UI
-      await initializeGeneric();
     }
   } catch (error) {
     console.error('[Engram] Content script error:', error);
@@ -316,44 +377,45 @@ async function initialize() {
 }
 
 /**
- * Set up navigation monitoring for SPAs like ChatGPT
+ * Set up navigation monitoring for SPA route changes.
+ *
+ * Installed once per page load (history is patched globally). Fires on any
+ * pathname change — across all supported platforms — and re-detects the platform,
+ * so it keeps working even if the user navigates between products in the same tab.
  */
 function setupNavigationMonitoring() {
+  if (navMonitorInstalled) return;
+  navMonitorInstalled = true;
+
   console.log('[Engram] Setting up navigation monitoring...');
 
-  // Listen for popstate (back/forward navigation)
-  window.addEventListener('popstate', () => {
-    console.log('[Engram] Popstate event detected');
-    const newConversationId = extractConversationId(window.location.href);
-    if (newConversationId !== currentConversationId) {
-      console.log('[Engram] New conversation detected via popstate, re-initializing...');
-      initializeChatGPT();
-    }
-  });
+  const onNavigation = () => {
+    const newPath = window.location.pathname;
+    if (newPath === lastPath) return; // ignore query/hash-only changes
+    lastPath = newPath;
+    currentConversationId = extractConversationId(window.location.href);
+    console.log('[Engram] SPA navigation detected →', newPath, '; re-initializing');
+    void reinitialize();
+  };
 
-  // Listen for pushstate/replacestate
+  // Back/forward navigation
+  window.addEventListener('popstate', onNavigation);
+
+  // Programmatic navigation (patch once)
   const originalPushState = history.pushState;
   const originalReplaceState = history.replaceState;
 
-  history.pushState = function(...args) {
+  history.pushState = function (...args) {
     originalPushState.apply(this, args);
-    const newConversationId = extractConversationId(window.location.href);
-    if (newConversationId !== currentConversationId) {
-      console.log('[Engram] New conversation detected via pushState, re-initializing...');
-      initializeChatGPT();
-    }
+    onNavigation();
   };
 
-  history.replaceState = function(...args) {
+  history.replaceState = function (...args) {
     originalReplaceState.apply(this, args);
-    const newConversationId = extractConversationId(window.location.href);
-    if (newConversationId !== currentConversationId) {
-      console.log('[Engram] New conversation detected via replaceState, re-initializing...');
-      initializeChatGPT();
-    }
+    onNavigation();
   };
 
-  console.log('[Engram] Navigation monitoring active');
+  console.log('[Engram] Navigation monitoring active (all platforms)');
 }
 
 // Start initialization

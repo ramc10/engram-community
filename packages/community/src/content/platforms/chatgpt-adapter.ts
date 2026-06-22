@@ -19,6 +19,7 @@ import {
   PlatformFeatures,
 } from '@engram/core';
 import { Platform, Role } from '@engram/core';
+import { computeMessageId } from '../shared/message-id';
 
 /**
  * ChatGPT DOM selectors
@@ -49,7 +50,7 @@ export class ChatGPTAdapter implements IPlatformAdapter {
   private observer: MutationObserver | null = null;
   private observerCallback: ((message: ExtractedMessage) => void) | null = null;
   private lastProcessedMessages = new Set<string>();
-  private streamingMessages = new Map<string, number>(); // Track streaming messages with debounce timers
+  private streamingMessages = new Map<HTMLElement, number>(); // In-flight streaming timers, keyed by DOM element
 
   /**
    * Get platform configuration
@@ -384,76 +385,65 @@ export class ChatGPTAdapter implements IPlatformAdapter {
   private processMessage(element: HTMLElement, forceImmediate = false): void {
     if (!this.observerCallback) return;
 
-    // Create unique ID for message (use DOM position as ChatGPT doesn't have IDs)
-    const messageId = this.getMessageId(element);
+    // Streaming is guarded by DOM element identity (not content): while the text
+    // is still growing we must neither emit nor schedule duplicate timers.
+    const isStreaming = this.isMessageStreaming(element);
+    if (isStreaming && !forceImmediate) {
+      this.debounceStreamingMessage(element);
+      return;
+    }
 
-    // Skip if already processed and saved
+    // Extract first, then dedup on the FINAL content. A content-hash id is stable
+    // across re-render/reorder/virtualized recycling, unlike the old DOM position.
+    const extracted = this.extractMessage(element);
+    if (!extracted) return;
+
+    const messageId = computeMessageId(extracted.conversationId, extracted.role, extracted.content);
+
+    // Clear any pending streaming timer for this element regardless of dedup outcome.
+    const existingTimer = this.streamingMessages.get(element);
+    if (existingTimer) {
+      window.clearTimeout(existingTimer);
+      this.streamingMessages.delete(element);
+    }
+
     if (this.lastProcessedMessages.has(messageId)) {
       return;
     }
 
-    // Check if message is still streaming
-    const isStreaming = this.isMessageStreaming(element);
-
-    if (isStreaming && !forceImmediate) {
-      // Message is streaming - debounce and wait for completion
-      this.debounceStreamingMessage(messageId, element);
-      return;
-    }
-
-    // Message is complete - extract and save immediately
-    const extracted = this.extractMessage(element);
-    if (extracted) {
-      this.lastProcessedMessages.add(messageId);
-
-      // Clear any pending debounce timer for this message
-      const existingTimer = this.streamingMessages.get(messageId);
-      if (existingTimer) {
-        window.clearTimeout(existingTimer);
-        this.streamingMessages.delete(messageId);
-      }
-
-      this.observerCallback(extracted);
-      console.log(`ChatGPT adapter: Saved complete message ${messageId}${forceImmediate ? ' (immediate)' : ''}`);
-    }
+    this.lastProcessedMessages.add(messageId);
+    this.observerCallback(extracted);
+    console.log(`ChatGPT adapter: Saved message ${messageId}${forceImmediate ? ' (immediate)' : ''}`);
   }
 
   /**
-   * Debounce streaming messages - only save when streaming stops
+   * Debounce streaming messages - only save when streaming stops.
+   * Keyed by DOM element so repeated streaming updates of the same message
+   * collapse into a single emission once the text stops growing.
    */
-  private debounceStreamingMessage(messageId: string, element: HTMLElement): void {
-    // Clear existing timer for this message
-    const existingTimer = this.streamingMessages.get(messageId);
+  private debounceStreamingMessage(element: HTMLElement): void {
+    const existingTimer = this.streamingMessages.get(element);
     if (existingTimer) {
       window.clearTimeout(existingTimer);
     }
 
     // Set new timer - if no updates for 2 seconds, consider it complete
     const timer = window.setTimeout(() => {
-      console.log(`ChatGPT adapter: Streaming completed for ${messageId}`);
-      this.streamingMessages.delete(messageId);
+      this.streamingMessages.delete(element);
 
       // Reprocess the message (it should be complete now)
       const extracted = this.extractMessage(element);
-      if (extracted && !this.lastProcessedMessages.has(messageId)) {
+      if (!extracted) return;
+
+      const messageId = computeMessageId(extracted.conversationId, extracted.role, extracted.content);
+      if (!this.lastProcessedMessages.has(messageId)) {
         this.lastProcessedMessages.add(messageId);
         this.observerCallback?.(extracted);
         console.log(`ChatGPT adapter: Saved streamed message ${messageId}`);
       }
     }, 2000); // 2 second delay after last update
 
-    this.streamingMessages.set(messageId, timer);
-  }
-
-  /**
-   * Generate unique ID for message element
-   */
-  private getMessageId(element: HTMLElement): string {
-    const container = document.querySelector(SELECTORS.containerSelector);
-    const messages = container?.querySelectorAll(SELECTORS.messageSelector);
-    const index = messages ? Array.from(messages).indexOf(element) : -1;
-    const conversationId = this.extractConversationId() || 'unknown';
-    return `${conversationId}-${index}`;
+    this.streamingMessages.set(element, timer);
   }
 
   /**
