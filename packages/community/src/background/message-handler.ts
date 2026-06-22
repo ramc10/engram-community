@@ -21,8 +21,6 @@ import {
   GetPremiumStatusResponse,
   UpgradeToPremiumResponse,
   RequestPremiumUpgradeResponse,
-  StartCloudSyncResponse,
-  StopCloudSyncResponse,
   ReinitializeEnrichmentResponse,
   RevertEvolutionResponse,
   AuthState,
@@ -164,12 +162,6 @@ export async function handleMessage(
 
       case MessageType.REQUEST_PREMIUM_UPGRADE:
         return await handleRequestPremiumUpgrade(service);
-
-      case MessageType.START_CLOUD_SYNC:
-        return await handleStartCloudSync(service);
-
-      case MessageType.STOP_CLOUD_SYNC:
-        return await handleStopCloudSync(service);
 
       case MessageType.REINITIALIZE_ENRICHMENT:
         return await handleReinitializeEnrichment(service);
@@ -445,21 +437,9 @@ async function handleGetSyncStatus(
     // Get last sync time from metadata
     const lastSyncTime = await storage.getMetadata<number>('lastSyncTime');
 
-    const cloudSync = service.getCloudSync();
-    let isConnected = cloudSync?.isStarted() || false;
-
-    if (!isConnected) {
-      try {
-        const syncManager = service.getSyncManager();
-        isConnected = syncManager?.isConnected() || false;
-      } catch (e) {
-        // Sync manager not initialized, which occurs during initial setup
-        // or in unit tests. This is expected.
-      }
-    }
-
+    // Cloud sync removed — memories live only on-device. Always disconnected.
     const status: SyncStatus = {
-      isConnected,
+      isConnected: false,
       lastSyncTime: lastSyncTime || undefined,
       pendingOperations,
       deviceId,
@@ -590,9 +570,6 @@ async function handleAuthRegister(
       // Continue anyway - device registration can be retried later
     }
 
-    // 5. Initialize cloud sync if user is premium with sync enabled
-    await service.initializeCloudSyncIfNeeded();
-
     return {
       type: MessageType.AUTH_REGISTER_RESPONSE,
       success: true,
@@ -685,9 +662,6 @@ async function handleAuthLogin(
 
     console.log('[Engram] Master key persisted (encrypted)');
 
-    // 4. Initialize cloud sync if user is premium with sync enabled
-    await service.initializeCloudSyncIfNeeded();
-
     return {
       type: MessageType.AUTH_LOGIN_RESPONSE,
       success: true,
@@ -771,20 +745,13 @@ async function handleAuthLogout(
 
     console.log('[Engram] Logging out user');
 
-    // 1. Stop cloud sync if running
-    const cloudSync = service.getCloudSync();
-    if (cloudSync) {
-      await cloudSync.stop();
-      console.log('[Engram] Cloud sync stopped');
-    }
-
-    // 2. Logout from server (clears JWT)
+    // 1. Logout from server (clears JWT)
     await authClient.logout();
 
-    // 3. Clear master key from memory
+    // 2. Clear master key from memory
     service.clearMasterKey();
 
-    // 4. Clear persisted encrypted master key
+    // 3. Clear persisted encrypted master key
     await service.clearPersistedMasterKey();
 
     console.log('[Engram] User logged out successfully');
@@ -950,103 +917,6 @@ async function handleRequestPremiumUpgrade(
     console.error('[Premium] Failed to submit upgrade request:', error);
     return {
       type: MessageType.REQUEST_PREMIUM_UPGRADE_RESPONSE,
-      success: false,
-      error: (error as Error).message,
-    };
-  }
-}
-
-/**
- * Handle start cloud sync request
- */
-async function handleStartCloudSync(
-  service: BackgroundService
-): Promise<StartCloudSyncResponse> {
-  try {
-    const authClient = service.getAuthClient();
-    const authState = await authClient.getAuthState();
-
-    if (!authState.isAuthenticated || !authState.userId) {
-      throw new Error('Not authenticated');
-    }
-
-    // Get authenticated Supabase client (has user session for RLS)
-    const supabaseClient = authClient.getSupabaseClient();
-
-    // Lazy load premium service
-    const { premiumService } = await getPremiumServiceModule();
-
-    // Check if user has premium tier
-    const isPremium = await premiumService.isPremium(authState.userId, supabaseClient);
-    if (!isPremium) {
-      throw new Error('Premium subscription required for cloud sync');
-    }
-
-    console.log('[CloudSync] Starting cloud sync for user:', authState.userId);
-
-    // Enable sync in database with authenticated client (for RLS)
-    await premiumService.enableSync(authState.userId, supabaseClient);
-
-    console.log('[CloudSync] Cloud sync enabled in database');
-
-    // Initialize CloudSyncService (now fixed to work in service worker context)
-    await service.initializeCloudSyncIfNeeded();
-
-    console.log('[CloudSync] Cloud sync service initialized and started');
-
-    return {
-      type: MessageType.START_CLOUD_SYNC_RESPONSE,
-      success: true,
-    };
-  } catch (error) {
-    console.error('[CloudSync] Failed to start cloud sync:', error);
-    return {
-      type: MessageType.START_CLOUD_SYNC_RESPONSE,
-      success: false,
-      error: (error as Error).message,
-    };
-  }
-}
-
-/**
- * Handle stop cloud sync request
- */
-async function handleStopCloudSync(
-  service: BackgroundService
-): Promise<StopCloudSyncResponse> {
-  try {
-    console.log('[CloudSync] Stopping cloud sync');
-
-    // Get auth state
-    const authClient = service.getAuthClient();
-    const authState = await authClient.getAuthState();
-
-    if (authState.isAuthenticated && authState.userId) {
-      // Get authenticated Supabase client (has user session for RLS)
-      const supabaseClient = authClient.getSupabaseClient();
-
-      // Lazy load premium service and disable sync in database with authenticated client (for RLS)
-      const { premiumService } = await getPremiumServiceModule();
-      await premiumService.disableSync(authState.userId, supabaseClient);
-    }
-
-    // Stop cloud sync service if running
-    const cloudSync = service.getCloudSync();
-    if (cloudSync) {
-      await cloudSync.stop();
-      console.log('[CloudSync] Cloud sync service stopped');
-    }
-
-    console.log('[CloudSync] Cloud sync disabled');
-
-    return {
-      type: MessageType.STOP_CLOUD_SYNC_RESPONSE,
-      success: true,
-    };
-  } catch (error) {
-    console.error('[CloudSync] Failed to stop cloud sync:', error);
-    return {
-      type: MessageType.STOP_CLOUD_SYNC_RESPONSE,
       success: false,
       error: (error as Error).message,
     };

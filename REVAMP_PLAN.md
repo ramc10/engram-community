@@ -100,7 +100,10 @@ No cloud relay. Memories live only in IndexedDB and the local `engram.db`. Supab
 - **Result:** 0 type errors; 650 tests green; no dangling references to deleted modules.
 
 ### Phase 2 — Supabase teardown (auth-preserving)
+Split into **2a (cloud-sync deletion, ✅ DONE)** and **2b (premium ungating, pending)**.
 Remove all cloud **memory storage/sync**; keep Supabase **auth only**. Done early (right after injection deletion) so every later phase builds against the final cloud-free data path, not soon-deleted sync code.
+
+**2a result:** deleted `cloud-sync.ts` + the WS-sync stack (`sync-manager`, `ws-client`, `operation-queue`, `state-machine`) and all `encrypted_memories` I/O; stripped the cloud-sync wiring from `background/index.ts` + `message-handler.ts` (`initializeCloudSyncIfNeeded`, `getCloudSync`, `getSyncManager`, `START/STOP_CLOUD_SYNC` messages, logout/login/register hooks). `GET_SYNC_STATUS` now always reports disconnected. **Kept** `sync/retry-manager.ts` (used by `enrichment-retry-queue.ts`) and all of auth. Removed obsolete sync tests. 0 type errors; 670 tests green.
 - **Delete:** `lib/cloud-sync.ts`, `sync/sync-manager.ts`, the `WebSocketClient`/`autoConnect:false` plumbing (`background/index.ts:152`), all `encrypted_memories` reads/writes, and the `https://*.supabase.co/*` host-permission scope *only if* auth uses a different origin (verify — auth likely needs it, so keep).
 - **Keep:** `lib/auth-client.ts`, `AuthenticationView.tsx`, `popup/pages/{Login,Signup,Welcome}.tsx`, `identity` permission. Login/session stays exactly as-is.
 - **Ungate premium:** strip account/payment gating from `premium-service.ts` + `premium-api-client.ts`; rewire `enrichment-service.ts` and `link-detection-service.ts` to run on the user's own API key (the architecture already supports user-key mode — see `ARCHITECTURE.md` "User's API Key Mode"). Remove the premium-only branches rather than the features.

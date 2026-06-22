@@ -15,7 +15,7 @@ import { CryptoService } from '../lib/crypto-service';
 import { StorageService } from '../lib/storage';
 import { Message, createErrorResponse } from '../lib/messages';
 import { handleMessage } from './message-handler';
-// LAZY LOADED: SyncManager, CloudSyncService, premiumService, getPremiumClient, EmbeddingMigration
+// LAZY LOADED: premiumService, getPremiumClient, EmbeddingMigration
 // These are loaded dynamically to reduce initial bundle size (~500KB savings)
 import { authClient } from '../lib/auth-client';
 import { getMigrationService } from '../lib/migration-service';
@@ -27,32 +27,14 @@ import { createLogger } from '../lib/logger';
 import { ErrorSeverity } from '../lib/error-types';
 
 // Types for lazy-loaded modules
-type SyncManagerModule = typeof import('../sync/sync-manager');
-type CloudSyncServiceModule = typeof import('../lib/cloud-sync');
 type PremiumServiceModule = typeof import('../lib/premium-service');
 type PremiumClientModule = typeof import('../lib/premium-api-client');
 type EmbeddingMigrationModule = typeof import('../lib/embedding-migration');
 
 // Lazy module loaders (cached after first load)
-let syncManagerModule: SyncManagerModule | null = null;
-let cloudSyncModule: CloudSyncServiceModule | null = null;
 let premiumServiceModule: PremiumServiceModule | null = null;
 let premiumClientModule: PremiumClientModule | null = null;
 let embeddingMigrationModule: EmbeddingMigrationModule | null = null;
-
-async function getSyncManagerModule(): Promise<SyncManagerModule> {
-  if (!syncManagerModule) {
-    syncManagerModule = await import('../sync/sync-manager');
-  }
-  return syncManagerModule;
-}
-
-async function getCloudSyncModule(): Promise<CloudSyncServiceModule> {
-  if (!cloudSyncModule) {
-    cloudSyncModule = await import('../lib/cloud-sync');
-  }
-  return cloudSyncModule;
-}
 
 async function getPremiumServiceModule(): Promise<PremiumServiceModule> {
   if (!premiumServiceModule) {
@@ -83,9 +65,6 @@ const logger = createLogger('Background');
 class BackgroundService {
   private crypto: CryptoService | null = null;
   private storage: StorageService | null = null;
-  // Use 'any' for lazy-loaded types to avoid circular dependency issues
-  private syncManager: any = null; // SyncManager instance (lazy loaded)
-  private cloudSync: any = null; // CloudSyncService instance (lazy loaded)
   private deviceId: string | null = null;
   private masterKey: MasterKey | null = null; // Master key in memory (can be persisted encrypted)
   private deviceKeyManager: DeviceKeyManager = new DeviceKeyManager();
@@ -144,24 +123,8 @@ class BackgroundService {
       this.deviceId = await this.getOrCreateDeviceId();
       console.log('[Engram] Device ID:', this.deviceId);
 
-      // Initialize sync manager (lazy loaded to reduce initial bundle size)
-      const { SyncManager } = await getSyncManagerModule();
-      this.syncManager = new SyncManager(this.storage, {
-        serverUrl: 'ws://localhost:3001/ws',
-        deviceId: this.deviceId,
-        autoConnect: false, // Don't auto-connect for now
-        syncOnStartup: false,
-      });
-      await this.syncManager.initialize();
-      console.log('[Engram] Sync manager initialized');
-
-      // Restore master key if available (for premium sync)
-      const keyRestored = await this.restoreMasterKey();
-
-      // Initialize cloud sync if key restored and user is premium
-      if (keyRestored) {
-        await this.initializeCloudSyncIfNeeded();
-      }
+      // Restore master key if available (needed to decrypt local memories)
+      await this.restoreMasterKey();
 
       // Initialize premium API client if using premium provider
       await this.initializePremiumClientIfNeeded();
@@ -237,16 +200,6 @@ class BackgroundService {
       throw new Error('Device ID not available');
     }
     return this.deviceId;
-  }
-
-  /**
-   * Get sync manager (must be initialized)
-   */
-  getSyncManager(): any {
-    if (!this.syncManager) {
-      throw new Error('Sync manager not initialized');
-    }
-    return this.syncManager;
   }
 
   /**
@@ -383,70 +336,6 @@ class BackgroundService {
   }
 
   /**
-   * Initialize cloud sync if user is premium with sync enabled
-   * Called on startup after master key restoration
-   * Uses lazy loading for CloudSyncService and premiumService (~200KB savings)
-   */
-  async initializeCloudSyncIfNeeded(): Promise<void> {
-    if (!this.hasMasterKey()) {
-      console.log('[CloudSync] No master key, skipping sync initialization');
-      return;
-    }
-
-    if (!this.storage || !this.crypto) {
-      console.log('[CloudSync] Storage or crypto not initialized');
-      return;
-    }
-
-    try {
-      // Check auth state
-      const authState = await authClient.getAuthState();
-      if (!authState.isAuthenticated || !authState.userId) {
-        console.log('[CloudSync] Not authenticated, skipping sync');
-        return;
-      }
-
-      // Lazy load premium service module
-      const { premiumService } = await getPremiumServiceModule();
-
-      // Check premium status and sync enabled
-      const supabaseClient = authClient.getSupabaseClient();
-      const premiumStatus = await premiumService.getPremiumStatus(
-        authState.userId,
-        supabaseClient
-      );
-
-      if (!premiumStatus.isPremium || !premiumStatus.syncEnabled) {
-        console.log('[CloudSync] User not premium or sync disabled');
-        return;
-      }
-
-      // Lazy load CloudSyncService
-      const { CloudSyncService } = await getCloudSyncModule();
-
-      // Initialize CloudSyncService
-      console.log('[CloudSync] Initializing cloud sync...');
-      this.cloudSync = new CloudSyncService(
-        authState.userId,
-        this.crypto,
-        this.getMasterKey()!,
-        supabaseClient
-      );
-
-      // Download memories from cloud
-      await this.downloadAndMergeMemories();
-
-      // Start periodic sync
-      await this.cloudSync.start(() => this.storage!.getMemories({}));
-
-      console.log('[CloudSync] Cloud sync initialized and started');
-    } catch (error) {
-      console.error('[CloudSync] Failed to initialize cloud sync:', error);
-      // Don't throw - allow extension to continue without sync
-    }
-  }
-
-  /**
    * Initialize premium API client if enrichment provider is 'premium'
    * Called on startup and when enrichment settings change
    * Uses lazy loading for premium client (~100KB savings)
@@ -523,73 +412,12 @@ class BackgroundService {
     }
   }
 
-  /**
-   * Download memories from cloud and merge with local
-   */
-  private async downloadAndMergeMemories(): Promise<void> {
-    if (!this.cloudSync || !this.storage) {
-      throw new Error('CloudSync or Storage not initialized');
-    }
-
-    try {
-      console.log('[CloudSync] Downloading memories from cloud...');
-      const remoteMemories = await this.cloudSync.downloadMemories();
-
-      if (remoteMemories.length === 0) {
-        console.log('[CloudSync] No remote memories to download');
-        return;
-      }
-
-      console.log(`[CloudSync] Downloaded ${remoteMemories.length} memories`);
-
-      // Merge with local memories (simple timestamp-based resolution)
-      for (const remoteMemory of remoteMemories) {
-        const localMemory = await this.storage.getMemory(remoteMemory.id);
-
-        if (!localMemory) {
-          // New memory from cloud - save locally
-          await this.storage.saveMemory(remoteMemory);
-          console.log(`[CloudSync] Added new memory from cloud: ${remoteMemory.id}`);
-        } else {
-          // Conflict - use timestamp to resolve (newer wins)
-          if (remoteMemory.timestamp > localMemory.timestamp) {
-            await this.storage.saveMemory(remoteMemory);
-            console.log(`[CloudSync] Updated memory from cloud: ${remoteMemory.id}`);
-          } else {
-            console.log(`[CloudSync] Local memory newer, skipping: ${remoteMemory.id}`);
-          }
-        }
-      }
-
-      console.log('[CloudSync] Memories merged successfully');
-    } catch (error) {
-      console.error('[CloudSync] Error downloading and merging memories:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Get cloud sync service (if initialized)
-   */
-  getCloudSync(): any | null {
-    return this.cloudSync;
-  }
 
   /**
    * Shutdown the service
    */
   async shutdown(): Promise<void> {
     console.log('[Engram] Shutting down background service...');
-
-    if (this.cloudSync) {
-      await this.cloudSync.stop();
-      this.cloudSync = null;
-    }
-
-    if (this.syncManager) {
-      await this.syncManager.destroy();
-      this.syncManager = null;
-    }
 
     if (this.storage) {
       await this.storage.close();

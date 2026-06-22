@@ -55,10 +55,6 @@ export enum MessageType {
   UPGRADE_TO_PREMIUM_RESPONSE = 'UPGRADE_TO_PREMIUM_RESPONSE',
   REQUEST_PREMIUM_UPGRADE = 'REQUEST_PREMIUM_UPGRADE',
   REQUEST_PREMIUM_UPGRADE_RESPONSE = 'REQUEST_PREMIUM_UPGRADE_RESPONSE',
-  START_CLOUD_SYNC = 'START_CLOUD_SYNC',
-  START_CLOUD_SYNC_RESPONSE = 'START_CLOUD_SYNC_RESPONSE',
-  STOP_CLOUD_SYNC = 'STOP_CLOUD_SYNC',
-  STOP_CLOUD_SYNC_RESPONSE = 'STOP_CLOUD_SYNC_RESPONSE',
 
   // Enrichment Config
   REINITIALIZE_ENRICHMENT = 'REINITIALIZE_ENRICHMENT',
@@ -273,26 +269,6 @@ export interface RequestPremiumUpgradeResponse extends BaseMessage {
   error?: string;
 }
 
-export interface StartCloudSyncRequest extends BaseMessage {
-  type: MessageType.START_CLOUD_SYNC;
-}
-
-export interface StartCloudSyncResponse extends BaseMessage {
-  type: MessageType.START_CLOUD_SYNC_RESPONSE;
-  success: boolean;
-  error?: string;
-}
-
-export interface StopCloudSyncRequest extends BaseMessage {
-  type: MessageType.STOP_CLOUD_SYNC;
-}
-
-export interface StopCloudSyncResponse extends BaseMessage {
-  type: MessageType.STOP_CLOUD_SYNC_RESPONSE;
-  success: boolean;
-  error?: string;
-}
-
 export interface ReinitializeEnrichmentRequest extends BaseMessage {
   type: MessageType.REINITIALIZE_ENRICHMENT;
 }
@@ -357,10 +333,6 @@ export type Message =
   | UpgradeToPremiumResponse
   | RequestPremiumUpgradeRequest
   | RequestPremiumUpgradeResponse
-  | StartCloudSyncRequest
-  | StartCloudSyncResponse
-  | StopCloudSyncRequest
-  | StopCloudSyncResponse
   | ReinitializeEnrichmentRequest
   | ReinitializeEnrichmentResponse
   | RevertEvolutionRequest

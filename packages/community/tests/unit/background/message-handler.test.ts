@@ -26,13 +26,6 @@ jest.mock('../../../src/lib/premium-service', () => ({
   },
 }));
 
-jest.mock('../../../src/lib/cloud-sync', () => ({
-  CloudSyncService: jest.fn<any>().mockImplementation(() => ({
-    start: jest.fn<any>().mockResolvedValue(undefined),
-    stop: jest.fn<any>().mockResolvedValue(undefined),
-  })),
-}));
-
 // Mock global navigator for device registration
 global.navigator = {
   userAgent: 'Mozilla/5.0 (Test) Chrome/120.0.0.0',
@@ -136,9 +129,7 @@ describe('Message Handler', () => {
       clearMasterKey: jest.fn(),
       persistMasterKey: jest.fn<any>().mockResolvedValue(undefined),
       clearPersistedMasterKey: jest.fn<any>().mockResolvedValue(undefined),
-      initializeCloudSyncIfNeeded: jest.fn<any>().mockResolvedValue(undefined),
       initializePremiumClientIfNeeded: jest.fn<any>().mockResolvedValue(undefined),
-      getCloudSync: jest.fn<any>().mockReturnValue(null),
     } as unknown as BackgroundService;
 
     mockSender = {
@@ -869,19 +860,6 @@ describe('Message Handler', () => {
       expect(mockService.clearPersistedMasterKey).toHaveBeenCalled();
     });
 
-    it('should stop cloud sync on logout', async () => {
-      const mockCloudSync = {
-        stop: jest.fn<any>().mockResolvedValue(undefined),
-      };
-      mockService.getCloudSync.mockReturnValue(mockCloudSync);
-
-      const message = { type: MessageType.AUTH_LOGOUT };
-
-      await handleMessage(message as any, mockSender, mockService);
-
-      expect(mockCloudSync.stop).toHaveBeenCalled();
-    });
-
     it('should clear client state even if server logout fails', async () => {
       mockAuthClient.logout.mockRejectedValueOnce(new Error('Network error'));
 
@@ -1022,82 +1000,6 @@ describe('Message Handler', () => {
 
       expect(response.success).toBe(false);
       expect(response.error).toBe('Not authenticated');
-    });
-  });
-
-  describe('START_CLOUD_SYNC', () => {
-    const { premiumService } = require('../../../src/lib/premium-service');
-
-    it('should start cloud sync successfully', async () => {
-      premiumService.isPremium.mockResolvedValue(true);
-      premiumService.enableSync.mockResolvedValue(undefined);
-
-      const message = { type: MessageType.START_CLOUD_SYNC };
-
-      const response = await handleMessage(message as any, mockSender, mockService);
-
-      expect(response.type).toBe(MessageType.START_CLOUD_SYNC_RESPONSE);
-      expect(response.success).toBe(true);
-      expect(premiumService.isPremium).toHaveBeenCalled();
-      expect(premiumService.enableSync).toHaveBeenCalled();
-      expect(mockService.initializeCloudSyncIfNeeded).toHaveBeenCalled();
-    });
-
-    it('should require premium subscription', async () => {
-      premiumService.isPremium.mockResolvedValue(false);
-
-      const message = { type: MessageType.START_CLOUD_SYNC };
-
-      const response = await handleMessage(message as any, mockSender, mockService);
-
-      expect(response.success).toBe(false);
-      expect(response.error).toBe('Premium subscription required for cloud sync');
-    });
-
-    it('should require authentication', async () => {
-      mockAuthClient.getAuthState.mockResolvedValue({
-        isAuthenticated: false,
-        userId: null,
-        email: null,
-      });
-
-      const message = { type: MessageType.START_CLOUD_SYNC };
-
-      const response = await handleMessage(message as any, mockSender, mockService);
-
-      expect(response.success).toBe(false);
-      expect(response.error).toBe('Not authenticated');
-    });
-  });
-
-  describe('STOP_CLOUD_SYNC', () => {
-    const { premiumService } = require('../../../src/lib/premium-service');
-
-    it('should stop cloud sync successfully', async () => {
-      const mockCloudSync = {
-        stop: jest.fn<any>().mockResolvedValue(undefined),
-      };
-      mockService.getCloudSync.mockReturnValue(mockCloudSync);
-      premiumService.disableSync.mockResolvedValue(undefined);
-
-      const message = { type: MessageType.STOP_CLOUD_SYNC };
-
-      const response = await handleMessage(message as any, mockSender, mockService);
-
-      expect(response.type).toBe(MessageType.STOP_CLOUD_SYNC_RESPONSE);
-      expect(response.success).toBe(true);
-      expect(premiumService.disableSync).toHaveBeenCalled();
-      expect(mockCloudSync.stop).toHaveBeenCalled();
-    });
-
-    it('should handle when cloud sync is not running', async () => {
-      mockService.getCloudSync.mockReturnValue(null);
-
-      const message = { type: MessageType.STOP_CLOUD_SYNC };
-
-      const response = await handleMessage(message as any, mockSender, mockService);
-
-      expect(response.success).toBe(true);
     });
   });
 
