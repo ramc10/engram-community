@@ -49,3 +49,30 @@ export async function allowHost(host: string): Promise<CaptureConfig> {
   const h = host.trim().toLowerCase();
   return setCaptureConfig({ deniedHosts: config.deniedHosts.filter((d) => d !== h) });
 }
+
+// ---------------------------------------------------------------------------
+// Page-visit throttle state (host → last capture ms), persisted so the
+// per-host-per-hour throttle survives page reloads and SW restarts.
+// ---------------------------------------------------------------------------
+
+const THROTTLE_KEY = 'pageVisitThrottle';
+
+export async function getVisitThrottle(): Promise<Map<string, number>> {
+  try {
+    const result = await chrome.storage.local.get(THROTTLE_KEY);
+    return new Map(Object.entries(result[THROTTLE_KEY] || {}));
+  } catch {
+    return new Map();
+  }
+}
+
+export async function recordVisit(host: string, timestamp: number): Promise<void> {
+  try {
+    const map = await getVisitThrottle();
+    map.set(host, timestamp);
+    await chrome.storage.local.set({ [THROTTLE_KEY]: Object.fromEntries(map) });
+  } catch {
+    // chrome.storage unavailable — best effort
+  }
+}
+

@@ -193,12 +193,15 @@ async function handleSaveMessage(
     const storage = service.getStorage();
     const crypto = service.getCrypto();
 
-    // Detect platform from sender URL
-    const platform = sender?.tab?.url
-      ? getPlatformFromUrl(sender.tab.url) || 'chatgpt'
-      : 'chatgpt'; // fallback
+    // Determine platform + kind. Non-chat captures (page_visit/selection/article)
+    // are always 'generic'; chat messages derive the platform from the tab URL.
+    const kind = extractedMessage.kind;
+    const isGenericCapture = kind && kind !== 'chat';
+    const platform = isGenericCapture
+      ? 'generic'
+      : (sender?.tab?.url ? getPlatformFromUrl(sender.tab.url) : 'generic');
 
-    console.log('[Engram] Detected platform:', platform, 'from URL:', sender?.tab?.url);
+    console.log('[Engram] Detected platform:', platform, 'kind:', kind || 'chat', 'from URL:', sender?.tab?.url);
 
     // Check if user is authenticated and has master key
     if (!service.hasMasterKey()) {
@@ -227,6 +230,7 @@ async function handleSaveMessage(
     // and will be populated by decrypting 'encryptedContent' when retrieving memories.
     const memory: any = {
       id: generateUUID(),
+      kind: kind || 'chat',
       conversationId: extractedMessage.conversationId,
       platform,
       content: {

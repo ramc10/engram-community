@@ -24,6 +24,8 @@ import { claudeAdapter } from '../content/platforms/claude-adapter';
 import { perplexityAdapter } from '../content/platforms/perplexity-adapter';
 import { geminiAdapter } from '../content/platforms/gemini-adapter';
 import { sendInitRequest, sendSaveMessage } from '../lib/messages';
+import { shouldCapturePageVisit, buildPageVisitMessage, hostnameOf } from '../content/shared/capture-policy';
+import { getCaptureConfig, getVisitThrottle, recordVisit } from '../lib/capture-config';
 
 /**
  * Navigation/cleanup coordination state.
@@ -305,13 +307,35 @@ async function initializePerplexity() {
 
 /**
  * Initialize generic mode for non-AI sites.
- * On generic sites, we don't auto-inject UI - users can access memories
- * via the extension popup or side panel when needed.
+ *
+ * Records an ambient `page_visit` (url + title metadata only) when the capture
+ * policy allows it — i.e. capture is enabled, not paused, ambient page visits are
+ * on, the host isn't on the denylist, and this host hasn't been recorded within
+ * the throttle window. All policy is applied here; the background just stores it.
  */
 async function initializeGeneric() {
-  // Don't auto-inject memory panel on every website
-  // Users can access memories via the extension popup/sidepanel
-  console.log('[Engram] Generic site - memory access available via extension popup');
+  try {
+    const url = window.location.href;
+    const config = await getCaptureConfig();
+    const throttle = await getVisitThrottle();
+
+    if (!shouldCapturePageVisit(url, config, throttle)) {
+      return;
+    }
+
+    const host = hostnameOf(url);
+    if (!host) return;
+
+    const response = await sendSaveMessage(buildPageVisitMessage(url, document.title || ''));
+    if (response.success) {
+      await recordVisit(host, Date.now());
+      console.log('[Engram] Recorded page visit for', host);
+    } else {
+      console.warn('[Engram] Page visit not saved:', response.error);
+    }
+  } catch (error) {
+    console.error('[Engram] Generic capture error:', error);
+  }
 }
 
 /**

@@ -8,12 +8,19 @@ import {
   setCaptureConfig,
   denyHost,
   allowHost,
+  getVisitThrottle,
+  recordVisit,
 } from '../../src/lib/capture-config';
 import { DEFAULT_CAPTURE_CONFIG } from '../../src/content/shared/capture-policy';
 
 const storedConfig = (value: unknown) =>
   (chrome.storage.local.get as jest.Mock).mockResolvedValue(
     { captureConfig: value } as never
+  );
+
+const storedThrottle = (value: unknown) =>
+  (chrome.storage.local.get as jest.Mock).mockResolvedValue(
+    { pageVisitThrottle: value } as never
   );
 
 describe('capture-config', () => {
@@ -62,5 +69,34 @@ describe('capture-config', () => {
     storedConfig({ deniedHosts: ['a.com', 'b.com'] });
     const next = await allowHost('a.com');
     expect(next.deniedHosts).toEqual(['b.com']);
+  });
+});
+
+describe('page-visit throttle', () => {
+  beforeEach(() => {
+    (chrome.storage.local.get as jest.Mock).mockResolvedValue(
+      { pageVisitThrottle: undefined } as never
+    );
+    (chrome.storage.local.set as jest.Mock).mockResolvedValue(undefined as never);
+  });
+
+  it('returns an empty map when nothing is stored', async () => {
+    const map = await getVisitThrottle();
+    expect(map.size).toBe(0);
+  });
+
+  it('reads stored entries into a Map', async () => {
+    storedThrottle({ 'example.com': 123 });
+    const map = await getVisitThrottle();
+    expect(map.get('example.com')).toBe(123);
+  });
+
+  it('recordVisit persists alongside existing entries', async () => {
+    storedThrottle({ 'a.com': 1 });
+    const setSpy = chrome.storage.local.set as jest.Mock;
+    await recordVisit('b.com', 2);
+    expect(setSpy).toHaveBeenCalledWith({
+      pageVisitThrottle: { 'a.com': 1, 'b.com': 2 },
+    });
   });
 });

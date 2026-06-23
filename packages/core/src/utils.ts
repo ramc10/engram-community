@@ -2,7 +2,7 @@
  * Shared utility functions
  */
 
-import type { UUID, Timestamp, VectorClock } from './types/memory';
+import type { UUID, Timestamp, VectorClock, Platform } from './types/memory';
 
 /**
  * Generate a UUID v4
@@ -195,11 +195,15 @@ export function isExtensionContext(): boolean {
 /**
  * Get platform name from URL
  */
-export function getPlatformFromUrl(url: string): 'chatgpt' | 'claude' | 'perplexity' | null {
-  if (/chatgpt\.com/.test(url)) return 'chatgpt';
+/**
+ * Get the AI platform for a URL, or 'generic' for any other website.
+ */
+export function getPlatformFromUrl(url: string): Platform {
+  if (/chatgpt\.com|chat\.openai\.com/.test(url)) return 'chatgpt';
   if (/claude\.ai/.test(url)) return 'claude';
   if (/perplexity\.ai/.test(url)) return 'perplexity';
-  return null;
+  if (/gemini\.google\.com/.test(url)) return 'gemini';
+  return 'generic';
 }
 
 /**

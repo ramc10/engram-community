@@ -261,6 +261,48 @@ describe('Message Handler', () => {
       expect(savedMemory.platform).toBe('claude');
     });
 
+    it('labels non-AI sites as the generic platform (not the chatgpt fallback)', async () => {
+      mockSender.tab!.url = 'https://en.wikipedia.org/wiki/Memory';
+
+      const message = {
+        type: MessageType.SAVE_MESSAGE,
+        message: {
+          role: 'user' as const,
+          content: 'Test',
+          conversationId: 'conv-123',
+          timestamp: Date.now(),
+        },
+      };
+
+      await handleMessage(message as any, mockSender, mockService);
+
+      const savedMemory = mockStorage.saveMemory.mock.calls[0][0];
+      expect(savedMemory.platform).toBe('generic');
+      expect(savedMemory.kind).toBe('chat');
+    });
+
+    it('persists a generic page_visit capture with kind + generic platform', async () => {
+      mockSender.tab!.url = 'https://en.wikipedia.org/wiki/Memory';
+
+      const message = {
+        type: MessageType.SAVE_MESSAGE,
+        message: {
+          role: 'capture' as const,
+          kind: 'page_visit' as const,
+          content: 'Memory - Wikipedia',
+          url: 'https://en.wikipedia.org/wiki/Memory',
+          conversationId: 'generic:en.wikipedia.org:2026-01-02',
+          timestamp: Date.now(),
+        },
+      };
+
+      await handleMessage(message as any, mockSender, mockService);
+
+      const savedMemory = mockStorage.saveMemory.mock.calls[0][0];
+      expect(savedMemory.kind).toBe('page_visit');
+      expect(savedMemory.platform).toBe('generic');
+    });
+
     it('should require master key for saving', async () => {
       mockService.hasMasterKey.mockReturnValue(false);
 
