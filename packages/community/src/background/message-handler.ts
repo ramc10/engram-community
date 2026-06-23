@@ -28,6 +28,8 @@ import {
 import { BackgroundService } from './index';
 import { Memory } from '@engram/core';
 import { generateUUID, getPlatformFromUrl, base64ToUint8Array, uint8ArrayToBase64 } from '@engram/core';
+import { enqueueBridge } from '../lib/bridge';
+import { runBridge } from '../lib/bridge-runtime';
 
 
 /**
@@ -286,6 +288,12 @@ async function handleSaveMessage(
 
     console.log('[Engram] Saved memory:', memory.id);
     console.log('[Engram] Plaintext cleared from memory');
+
+    // Queue for delivery to the local MCP store and kick the bridge (best-effort;
+    // never blocks or fails the save — pending ids drain on the next attempt).
+    enqueueBridge(memory.id)
+      .then(() => runBridge(service))
+      .catch((err) => console.warn('[Engram] Bridge enqueue/run failed:', err));
 
     return {
       type: MessageType.SAVE_MESSAGE_RESPONSE,

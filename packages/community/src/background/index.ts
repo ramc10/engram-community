@@ -16,6 +16,7 @@ import { StorageService } from '../lib/storage';
 import { Message, createErrorResponse } from '../lib/messages';
 import { handleMessage } from './message-handler';
 import { registerCaptureContextMenus, registerContextMenuClickHandler } from '../lib/context-menus';
+import { runBridge } from '../lib/bridge-runtime';
 // LAZY LOADED: EmbeddingMigration — loaded dynamically to reduce initial bundle size
 import { authClient } from '../lib/auth-client';
 import { getMigrationService } from '../lib/migration-service';
@@ -105,6 +106,9 @@ class BackgroundService {
 
       // Restore master key if available (needed to decrypt local memories)
       await this.restoreMasterKey();
+
+      // Drain any memories queued for the local MCP store (best-effort).
+      runBridge(this).catch((err) => console.warn('[Engram] Bridge startup drain failed:', err));
 
       this.isInitialized = true;
       console.log('[Engram] Background service ready');

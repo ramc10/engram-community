@@ -74,7 +74,8 @@
       "identity",
       "sidePanel",
       "notifications",
-      "contextMenus"
+      "contextMenus",
+      "nativeMessaging"
     ],
     "host_permissions": [
       "https://chatgpt.com/*",
