@@ -6,13 +6,14 @@
 
 import type { PlasmoCSConfig} from "plasmo";
 
-// Configure to run only on AI chat platforms for better security and faster Chrome Web Store review
+// Runs on every website: AI platforms get conversation capture; all other sites
+// get the generic observer (ambient page-visit metadata, gated by the user's
+// capture policy) plus the manual "Save page" handler. http(s) only — excludes
+// file://, chrome://, etc. Privacy controls live in Settings → Web Capture.
 export const config: PlasmoCSConfig = {
   matches: [
-    "https://chatgpt.com/*",
-    "https://claude.ai/*",
-    "https://www.perplexity.ai/*",
-    "https://gemini.google.com/*"
+    "https://*/*",
+    "http://*/*"
   ],
   all_frames: false,
   run_at: "document_end"

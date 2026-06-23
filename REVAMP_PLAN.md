@@ -124,7 +124,9 @@ Remove all cloud **memory storage/sync**; keep Supabase **auth only**. Done earl
 - **Deferred to Phase 5:** MCP SQLite schema v2 (kind + `encryptedContent`/`encryptedEmbedding` columns, `applyMigrations` logic) and `serialization.ts` round-trip — the MCP package isn't installed/buildable in this workspace and the schema is only exercised by the bridge, so it's done where it can be validated end-to-end.
 - **Deferred polish:** retrofitting the remaining `(as any)` encrypted-field accesses in `storage.ts` (working, guarded runtime accesses in the encryption path — low value, regression-prone to churn now). New capture code (Phase 4) uses the typed fields directly.
 
-### Phase 4 — Generic observer (capture every site, observe-only) — **HYBRID model**
+### Phase 4 — Generic observer (capture every site, observe-only) — **HYBRID model** ✅ DONE
+Shipped in five slices: **4a** capture policy + config (pure, tested), **4b** generic observer + save-path fix (generic platform/kind labelling), **4c** manual save (context-menu selection + page article), **4d** privacy controls UI (Settings → Web Capture: kill switch, ambient toggle, denylist, consent), **4e** content-script `matches` → `https://*/*`+`http://*/*` (R3 mitigations in place). MCP-side has no change here. ~40 new tests; 659 green; 0 type errors. Original design notes retained below.
+
 - Promote `generic-adapter.ts` to a real observer. Two capture paths coexist:
   - **Automatic ambient layer (all sites except denylist):** `page_visit` = url + title + hostname + timestamp only. No body, no DOM scrape. Throttled to ≤1 per (host, hour). Needs broad host access (`<all_urls>`) + the privacy controls below.
   - **Manual "Save to memory" gesture (user-initiated):** the deliberate-keep path, requires only **`activeTab`** (granted on click — low review risk):
@@ -160,7 +162,7 @@ Remove all cloud **memory storage/sync**; keep Supabase **auth only**. Done earl
 |---|---|---|---|
 | R1 | Dual-writer corruption on `engram.db` | ~~High~~ **Closed** | MCP opened `readonly:true` with no write tools; native host is sole writer; `busy_timeout`. Contention impossible by construction |
 | R2 | ~~OAuth key non-derivable → bridge data loss~~ | ~~High~~ **Moot** | Resolved by design: no cloud memory + plaintext-over-IPC means keys are never re-derived off-device |
-| R3 | `<all_urls>` (ambient metadata) flagged as spyware | **High** | Denylist on by default, indicator, pause, kill switch, consent screen; isolate `<all_urls>` to the ambient toggle — manual save + AI capture work on `activeTab` |
+| R3 | broad-host content script (ambient metadata) flagged as spyware | **High — mitigations in place** | Phase 4d/4e: matches limited to `https://*/*`+`http://*/*` (no file/chrome); built-in sensitive-site denylist on by default; user denylist; master kill switch + ambient toggle + consent copy in Settings; capture is on-device only and policy-gated; manual save is independent. Web Store approval itself is external and unverifiable here |
 | R4 | MV3 SW death drops bridge messages | Med | IndexedDB outbox + reconnect drain; no long-lived port assumption |
 | R5 | Position-based dedup drops/dupes on virtualized lists | ~~Med~~ **Closed** | Phase 0b: shared content-hash `computeMessageId`. ChatGPT (position-only, the sole exposed adapter) refactored to content dedup + element-keyed streaming guard; Claude/Perplexity/Gemini already deduped on content (`processedContents`) and keep their element-stable streaming id by design (content-hashing it would break streaming-change detection) |
 | R6 | SPA route changes leak observers/UI | ~~Med~~ **Closed** | Phase 0c: navigation monitoring generalized from ChatGPT-only to all four SPAs; once-installed pathname-based history patch + uniform `cleanupActive()` tears down the prior adapter/interceptor on every route change (was: 3 of 4 platforms had no re-init at all) |
