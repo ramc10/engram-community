@@ -12,7 +12,10 @@ import { registerMemoryTools } from './tools/memory-tools';
 import { registerConversationTools } from './tools/conversation-tools';
 import { registerSearchTools } from './tools/search-tools';
 import { registerAnalyticsTools } from './tools/analytics-tools';
-import { registerImportTools } from './tools/import-tools';
+// NOTE: import-tools (bulk writers) are intentionally NOT registered. The MCP
+// server is read-only; the native host owns all writes. Cold-start import moves
+// to the native-host CLI. Any remaining write paths in memory-tools will error
+// against the read-only database by design (see Phase 5 / R1).
 import { registerMemoryResource } from './resources/memory-resource';
 import { registerConversationResource } from './resources/conversation-resource';
 import { registerSummarizePrompt } from './prompts/summarize-conversation';
@@ -39,7 +42,7 @@ export function registerAll(server: McpServer, deps: ServerDependencies): void {
   registerConversationTools(server, deps.storage);
   registerSearchTools(server, deps.storage, deps.embeddingService, deps.vectorStore);
   registerAnalyticsTools(server, deps.storage, deps.vectorStore, deps.keyManager, deps.embeddingService);
-  registerImportTools(server, deps.storage, deps.deviceId);
+  // Read-only server: import/bulk-write tools are not registered (see note above).
 
   // Resources
   registerMemoryResource(server, deps.storage);

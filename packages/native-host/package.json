@@ -1,0 +1,27 @@
+{
+  "name": "@engram/native-host",
+  "version": "1.0.0",
+  "description": "Engram native-messaging host — the single writer to the local MCP SQLite store (~/.engram/engram.db).",
+  "license": "MIT",
+  "type": "commonjs",
+  "bin": {
+    "engram-native-host": "dist/index.js",
+    "engram-native-host-install": "dist/install.js"
+  },
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "install-host": "node dist/install.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.0.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.0",
+    "@types/node": "^20.0.0",
+    "typescript": "^5.3.0"
+  },
+  "files": [
+    "dist"
+  ]
+}

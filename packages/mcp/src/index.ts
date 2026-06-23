@@ -21,10 +21,13 @@ async function main(): Promise<void> {
   const config = loadConfig();
   logger.info('Starting Engram MCP server...');
 
-  // Initialize storage
-  const storage = createSQLiteStorage(config.storagePath, config.deviceId);
+  // Initialize storage READ-ONLY. The @engram/native-host process is the single
+  // writer + schema owner; opening read-only here makes dual-writer contention
+  // impossible by construction. The DB file must already exist (the host creates
+  // it on first write).
+  const storage = createSQLiteStorage(config.storagePath, config.deviceId, true);
   await storage.initialize();
-  logger.info(`Storage initialized at ${config.storagePath}`);
+  logger.info(`Storage opened (read-only) at ${config.storagePath}`);
 
   // Initialize crypto (if passphrase configured)
   let cryptoService: CryptoService | null = null;
