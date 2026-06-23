@@ -78,10 +78,6 @@
       "nativeMessaging"
     ],
     "host_permissions": [
-      "https://chatgpt.com/*",
-      "https://claude.ai/*",
-      "https://www.perplexity.ai/*",
-      "https://gemini.google.com/*",
       "https://*.supabase.co/*"
     ],
     "content_security_policy": {

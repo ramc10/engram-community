@@ -156,10 +156,13 @@ Shipped in five slices: **4a** capture policy + config (pure, tested), **4b** ge
 - Installer: `npx engram-native-host install` (writes host manifest), surfaced from the extension settings with copy-paste fallback.
 - **Acceptance:** create a memory in-browser → appears in `engram.db` within seconds with correct plaintext + searchable via MCP `search_memories`; kill the SW mid-stream → memory still lands on reconnect; MCP exposes **no write tools**; concurrent MCP reads never throw `SQLITE_BUSY`.
 
-### Phase 6 — Cleanup, docs, release
-- Update `ARCHITECTURE.md` (currently describes injection-era flow), `README`, store listing.
-- Move `import_from_extension` out of the MCP tool set into the native-host CLI (MCP stays read-only); keep it as cold-start only with a deprecation note.
-- Version bump (note repo is mid-`1.0.0`-bump, last shipped release is `v0.1.5`).
+### Phase 6 — Cleanup, docs, release ✅ DONE
+- Removed the orphaned `src/popup/` pages (unmounted; carried premium/cloud-sync markup).
+- Audited `host_permissions` → only `https://*.supabase.co/*` remains (the 4 AI hosts were redundant once the content script matches `https://*/*`; nothing fetches them cross-origin).
+- Rewrote `ARCHITECTURE.md` (injection-era → MCP-first), updated `README` (features/structure/roadmap/env), added a CHANGELOG "MCP-first revamp" entry.
+- `import_from_extension` already dropped from the MCP tool set in Phase 5c (read-only); cold-start import lives in the native-host CLI.
+- Versions already at `1.0.0` across packages — this revamp is the 1.0.0 release; no churn needed.
+- 0 type errors; 666 tests green.
 
 ---
 

@@ -17,12 +17,13 @@ Engram is a browser extension that captures AI conversations from ChatGPT, Claud
 ---
 
 ## ✨ Features
-- ✅ **Multi-platform capture**: ChatGPT, Claude, Perplexity, Gemini
-- ✅ **End-to-end encryption**: XChaCha20-Poly1305
+- ✅ **Capture everywhere (observe-only)**: AI conversations (ChatGPT, Claude, Perplexity, Gemini) + ambient page visits and manual save on any site — no text injection
+- ✅ **Privacy-gated**: master kill switch, sensitive-site denylist, per-site blocking (Settings → Web Capture)
+- ✅ **End-to-end encryption**: XChaCha20-Poly1305, on-device only
 - ✅ **Local semantic search**: BGE-Small embeddings + HNSW
-- ✅ **Memory injection**: Automatic context in chat
-- ✅ **Cloud sync**: Optional Supabase integration
-- ✅ **Portable**: Full offline functionality
+- ✅ **MCP bridge**: expose your memory to Claude Desktop / Claude Code via a local native-messaging host → read-only MCP server
+- ✅ **Your own AI key**: enrichment / linking / evolution run on OpenAI, Anthropic, or a local model — no managed tier
+- ✅ **Local-first**: works offline; memories never leave your device automatically
 
 ---
 
@@ -33,17 +34,19 @@ This repository is structured as a **monorepo** with multiple packages:
 ```
 engram-community/
 ├── packages/
-│   ├── core/         # @engram/core (MIT License)
-│   │   └── Type definitions and interfaces
-│   │
-│   └── community/    # Main extension (AGPL-3.0)
-│       ├── Storage & encryption
-│       ├── Platform adapters
-│       ├── Memory injection
-│       └── UI components
+│   ├── core/         # @engram/core (MIT) — shared types + utils
+│   ├── community/    # browser extension (AGPL-3.0)
+│   │   ├── Storage & encryption
+│   │   ├── Platform adapters + generic capture observer
+│   │   ├── Native-messaging bridge (extension → host)
+│   │   └── UI components
+│   ├── mcp/          # read-only MCP server (MIT)
+│   └── native-host/  # native-messaging host — single SQLite writer (MIT)
 │
 └── public/          # Landing page & legal docs
 ```
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the full MCP-first data flow.
 
 ### Package Boundaries
 
@@ -132,9 +135,9 @@ packages/community/src/
 │   ├── index.ts
 │   └── message-handler.ts
 │
-├── content/              # Content scripts
-│   ├── platforms/        # ChatGPT, Claude, Perplexity, Gemini
-│   └── shared/           # Prompt interceptor, UI injector
+├── content/              # Content-script logic
+│   ├── platforms/        # ChatGPT, Claude, Perplexity, Gemini adapters
+│   └── shared/           # capture policy, message-id, memory panel/UI
 │
 ├── lib/                  # Core services
 │   ├── storage.ts        # IndexedDB + encryption
@@ -195,7 +198,7 @@ For local development:
 ```env
 # packages/community/.env
 
-# Supabase (optional cloud sync)
+# Supabase (authentication only — no memory is ever stored in the cloud)
 PLASMO_PUBLIC_SUPABASE_URL=https://xxx.supabase.co
 PLASMO_PUBLIC_SUPABASE_ANON_KEY=xxx
 
@@ -250,25 +253,22 @@ For commercial licensing inquiries: artha360.live@gmail.com
 
 ## 🗺️ Roadmap
 
-### Current (v1.0.0)
-- ✅ Multi-platform capture (ChatGPT, Claude, Perplexity, Gemini)
-- ✅ End-to-end encryption (XChaCha20-Poly1305)
+### Current
+- ✅ Observe-only capture on AI platforms **and every other site** (ambient page visits + manual save)
+- ✅ Privacy controls: kill switch, sensitive-site denylist, per-site blocking
+- ✅ End-to-end encryption (XChaCha20-Poly1305), local-only storage
 - ✅ Local semantic search (BGE-Small + HNSW)
-- ✅ Memory injection and context awareness
-- ✅ Modular component architecture
-- ✅ Error boundaries and crash recovery
-- ✅ Version migration system
+- ✅ MCP bridge: native-messaging host → read-only MCP server for Claude Desktop / Code
+- ✅ AI features (enrichment / linking / evolution) on the user's own API key
 
-### Coming Soon (v1.1.0+)
+### Coming Soon
 - 🔜 Enhanced UI/UX with improved memory card design
 - 🔜 Advanced search filters and saved searches
 - 🔜 Memory organization (tags, folders, collections)
 - 🔜 Knowledge graph visualization
 - 🔜 Firefox and Safari support
-- 🔜 Mobile companion app
-- 🔜 Team workspaces
-- 🔜 MCP (Model Context Protocol) server integration
-- 🔜 API for third-party integrations
+- 🔜 Readability-based article extraction
+- 🔜 Optional multi-device sync
 
 See [ROADMAP.md](ROADMAP.md) for full roadmap.
 

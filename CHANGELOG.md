@@ -5,14 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [Unreleased] — MCP-first revamp
 
-### Planned
-- UI/UX improvements for memory cards and search interface
-- Advanced search filters (date range, tags, platform)
-- Memory organization features (tags, folders, collections)
-- Knowledge graph visualization
-- Firefox extension support
+### Changed (breaking)
+- **Removed text injection.** Capture is now observe-only; the prompt interceptor
+  and main-world network/fetch patching are gone.
+- **Universal capture.** The content script runs on every site: AI conversations
+  via DOM adapters, plus a policy-gated generic observer (ambient `page_visit`
+  metadata) and manual "Save selection / Save page" via the context menu.
+- **Local-only storage.** Cloud sync (Supabase memory storage + the WebSocket
+  sync stack) removed; Supabase is retained for authentication only.
+- **Premium ungated.** Enrichment, link-detection, and evolution run on the
+  user's own API key; the premium tier, its service/client, and UI are removed.
+
+### Added
+- Privacy controls (Settings → Web Capture): master kill switch, ambient toggle,
+  built-in sensitive-site denylist + per-site blocking.
+- `Memory.kind` (`chat | page_visit | selection | article`), `capture` role, and
+  `genericConversationId` for non-chat captures.
+- **MCP bridge**: `@engram/native-host` native-messaging host (single SQLite
+  writer) + the MCP server opened **read-only**, exposing memory to Claude
+  Desktop / Claude Code.
+
+### Security / robustness
+- Content-hash message dedup (position-independent); SPA navigation re-init across
+  all platforms; bridge keeps E2E encryption intact (plaintext only in transit).
+
+> Native host + read-only MCP are implemented but not yet verified end-to-end in
+> CI (native deps not installed there). See `packages/native-host/README.md`.
 
 ---
 
