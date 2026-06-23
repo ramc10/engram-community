@@ -33,13 +33,25 @@ export class SQLiteStorage implements IStorage {
   private db: Database.Database | null = null;
   private readonly dbPath: string;
   private readonly deviceId: string;
+  private readonly readonly: boolean;
 
-  constructor(dbPath: string, deviceId: string) {
+  constructor(dbPath: string, deviceId: string, readonly = false) {
     this.dbPath = dbPath;
     this.deviceId = deviceId;
+    this.readonly = readonly;
   }
 
   async initialize(): Promise<void> {
+    // The native host (@engram/native-host) is the single writer + schema owner.
+    // The MCP server opens the same file read-only so writers and readers never
+    // contend (closes the dual-writer corruption risk). Schema creation is skipped
+    // in readonly mode; the file must already exist (created by the host).
+    if (this.readonly) {
+      this.db = new Database(this.dbPath, { readonly: true, fileMustExist: true });
+      logger.info(`Database opened read-only at ${this.dbPath}`);
+      return;
+    }
+
     this.db = new Database(this.dbPath);
     this.db.pragma('journal_mode = WAL');
     this.db.pragma('foreign_keys = ON');
@@ -467,8 +479,9 @@ export class SQLiteStorage implements IStorage {
 }
 
 /**
- * Create a new SQLiteStorage instance
+ * Create a new SQLiteStorage instance. Pass readonly=true for the MCP server,
+ * which reads the database the native host writes.
  */
-export function createSQLiteStorage(dbPath: string, deviceId: string): SQLiteStorage {
-  return new SQLiteStorage(dbPath, deviceId);
+export function createSQLiteStorage(dbPath: string, deviceId: string, readonly = false): SQLiteStorage {
+  return new SQLiteStorage(dbPath, deviceId, readonly);
 }

@@ -3,7 +3,7 @@
  * Based on MVP Implementation Specification Phase 1.2
  */
 
-import { Platform, Role } from './memory';
+import { Platform, Role, MemoryKind } from './memory';
 
 /**
  * DOM Selectors for platform
@@ -79,6 +79,13 @@ export interface ExtractedMessage {
   timestamp?: number;
   conversationId: string;
   metadata?: ExtractedMetadata;
+  /**
+   * Capture kind. Absent ⇒ 'chat' (an AI conversation message). Set by the
+   * generic web observer for page visits, selections, and saved articles.
+   */
+  kind?: MemoryKind;
+  /** Source page URL, for non-chat ('generic') captures. */
+  url?: string;
 }
 
 /**

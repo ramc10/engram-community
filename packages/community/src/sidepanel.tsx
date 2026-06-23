@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { ThemeProvider, ToastProvider, useToast, useTheme, Logo } from './components/ui';
-import { PremiumBadge, UpgradeBanner, ErrorBoundary, AuthenticationView, MemoriesTab, SettingsTab } from './components';
+import { ErrorBoundary, AuthenticationView, MemoriesTab, SettingsTab } from './components';
 import type { MessageType } from './lib/messages';
 import type { Memory } from '@engram/core';
 import { logBoundaryError } from './lib/error-logger';
@@ -21,11 +21,6 @@ function SidePanelContent() {
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [activeTab, setActiveTab] = useState<Tab>('memories');
   const [lastRefreshTime, setLastRefreshTime] = useState<Date | null>(null);
-
-  // Premium tier state
-  const [isPremium, setIsPremium] = useState(false);
-  const [syncEnabled, setSyncEnabled] = useState(false);
-  const [hasPendingRequest, setHasPendingRequest] = useState(false);
 
   const { success, error: showError } = useToast();
   const { colors } = useTheme();
@@ -43,22 +38,6 @@ function SidePanelContent() {
       }
     } catch (err) {
       console.error('[Engram Side Panel] Failed to check auth state:', err);
-    }
-  }, []);
-
-  const checkPremiumStatus = useCallback(async () => {
-    try {
-      const response = await chrome.runtime.sendMessage({
-        type: 'GET_PREMIUM_STATUS' as MessageType,
-      });
-
-      if (response.success && response.status) {
-        setIsPremium(response.status.isPremium);
-        setSyncEnabled(response.status.syncEnabled);
-        setHasPendingRequest(response.status.hasPendingRequest || false);
-      }
-    } catch (err) {
-      console.error('[Engram Side Panel] Failed to check premium status:', err);
     }
   }, []);
 
@@ -93,9 +72,8 @@ function SidePanelContent() {
   useEffect(() => {
     if (isAuthenticated) {
       loadMemories();
-      checkPremiumStatus();
     }
-  }, [isAuthenticated, loadMemories, checkPremiumStatus]);
+  }, [isAuthenticated, loadMemories]);
 
   // Auto-refresh memories every 10 seconds
   useEffect(() => {
@@ -109,38 +87,6 @@ function SidePanelContent() {
 
     return () => clearInterval(intervalId);
   }, [isAuthenticated, activeTab, loadMemories]);
-
-  const handleUpgrade = async () => {
-    const confirmed = window.confirm(
-      'Request Premium Access\n\n' +
-      'Your upgrade request will be submitted for review.\n\n' +
-      'The founder will review and grant you access shortly.\n\n' +
-      'Click OK to continue.'
-    );
-
-    if (!confirmed) return;
-
-    try {
-      const response = await chrome.runtime.sendMessage({
-        type: 'REQUEST_PREMIUM_UPGRADE' as MessageType,
-      });
-
-      if (!response.success) {
-        throw new Error(response.error || 'Failed to submit upgrade request');
-      }
-
-      setHasPendingRequest(true);
-      success('Upgrade request submitted! You will be notified once approved.');
-    } catch (err) {
-      console.error('[Engram Side Panel] Failed to submit upgrade request:', err);
-      const errorMessage = err instanceof Error
-        ? err.message
-        : typeof err === 'object' && err !== null
-          ? JSON.stringify(err)
-          : 'Failed to submit upgrade request';
-      showError(errorMessage);
-    }
-  };
 
   const handleLogout = async () => {
     if (!confirm('Are you sure you want to logout?')) return;
@@ -197,7 +143,6 @@ function SidePanelContent() {
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <Logo size={32} />
-                  <PremiumBadge isPremium={isPremium} />
                 </div>
               </div>
             </div>
@@ -227,62 +172,6 @@ function SidePanelContent() {
             </div>
           </div>
 
-          {/* Upgrade Banner for Free Users */}
-          {!isPremium && !hasPendingRequest && <UpgradeBanner onUpgrade={handleUpgrade} />}
-
-          {/* Pending Request Message */}
-          {!isPremium && hasPendingRequest && (
-            <div style={{
-              background: 'linear-gradient(135deg, #2d2d2d 0%, #1a1a1a 100%)',
-              padding: '16px',
-              color: 'white',
-              borderRadius: '8px',
-              margin: '16px',
-              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.5)',
-              textAlign: 'center',
-              position: 'relative',
-            }}>
-              <button
-                onClick={checkPremiumStatus}
-                title="Check approval status"
-                style={{
-                  position: 'absolute',
-                  top: '12px',
-                  right: '12px',
-                  background: 'rgba(255, 255, 255, 0.15)',
-                  border: '1px solid rgba(255, 255, 255, 0.3)',
-                  borderRadius: '6px',
-                  padding: '6px',
-                  color: 'white',
-                  fontSize: '14px',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  width: '28px',
-                  height: '28px',
-                  transition: 'all 0.2s',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.25)';
-                  e.currentTarget.style.transform = 'rotate(90deg)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.15)';
-                  e.currentTarget.style.transform = 'rotate(0deg)';
-                }}
-              >
-                Refresh
-              </button>
-              <div style={{ fontSize: '14px', marginBottom: '4px', fontWeight: 600 }}>
-                Upgrade Request Pending
-              </div>
-              <div style={{ fontSize: '12px', opacity: 0.9 }}>
-                Your premium upgrade request has been submitted. You&apos;ll be notified once approved.
-              </div>
-            </div>
-          )}
-
           {/* Content Area */}
           <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
             {activeTab === 'memories' ? (
@@ -309,13 +198,8 @@ function SidePanelContent() {
                 <SettingsTab
                   email={email}
                   userId={userId}
-                  isPremium={isPremium}
-                  syncEnabled={syncEnabled}
-                  hasPendingRequest={hasPendingRequest}
                   onLogout={handleLogout}
                   isLoggingOut={isLoggingOut}
-                  onCheckPremiumStatus={checkPremiumStatus}
-                  onUpgrade={handleUpgrade}
                 />
               </ErrorBoundary>
             )}

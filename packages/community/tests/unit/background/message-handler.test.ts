@@ -15,24 +15,6 @@ import { createMockChromeStorage } from '../../__utils__/test-helpers';
 declare const chrome: any;
 
 // Mock dependencies
-jest.mock('../../../src/lib/premium-service', () => ({
-  premiumService: {
-    getPremiumStatus: jest.fn(),
-    isPremium: jest.fn(),
-    upgradeToPremium: jest.fn(),
-    requestPremiumUpgrade: jest.fn(),
-    enableSync: jest.fn(),
-    disableSync: jest.fn(),
-  },
-}));
-
-jest.mock('../../../src/lib/cloud-sync', () => ({
-  CloudSyncService: jest.fn<any>().mockImplementation(() => ({
-    start: jest.fn<any>().mockResolvedValue(undefined),
-    stop: jest.fn<any>().mockResolvedValue(undefined),
-  })),
-}));
-
 // Mock global navigator for device registration
 global.navigator = {
   userAgent: 'Mozilla/5.0 (Test) Chrome/120.0.0.0',
@@ -136,9 +118,6 @@ describe('Message Handler', () => {
       clearMasterKey: jest.fn(),
       persistMasterKey: jest.fn<any>().mockResolvedValue(undefined),
       clearPersistedMasterKey: jest.fn<any>().mockResolvedValue(undefined),
-      initializeCloudSyncIfNeeded: jest.fn<any>().mockResolvedValue(undefined),
-      initializePremiumClientIfNeeded: jest.fn<any>().mockResolvedValue(undefined),
-      getCloudSync: jest.fn<any>().mockReturnValue(null),
     } as unknown as BackgroundService;
 
     mockSender = {
@@ -280,6 +259,48 @@ describe('Message Handler', () => {
 
       const savedMemory = mockStorage.saveMemory.mock.calls[0][0];
       expect(savedMemory.platform).toBe('claude');
+    });
+
+    it('labels non-AI sites as the generic platform (not the chatgpt fallback)', async () => {
+      mockSender.tab!.url = 'https://en.wikipedia.org/wiki/Memory';
+
+      const message = {
+        type: MessageType.SAVE_MESSAGE,
+        message: {
+          role: 'user' as const,
+          content: 'Test',
+          conversationId: 'conv-123',
+          timestamp: Date.now(),
+        },
+      };
+
+      await handleMessage(message as any, mockSender, mockService);
+
+      const savedMemory = mockStorage.saveMemory.mock.calls[0][0];
+      expect(savedMemory.platform).toBe('generic');
+      expect(savedMemory.kind).toBe('chat');
+    });
+
+    it('persists a generic page_visit capture with kind + generic platform', async () => {
+      mockSender.tab!.url = 'https://en.wikipedia.org/wiki/Memory';
+
+      const message = {
+        type: MessageType.SAVE_MESSAGE,
+        message: {
+          role: 'capture' as const,
+          kind: 'page_visit' as const,
+          content: 'Memory - Wikipedia',
+          url: 'https://en.wikipedia.org/wiki/Memory',
+          conversationId: 'generic:en.wikipedia.org:2026-01-02',
+          timestamp: Date.now(),
+        },
+      };
+
+      await handleMessage(message as any, mockSender, mockService);
+
+      const savedMemory = mockStorage.saveMemory.mock.calls[0][0];
+      expect(savedMemory.kind).toBe('page_visit');
+      expect(savedMemory.platform).toBe('generic');
     });
 
     it('should require master key for saving', async () => {
@@ -869,19 +890,6 @@ describe('Message Handler', () => {
       expect(mockService.clearPersistedMasterKey).toHaveBeenCalled();
     });
 
-    it('should stop cloud sync on logout', async () => {
-      const mockCloudSync = {
-        stop: jest.fn<any>().mockResolvedValue(undefined),
-      };
-      mockService.getCloudSync.mockReturnValue(mockCloudSync);
-
-      const message = { type: MessageType.AUTH_LOGOUT };
-
-      await handleMessage(message as any, mockSender, mockService);
-
-      expect(mockCloudSync.stop).toHaveBeenCalled();
-    });
-
     it('should clear client state even if server logout fails', async () => {
       mockAuthClient.logout.mockRejectedValueOnce(new Error('Network error'));
 
@@ -921,186 +929,6 @@ describe('Message Handler', () => {
     });
   });
 
-  describe('GET_PREMIUM_STATUS', () => {
-    const { premiumService } = require('../../../src/lib/premium-service');
-
-    it('should get premium status successfully', async () => {
-      premiumService.getPremiumStatus.mockResolvedValue({
-        tier: 'premium',
-        isPremium: true,
-        syncEnabled: true,
-        premiumSince: '2024-01-01',
-        hasPendingRequest: false,
-      });
-
-      const message = { type: MessageType.GET_PREMIUM_STATUS };
-
-      const response = await handleMessage(message as any, mockSender, mockService);
-
-      expect(response.type).toBe(MessageType.GET_PREMIUM_STATUS_RESPONSE);
-      expect(response.success).toBe(true);
-      expect(response.status.isPremium).toBe(true);
-      expect(premiumService.getPremiumStatus).toHaveBeenCalledWith('user-123', expect.any(Object));
-    });
-
-    it('should require authentication', async () => {
-      mockAuthClient.getAuthState.mockResolvedValue({
-        isAuthenticated: false,
-        userId: null,
-        email: null,
-      });
-
-      const message = { type: MessageType.GET_PREMIUM_STATUS };
-
-      const response = await handleMessage(message as any, mockSender, mockService);
-
-      expect(response.success).toBe(false);
-      expect(response.error).toBe('Not authenticated');
-    });
-  });
-
-  describe('UPGRADE_TO_PREMIUM', () => {
-    const { premiumService } = require('../../../src/lib/premium-service');
-
-    it('should upgrade to premium successfully', async () => {
-      premiumService.upgradeToPremium.mockResolvedValue(undefined);
-
-      const message = { type: MessageType.UPGRADE_TO_PREMIUM };
-
-      const response = await handleMessage(message as any, mockSender, mockService);
-
-      expect(response.type).toBe(MessageType.UPGRADE_TO_PREMIUM_RESPONSE);
-      expect(response.success).toBe(true);
-      expect(premiumService.upgradeToPremium).toHaveBeenCalledWith('user-123');
-    });
-
-    it('should require authentication', async () => {
-      mockAuthClient.getAuthState.mockResolvedValue({
-        isAuthenticated: false,
-        userId: null,
-        email: null,
-      });
-
-      const message = { type: MessageType.UPGRADE_TO_PREMIUM };
-
-      const response = await handleMessage(message as any, mockSender, mockService);
-
-      expect(response.success).toBe(false);
-      expect(response.error).toBe('Not authenticated');
-    });
-  });
-
-  describe('REQUEST_PREMIUM_UPGRADE', () => {
-    const { premiumService } = require('../../../src/lib/premium-service');
-
-    it('should request premium upgrade successfully', async () => {
-      premiumService.requestPremiumUpgrade.mockResolvedValue(undefined);
-
-      const message = { type: MessageType.REQUEST_PREMIUM_UPGRADE };
-
-      const response = await handleMessage(message as any, mockSender, mockService);
-
-      expect(response.type).toBe(MessageType.REQUEST_PREMIUM_UPGRADE_RESPONSE);
-      expect(response.success).toBe(true);
-      expect(premiumService.requestPremiumUpgrade).toHaveBeenCalledWith(
-        'user-123',
-        'test@example.com',
-        expect.any(Object)
-      );
-    });
-
-    it('should require authentication with email', async () => {
-      mockAuthClient.getAuthState.mockResolvedValue({
-        isAuthenticated: true,
-        userId: 'user-123',
-        email: null,
-      });
-
-      const message = { type: MessageType.REQUEST_PREMIUM_UPGRADE };
-
-      const response = await handleMessage(message as any, mockSender, mockService);
-
-      expect(response.success).toBe(false);
-      expect(response.error).toBe('Not authenticated');
-    });
-  });
-
-  describe('START_CLOUD_SYNC', () => {
-    const { premiumService } = require('../../../src/lib/premium-service');
-
-    it('should start cloud sync successfully', async () => {
-      premiumService.isPremium.mockResolvedValue(true);
-      premiumService.enableSync.mockResolvedValue(undefined);
-
-      const message = { type: MessageType.START_CLOUD_SYNC };
-
-      const response = await handleMessage(message as any, mockSender, mockService);
-
-      expect(response.type).toBe(MessageType.START_CLOUD_SYNC_RESPONSE);
-      expect(response.success).toBe(true);
-      expect(premiumService.isPremium).toHaveBeenCalled();
-      expect(premiumService.enableSync).toHaveBeenCalled();
-      expect(mockService.initializeCloudSyncIfNeeded).toHaveBeenCalled();
-    });
-
-    it('should require premium subscription', async () => {
-      premiumService.isPremium.mockResolvedValue(false);
-
-      const message = { type: MessageType.START_CLOUD_SYNC };
-
-      const response = await handleMessage(message as any, mockSender, mockService);
-
-      expect(response.success).toBe(false);
-      expect(response.error).toBe('Premium subscription required for cloud sync');
-    });
-
-    it('should require authentication', async () => {
-      mockAuthClient.getAuthState.mockResolvedValue({
-        isAuthenticated: false,
-        userId: null,
-        email: null,
-      });
-
-      const message = { type: MessageType.START_CLOUD_SYNC };
-
-      const response = await handleMessage(message as any, mockSender, mockService);
-
-      expect(response.success).toBe(false);
-      expect(response.error).toBe('Not authenticated');
-    });
-  });
-
-  describe('STOP_CLOUD_SYNC', () => {
-    const { premiumService } = require('../../../src/lib/premium-service');
-
-    it('should stop cloud sync successfully', async () => {
-      const mockCloudSync = {
-        stop: jest.fn<any>().mockResolvedValue(undefined),
-      };
-      mockService.getCloudSync.mockReturnValue(mockCloudSync);
-      premiumService.disableSync.mockResolvedValue(undefined);
-
-      const message = { type: MessageType.STOP_CLOUD_SYNC };
-
-      const response = await handleMessage(message as any, mockSender, mockService);
-
-      expect(response.type).toBe(MessageType.STOP_CLOUD_SYNC_RESPONSE);
-      expect(response.success).toBe(true);
-      expect(premiumService.disableSync).toHaveBeenCalled();
-      expect(mockCloudSync.stop).toHaveBeenCalled();
-    });
-
-    it('should handle when cloud sync is not running', async () => {
-      mockService.getCloudSync.mockReturnValue(null);
-
-      const message = { type: MessageType.STOP_CLOUD_SYNC };
-
-      const response = await handleMessage(message as any, mockSender, mockService);
-
-      expect(response.success).toBe(true);
-    });
-  });
-
   describe('REINITIALIZE_ENRICHMENT', () => {
     it('should reinitialize enrichment successfully', async () => {
       const message = { type: MessageType.REINITIALIZE_ENRICHMENT };
@@ -1110,7 +938,6 @@ describe('Message Handler', () => {
       expect(response.type).toBe(MessageType.REINITIALIZE_ENRICHMENT_RESPONSE);
       expect(response.success).toBe(true);
       expect(mockStorage.reinitializeEnrichment).toHaveBeenCalled();
-      expect(mockService.initializePremiumClientIfNeeded).toHaveBeenCalled();
     });
 
     it('should handle enrichment initialization error', async () => {

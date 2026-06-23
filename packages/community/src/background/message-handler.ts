@@ -18,11 +18,6 @@ import {
   AuthLoginGoogleResponse,
   AuthLogoutResponse,
   GetAuthStateResponse,
-  GetPremiumStatusResponse,
-  UpgradeToPremiumResponse,
-  RequestPremiumUpgradeResponse,
-  StartCloudSyncResponse,
-  StopCloudSyncResponse,
   ReinitializeEnrichmentResponse,
   RevertEvolutionResponse,
   AuthState,
@@ -33,17 +28,8 @@ import {
 import { BackgroundService } from './index';
 import { Memory } from '@engram/core';
 import { generateUUID, getPlatformFromUrl, base64ToUint8Array, uint8ArrayToBase64 } from '@engram/core';
-
-// Lazy load premium service for bundle size optimization
-type PremiumServiceModule = typeof import('../lib/premium-service');
-let premiumServiceModule: PremiumServiceModule | null = null;
-
-async function getPremiumServiceModule(): Promise<PremiumServiceModule> {
-  if (!premiumServiceModule) {
-    premiumServiceModule = await import('../lib/premium-service');
-  }
-  return premiumServiceModule;
-}
+import { enqueueBridge } from '../lib/bridge';
+import { runBridge } from '../lib/bridge-runtime';
 
 
 /**
@@ -156,21 +142,6 @@ export async function handleMessage(
       case MessageType.GET_AUTH_STATE:
         return await handleGetAuthState(service);
 
-      case MessageType.GET_PREMIUM_STATUS:
-        return await handleGetPremiumStatus(service);
-
-      case MessageType.UPGRADE_TO_PREMIUM:
-        return await handleUpgradeToPremium(service);
-
-      case MessageType.REQUEST_PREMIUM_UPGRADE:
-        return await handleRequestPremiumUpgrade(service);
-
-      case MessageType.START_CLOUD_SYNC:
-        return await handleStartCloudSync(service);
-
-      case MessageType.STOP_CLOUD_SYNC:
-        return await handleStopCloudSync(service);
-
       case MessageType.REINITIALIZE_ENRICHMENT:
         return await handleReinitializeEnrichment(service);
 
@@ -224,12 +195,15 @@ async function handleSaveMessage(
     const storage = service.getStorage();
     const crypto = service.getCrypto();
 
-    // Detect platform from sender URL
-    const platform = sender?.tab?.url
-      ? getPlatformFromUrl(sender.tab.url) || 'chatgpt'
-      : 'chatgpt'; // fallback
+    // Determine platform + kind. Non-chat captures (page_visit/selection/article)
+    // are always 'generic'; chat messages derive the platform from the tab URL.
+    const kind = extractedMessage.kind;
+    const isGenericCapture = kind && kind !== 'chat';
+    const platform = isGenericCapture
+      ? 'generic'
+      : (sender?.tab?.url ? getPlatformFromUrl(sender.tab.url) : 'generic');
 
-    console.log('[Engram] Detected platform:', platform, 'from URL:', sender?.tab?.url);
+    console.log('[Engram] Detected platform:', platform, 'kind:', kind || 'chat', 'from URL:', sender?.tab?.url);
 
     // Check if user is authenticated and has master key
     if (!service.hasMasterKey()) {
@@ -258,6 +232,7 @@ async function handleSaveMessage(
     // and will be populated by decrypting 'encryptedContent' when retrieving memories.
     const memory: any = {
       id: generateUUID(),
+      kind: kind || 'chat',
       conversationId: extractedMessage.conversationId,
       platform,
       content: {
@@ -313,6 +288,12 @@ async function handleSaveMessage(
 
     console.log('[Engram] Saved memory:', memory.id);
     console.log('[Engram] Plaintext cleared from memory');
+
+    // Queue for delivery to the local MCP store and kick the bridge (best-effort;
+    // never blocks or fails the save — pending ids drain on the next attempt).
+    enqueueBridge(memory.id)
+      .then(() => runBridge(service))
+      .catch((err) => console.warn('[Engram] Bridge enqueue/run failed:', err));
 
     return {
       type: MessageType.SAVE_MESSAGE_RESPONSE,
@@ -445,21 +426,9 @@ async function handleGetSyncStatus(
     // Get last sync time from metadata
     const lastSyncTime = await storage.getMetadata<number>('lastSyncTime');
 
-    const cloudSync = service.getCloudSync();
-    let isConnected = cloudSync?.isStarted() || false;
-
-    if (!isConnected) {
-      try {
-        const syncManager = service.getSyncManager();
-        isConnected = syncManager?.isConnected() || false;
-      } catch (e) {
-        // Sync manager not initialized, which occurs during initial setup
-        // or in unit tests. This is expected.
-      }
-    }
-
+    // Cloud sync removed — memories live only on-device. Always disconnected.
     const status: SyncStatus = {
-      isConnected,
+      isConnected: false,
       lastSyncTime: lastSyncTime || undefined,
       pendingOperations,
       deviceId,
@@ -590,9 +559,6 @@ async function handleAuthRegister(
       // Continue anyway - device registration can be retried later
     }
 
-    // 5. Initialize cloud sync if user is premium with sync enabled
-    await service.initializeCloudSyncIfNeeded();
-
     return {
       type: MessageType.AUTH_REGISTER_RESPONSE,
       success: true,
@@ -685,9 +651,6 @@ async function handleAuthLogin(
 
     console.log('[Engram] Master key persisted (encrypted)');
 
-    // 4. Initialize cloud sync if user is premium with sync enabled
-    await service.initializeCloudSyncIfNeeded();
-
     return {
       type: MessageType.AUTH_LOGIN_RESPONSE,
       success: true,
@@ -771,20 +734,13 @@ async function handleAuthLogout(
 
     console.log('[Engram] Logging out user');
 
-    // 1. Stop cloud sync if running
-    const cloudSync = service.getCloudSync();
-    if (cloudSync) {
-      await cloudSync.stop();
-      console.log('[Engram] Cloud sync stopped');
-    }
-
-    // 2. Logout from server (clears JWT)
+    // 1. Logout from server (clears JWT)
     await authClient.logout();
 
-    // 3. Clear master key from memory
+    // 2. Clear master key from memory
     service.clearMasterKey();
 
-    // 4. Clear persisted encrypted master key
+    // 3. Clear persisted encrypted master key
     await service.clearPersistedMasterKey();
 
     console.log('[Engram] User logged out successfully');
@@ -847,213 +803,6 @@ async function handleGetAuthState(
 }
 
 /**
- * Handle get premium status request
- */
-async function handleGetPremiumStatus(
-  service: BackgroundService
-): Promise<GetPremiumStatusResponse> {
-  try {
-    const authClient = service.getAuthClient();
-    const authState = await authClient.getAuthState();
-
-    if (!authState.isAuthenticated || !authState.userId) {
-      throw new Error('Not authenticated');
-    }
-
-    console.log('[Premium] Getting premium status for user:', authState.userId);
-
-    // Get authenticated Supabase client (has user session for RLS)
-    const supabaseClient = authClient.getSupabaseClient();
-
-    const { premiumService } = await getPremiumServiceModule();
-    const status = await premiumService.getPremiumStatus(authState.userId, supabaseClient);
-
-    return {
-      type: MessageType.GET_PREMIUM_STATUS_RESPONSE,
-      success: true,
-      status,
-    };
-  } catch (error) {
-    console.error('[Premium] Failed to get premium status:', error);
-    return {
-      type: MessageType.GET_PREMIUM_STATUS_RESPONSE,
-      success: false,
-      error: (error as Error).message,
-    };
-  }
-}
-
-/**
- * Handle upgrade to premium request
- */
-async function handleUpgradeToPremium(
-  service: BackgroundService
-): Promise<UpgradeToPremiumResponse> {
-  try {
-    const authClient = service.getAuthClient();
-    const authState = await authClient.getAuthState();
-
-    if (!authState.isAuthenticated || !authState.userId) {
-      throw new Error('Not authenticated');
-    }
-
-    console.log('[Premium] Upgrading user to premium:', authState.userId);
-
-    const { premiumService } = await getPremiumServiceModule();
-    await premiumService.upgradeToPremium(authState.userId);
-
-    console.log('[Premium] User upgraded successfully');
-
-    return {
-      type: MessageType.UPGRADE_TO_PREMIUM_RESPONSE,
-      success: true,
-    };
-  } catch (error) {
-    console.error('[Premium] Failed to upgrade to premium:', error);
-    return {
-      type: MessageType.UPGRADE_TO_PREMIUM_RESPONSE,
-      success: false,
-      error: (error as Error).message,
-    };
-  }
-}
-
-/**
- * Handle request premium upgrade
- */
-async function handleRequestPremiumUpgrade(
-  service: BackgroundService
-): Promise<RequestPremiumUpgradeResponse> {
-  try {
-    const authClient = service.getAuthClient();
-    const authState = await authClient.getAuthState();
-
-    if (!authState.isAuthenticated || !authState.userId || !authState.email) {
-      throw new Error('Not authenticated');
-    }
-
-    console.log('[Premium] Submitting upgrade request for user:', authState.userId);
-
-    // Get authenticated Supabase client (has user session for RLS)
-    const supabaseClient = authClient.getSupabaseClient();
-
-    const { premiumService } = await getPremiumServiceModule();
-    await premiumService.requestPremiumUpgrade(authState.userId, authState.email, supabaseClient);
-
-    console.log('[Premium] Upgrade request submitted successfully');
-
-    return {
-      type: MessageType.REQUEST_PREMIUM_UPGRADE_RESPONSE,
-      success: true,
-    };
-  } catch (error) {
-    console.error('[Premium] Failed to submit upgrade request:', error);
-    return {
-      type: MessageType.REQUEST_PREMIUM_UPGRADE_RESPONSE,
-      success: false,
-      error: (error as Error).message,
-    };
-  }
-}
-
-/**
- * Handle start cloud sync request
- */
-async function handleStartCloudSync(
-  service: BackgroundService
-): Promise<StartCloudSyncResponse> {
-  try {
-    const authClient = service.getAuthClient();
-    const authState = await authClient.getAuthState();
-
-    if (!authState.isAuthenticated || !authState.userId) {
-      throw new Error('Not authenticated');
-    }
-
-    // Get authenticated Supabase client (has user session for RLS)
-    const supabaseClient = authClient.getSupabaseClient();
-
-    // Lazy load premium service
-    const { premiumService } = await getPremiumServiceModule();
-
-    // Check if user has premium tier
-    const isPremium = await premiumService.isPremium(authState.userId, supabaseClient);
-    if (!isPremium) {
-      throw new Error('Premium subscription required for cloud sync');
-    }
-
-    console.log('[CloudSync] Starting cloud sync for user:', authState.userId);
-
-    // Enable sync in database with authenticated client (for RLS)
-    await premiumService.enableSync(authState.userId, supabaseClient);
-
-    console.log('[CloudSync] Cloud sync enabled in database');
-
-    // Initialize CloudSyncService (now fixed to work in service worker context)
-    await service.initializeCloudSyncIfNeeded();
-
-    console.log('[CloudSync] Cloud sync service initialized and started');
-
-    return {
-      type: MessageType.START_CLOUD_SYNC_RESPONSE,
-      success: true,
-    };
-  } catch (error) {
-    console.error('[CloudSync] Failed to start cloud sync:', error);
-    return {
-      type: MessageType.START_CLOUD_SYNC_RESPONSE,
-      success: false,
-      error: (error as Error).message,
-    };
-  }
-}
-
-/**
- * Handle stop cloud sync request
- */
-async function handleStopCloudSync(
-  service: BackgroundService
-): Promise<StopCloudSyncResponse> {
-  try {
-    console.log('[CloudSync] Stopping cloud sync');
-
-    // Get auth state
-    const authClient = service.getAuthClient();
-    const authState = await authClient.getAuthState();
-
-    if (authState.isAuthenticated && authState.userId) {
-      // Get authenticated Supabase client (has user session for RLS)
-      const supabaseClient = authClient.getSupabaseClient();
-
-      // Lazy load premium service and disable sync in database with authenticated client (for RLS)
-      const { premiumService } = await getPremiumServiceModule();
-      await premiumService.disableSync(authState.userId, supabaseClient);
-    }
-
-    // Stop cloud sync service if running
-    const cloudSync = service.getCloudSync();
-    if (cloudSync) {
-      await cloudSync.stop();
-      console.log('[CloudSync] Cloud sync service stopped');
-    }
-
-    console.log('[CloudSync] Cloud sync disabled');
-
-    return {
-      type: MessageType.STOP_CLOUD_SYNC_RESPONSE,
-      success: true,
-    };
-  } catch (error) {
-    console.error('[CloudSync] Failed to stop cloud sync:', error);
-    return {
-      type: MessageType.STOP_CLOUD_SYNC_RESPONSE,
-      success: false,
-      error: (error as Error).message,
-    };
-  }
-}
-
-/**
  * Handle reinitialize enrichment request
  * Called when enrichment settings are changed in the UI
  */
@@ -1065,10 +814,6 @@ async function handleReinitializeEnrichment(
 
     const storage = service.getStorage();
     await storage.reinitializeEnrichment();
-
-    // Re-initialize Premium API client if using premium provider
-    // This ensures the client is authenticated after user configures license key in UI
-    await service.initializePremiumClientIfNeeded();
 
     console.log('[Enrichment] Enrichment services reinitialized successfully');
 

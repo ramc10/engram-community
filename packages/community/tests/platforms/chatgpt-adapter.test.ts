@@ -288,9 +288,45 @@ describe('ChatGPTAdapter', () => {
       adapter.stopObserving();
     });
 
+    it('deduplicates the same message across repeated mutations (characterization)', async () => {
+      // Safety-net for the Phase 0b ID refactor: the same logical message,
+      // re-rendered by ChatGPT (a fresh mutation on the same turn), must emit
+      // exactly once. This invariant must hold under both the current
+      // position-based getMessageId and the upcoming content-hash IDs.
+      const callback = jest.fn<(message: ExtractedMessage) => void>();
+      await adapter.observeMessages(callback);
+
+      const container = document.querySelector('[class*="react-scroll-to-bottom"]');
+      expect(container).not.toBeNull();
+
+      const messageEl = document.createElement('article');
+      messageEl.setAttribute('data-testid', 'conversation-turn-1');
+      const roleEl = document.createElement('div');
+      roleEl.setAttribute('data-message-author-role', 'user');
+      const contentEl = document.createElement('div');
+      contentEl.className = 'markdown';
+      contentEl.textContent = 'Dedup me';
+      roleEl.appendChild(contentEl);
+      messageEl.appendChild(roleEl);
+      container!.appendChild(messageEl);
+
+      await new Promise(resolve => setTimeout(resolve, 200));
+
+      // Re-mutate the SAME turn element (simulates ChatGPT re-rendering it)
+      messageEl.appendChild(document.createElement('span'));
+      await new Promise(resolve => setTimeout(resolve, 200));
+
+      const emissionsForMsg = callback.mock.calls.filter(
+        ([m]) => (m as ExtractedMessage).content === 'Dedup me'
+      ).length;
+      expect(emissionsForMsg).toBe(1);
+
+      adapter.stopObserving();
+    });
+
     it('should stop observing when requested', () => {
       const callback = jest.fn<(message: ExtractedMessage) => void>();
-      
+
       adapter.observeMessages(callback);
       adapter.stopObserving();
       

@@ -93,12 +93,6 @@ jest.mock('@supabase/supabase-js', () => ({
     })),
 }));
 
-// Mock premium service to avoid clutter
-jest.mock('../../src/lib/premium-service', () => ({
-    premiumService: {
-        getPremiumStatus: jest.fn(() => Promise.resolve({ isPremium: false })),
-    },
-}));
 
 describe('Auth Encryption Consistency Integration', () => {
     let backgroundService: BackgroundService;

@@ -2,7 +2,7 @@
  * Shared utility functions
  */
 
-import type { UUID, Timestamp, VectorClock } from './types/memory';
+import type { UUID, Timestamp, VectorClock, Platform } from './types/memory';
 
 /**
  * Generate a UUID v4
@@ -195,11 +195,37 @@ export function isExtensionContext(): boolean {
 /**
  * Get platform name from URL
  */
-export function getPlatformFromUrl(url: string): 'chatgpt' | 'claude' | 'perplexity' | null {
-  if (/chatgpt\.com/.test(url)) return 'chatgpt';
+/**
+ * Get the AI platform for a URL, or 'generic' for any other website.
+ */
+export function getPlatformFromUrl(url: string): Platform {
+  if (/chatgpt\.com|chat\.openai\.com/.test(url)) return 'chatgpt';
   if (/claude\.ai/.test(url)) return 'claude';
   if (/perplexity\.ai/.test(url)) return 'perplexity';
-  return null;
+  if (/gemini\.google\.com/.test(url)) return 'gemini';
+  return 'generic';
+}
+
+/**
+ * Build a synthetic conversationId for a non-chat ("generic") capture.
+ *
+ * Generic captures (page visits, selections, saved articles) have no real
+ * conversation, but `conversationId` is required throughout the schema. We
+ * group them by host and day so a session of activity on one site stays
+ * together: `generic:<hostname>:<yyyy-mm-dd>`.
+ *
+ * @param url        The page URL the capture came from.
+ * @param timestamp  Capture time (defaults to now); determines the date bucket.
+ */
+export function genericConversationId(url: string, timestamp: number = Date.now()): string {
+  let host = 'unknown';
+  try {
+    host = new URL(url).hostname || 'unknown';
+  } catch {
+    // Non-URL input — fall back to a stable placeholder host.
+  }
+  const day = new Date(timestamp).toISOString().slice(0, 10); // yyyy-mm-dd (UTC)
+  return `generic:${host}:${day}`;
 }
 
 /**

@@ -2,199 +2,134 @@
 
 ## System Overview
 
-Engram Community Edition uses a **local-first, privacy-preserving** architecture tailored for open source usage.
+Engram is a **local-first, privacy-preserving** memory layer for your browsing
+and AI conversations. It **observes and captures** (it never injects text into
+pages), stores everything **on-device, end-to-end encrypted**, and exposes that
+memory to external AI agents (Claude Desktop / Claude Code) over a local
+**Model Context Protocol (MCP)** bridge.
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│  Browser Extension (Community Edition)                  │
-│  ────────────────────────────────────────────────────   │
-│                                                           │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  │
-│  │  Platform    │  │   Storage    │  │  Embedding   │  │
-│  │  Adapters    │  │   Manager    │  │   Service    │  │
-│  │              │  │              │  │              │  │
-│  │ - ChatGPT    │  │ - E2E Crypto │  │ - BGE-Small  │  │
-│  │ - Claude     │  │ - IndexedDB  │  │ - HNSW Index │  │
-│  │ - Perplexity │  │ - Sync       │  │ - Local ML   │  │
-│  └──────────────┘  └──────────────┘  └──────────────┘  │
-│                                                           │
-│  ┌──────────────────────────────────────────────────┐   │
-│  │  AI Services (User Configured)                   │   │
-│  │  ───────────────────────────────────────────────  │   │
-│  │                                                   │   │
-│  │  User's API Key Mode                             │   │
-│  │                                                   │   │
-│  │  - Enrichment Service                            │   │
-│  │  - Link Detection Service                        │   │
-│  │  - Evolution Service                             │   │
-│  └──────────────────────────────────────────────────┘   │
-└───────────────────────┬─────────────────────────────────┘
-                        │
-                        │ (External API Calls)
-                        ↓
-┌─────────────────────────────────────────────────────────┐
-│  External LLM Provider                                  │
-│  ────────────────────────────────────────────────────   │
-│                                                           │
-│  OpenAI / Anthropic / LM Studio (Local)                 │
-│                                                           │
-└─────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────┐
+│  Browser Extension (MV3)                                              │
+│                                                                        │
+│  Capture (observe-only, no injection)                                 │
+│   • AI platforms (ChatGPT/Claude/Perplexity/Gemini): conversation     │
+│     messages via DOM adapters                                         │
+│   • Every other site: generic observer — ambient page_visit metadata  │
+│     (url+title) + manual "Save selection / Save page", policy-gated    │
+│        │                                                               │
+│        ▼                                                               │
+│  Background service worker                                            │
+│   • IndexedDB (E2E encrypted) = source of truth                       │
+│   • holds the decrypted master key in memory                          │
+│   • AI features (enrichment / link-detection / evolution) run on the   │
+│     user's OWN API key (OpenAI / Anthropic / local)                   │
+└───────────────────────────────┬──────────────────────────────────────┘
+                                 │  chrome.runtime.connectNative
+                                 │  (decrypted memory, plaintext over local stdio)
+                                 ▼
+                  ┌──────────────────────────────┐
+                  │  engram-native-host (Node)    │   single writer
+                  │  → ~/.engram/engram.db (SQLite)│
+                  └───────────────┬───────────────┘
+                                  │ read-only
+                                  ▼
+                  ┌──────────────────────────────┐
+                  │  engram-mcp (stdio)           │ ──▶ Claude Desktop / Claude Code
+                  └──────────────────────────────┘
 ```
+
+Plaintext exists only in the browser's memory (transiently) and in the local
+`~/.engram/engram.db`. It never leaves the device automatically and is never
+written to the cloud.
 
 ---
 
-## Package Architecture
-
-### Workspace Structure
+## Packages
 
 ```
-engram-community/                    # Public Repository (GitHub)
+engram-community/
 ├── packages/
-│   ├── core/                        # MIT License
-│   │   ├── src/
-│   │   │   ├── types/              # Type definitions
-│   │   │   └── interfaces/         # API contracts
-│   │   └── package.json
-│   │
-│   ├── community/                   # AGPL-3.0 License
-│   │   ├── src/
-│   │   │   ├── background/         # Service worker
-│   │   │   ├── content/            # Content scripts
-│   │   │   ├── lib/                # Core services
-│   │   │   │   ├── storage.ts      # Local storage
-│   │   │   │   └── *-service.ts    # Service implementations
-│   │   │   ├── components/         # React UI components
-│   │   │   │   └── ui/             # Reusable UI elements
-│   │   │   ├── popup/              # Extension popup
-│   │   │   └── sidepanel/          # Side panel interface
-│   │   └── package.json
-│   │
-│   └── mcp-server/                  # MIT License
-│       ├── src/                     # MCP server implementation
-│       └── package.json             # Model Context Protocol server
-│
-└── public/                          # Landing page
+│   ├── core/          # MIT — shared types + utils (Memory, Platform, helpers)
+│   ├── community/     # AGPL-3.0 — the browser extension
+│   │   └── src/
+│   │       ├── background/      # service worker + message handler
+│   │       ├── content/         # platform adapters + capture policy (shared)
+│   │       ├── contents/        # Plasmo content-script entry (runs on all sites)
+│   │       ├── components/      # React UI
+│   │       ├── lib/             # storage, crypto, capture-config, bridge, …
+│   │       └── sidepanel.tsx    # side-panel UI
+│   ├── mcp/           # MIT — read-only MCP server over ~/.engram/engram.db
+│   └── native-host/   # MIT — native-messaging host, the single SQLite writer
 ```
 
 ---
 
-## Communication Flow
+## Capture model (hybrid, observe-only)
 
-### Memory Enrichment
+- **AI platforms** — DOM adapters extract conversation messages. Dedup is
+  content-hash based (position-independent); SPA route changes re-initialize the
+  observer and tear down the previous one.
+- **Every other site** — a generic observer governed by the user's capture
+  policy:
+  - *Automatic*: a lightweight `page_visit` (url + title) per host, throttled to
+    once an hour, skipped on a built-in sensitive-site denylist (finance, health,
+    government) and any user-blocked hosts.
+  - *Manual*: "Save selection" and "Save page" (readable article text) via the
+    right-click menu.
+- A master kill switch, an automatic-page-visit toggle, and the blocked-sites
+  list live in **Settings → Web Capture**.
 
-```
-1. User creates new memory
-   ↓
-2. Extension checks: User API key configured?
-   ↓
-3. Extension calls OpenAI/Anthropic/Local LLM directly
-   - Uses user's provided API key
-   - Enrichment logic runs using prompts defined in extension
-   - User pays for API usage (if cloud)
-   ↓
-4. Extension stores enriched memory locally (Encrypted)
-```
-
----
-
-## Security Model
-
-### Extension Security
-
-1. **No Secrets in Code:**
-   - No API keys embedded
-   - User's API keys encrypted locally using OS-level storage where possible or encrypted IndexedDB
-
-2. **End-to-End Encryption:**
-   - All memories encrypted with user's specific keys
-   - Encryption happens client-side
-   - Server (if syncing) never sees plaintext
+`Memory.kind` (`chat | page_visit | selection | article`) distinguishes captures;
+generic captures use a synthetic `conversationId` of `generic:<host>:<date>`.
 
 ---
 
-## Development vs Production
+## Storage & encryption
 
-### Development
-
-- Extension: `npm run dev` (hot reload)
-- LLM: LM Studio (local) or OpenAI API
-
-### Production
-
-- Extension: Built and packaged (`npm run build`)
-- LLM: User's choice (OpenAI, Anthropic, or Local)
+- **IndexedDB (Dexie)** is the source of truth. Message content and embeddings
+  are encrypted at rest with **XChaCha20-Poly1305** under a per-user master key.
+- The master key is derived from the user's passphrase (Argon2id) or, for Google
+  OAuth users, a random device-wrapped key in `chrome.storage.local`.
+- **No cloud memory storage.** Supabase is retained for **authentication only**
+  (login/session); memories are never uploaded.
 
 ---
 
-## Why This Architecture?
+## The MCP bridge
 
-### 1. **Privacy First**
-- Memories never leave user's device (unless cloud sync enabled)
-- No central server processing your data
-- User has full control: use cloud APIs or local models
+1. On save, the service worker enqueues the memory id in an on-disk **outbox**
+   (ids only — never plaintext at rest).
+2. It connects to the `com.engram.host` native host, loads each queued memory,
+   **decrypts it in-process**, and streams the plaintext payload over local stdio.
+3. The native host is the **single writer** to `~/.engram/engram.db` and upserts
+   idempotently by id (safe to re-send after a service-worker restart).
+4. The **MCP server opens that database read-only** — so writers and readers can
+   never contend — and exposes search/read tools, resources, and prompts to any
+   MCP client.
 
-### 2. **Open Source Benefits**
-- Community can audit security
-- Platform adapters can be improved by anyone
-- Core features always free
-
-### 3. **Flexible Deployment**
-- Extension works offline (local features)
-- Can self-host Sync server (Supabase compatible)
+See `packages/native-host/README.md` for installing the host.
 
 ---
 
-## Recent Architectural Improvements (v1.0.0)
+## AI features (user's own key)
 
-### Component Architecture
-- Refactored monolithic `sidepanel.tsx` (1950 lines) into focused, reusable components
-- Implemented error boundaries for isolated crash recovery
-- Added version migration system for seamless data transitions
-- Content script command protocol for background-to-content communication
-
-### Security Enhancements
-- Fixed critical master key persistence for Google OAuth users
-- Resolved 10+ critical and high-severity security issues
-- Enhanced encryption key derivation and storage
-- Improved salt management and recovery
-
-### Performance Optimizations
-- Fixed HNSW vector index WASM loading in service worker
-- Optimized embedding service with caching
-- Improved IndexedDB query performance
-- Reduced bundle size and lazy loading
-
-### Integration Capabilities
-- **MCP Server**: Model Context Protocol server for AI conversation memory access
-- Third-party integrations via standardized API
-- Enhanced platform adapter extensibility
+Enrichment (keywords/tags/context), link detection, and memory evolution run
+against the user's configured provider — OpenAI, Anthropic, or a local model
+(Ollama / LM Studio). There is no managed/premium tier and no server-side LLM
+proxy; the user supplies and pays for their own API usage.
 
 ---
 
-## Future Enhancements
+## Why this architecture
 
-### Planned Features
-
-1. **Offline AI**
-   - Run LLM in browser (WebGPU)
-   - Smaller models for mobile
-   - Fully offline enrichment
-
-2. **Advanced Analytics**
-   - Memory usage patterns
-   - Search quality metrics
-   - Knowledge graph visualization
-
-3. **Enhanced Sync**
-   - Conflict resolution improvements
-   - CRDT-based merging
-   - Multi-device coordination
-
-4. **Browser Support**
-   - Firefox extension
-   - Safari extension
-   - Mobile companion app
+- **Privacy first** — capture is observe-only and policy-gated; memories stay on
+  device; sensitive sites are excluded by default.
+- **Local-first** — everything works offline; the only network calls are the
+  user's own LLM provider and (optional) auth.
+- **Composable** — memory is exposed through the open MCP standard, so any MCP
+  client can read it.
 
 ---
 
-**For questions about architecture:** artha360.live@gmail.com
+**Questions about architecture:** artha360.live@gmail.com

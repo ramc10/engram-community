@@ -24,7 +24,6 @@
  */
 
 import type { EnrichmentConfig, MemoryWithMemA, EvolutionCheckRequest, EvolutionCheckResponse, EvolutionHistoryEntry, UUID } from '@engram/core';
-import { getPremiumClient } from './premium-api-client';
 
 /**
  * Evolution statistics for monitoring
@@ -113,10 +112,7 @@ export class EvolutionService {
 
     // Check credentials based on provider
     let hasCredentials = false;
-    if ((this.config.provider as string) === 'premium') {
-      const client = getPremiumClient();
-      hasCredentials = client.isAuthenticated();
-    } else if (this.config.provider === 'local') {
+    if (this.config.provider === 'local') {
       hasCredentials = !!this.config.localEndpoint;
     } else {
       hasCredentials = !!this.config.apiKey;
@@ -330,13 +326,11 @@ Return valid JSON only:
   }
 
   /**
-   * Call LLM API (OpenAI/Anthropic/Local/Premium)
+   * Call LLM API (OpenAI/Anthropic/Local — user's own API key)
    * Same pattern as EnrichmentService and LinkDetectionService
    */
-  private async callLLM(prompt: string, targetMemory?: MemoryWithMemA, newMemory?: MemoryWithMemA): Promise<EvolutionCheckResponse> {
-    if ((this.config.provider as string) === 'premium') {
-      return this.callPremium(prompt, targetMemory, newMemory);
-    } else if (this.config.provider === 'openai') {
+  private async callLLM(prompt: string, _targetMemory?: MemoryWithMemA, _newMemory?: MemoryWithMemA): Promise<EvolutionCheckResponse> {
+    if (this.config.provider === 'openai') {
       return this.callOpenAI(prompt);
     } else if (this.config.provider === 'anthropic') {
       return this.callAnthropic(prompt);
@@ -344,45 +338,6 @@ Return valid JSON only:
       return this.callLocal(prompt);
     } else {
       throw new Error(`Unknown provider: ${this.config.provider}`);
-    }
-  }
-
-  /**
-   * Call Premium API
-   * Routes evolution check to premium server with LM Studio backend
-   */
-  private async callPremium(_prompt: string, targetMemory?: MemoryWithMemA, newMemory?: MemoryWithMemA): Promise<EvolutionCheckResponse> {
-    const client = getPremiumClient();
-
-    if (!client.isAuthenticated()) {
-      throw new Error('Not authenticated with premium API. Please configure your license key in settings.');
-    }
-
-    if (!targetMemory || !newMemory) {
-      throw new Error('No memory data available for premium API call');
-    }
-
-    try {
-      const memory = {
-        id: targetMemory.id,
-        content: targetMemory.content.text,
-        timestamp: targetMemory.timestamp,
-      } as any;
-
-      const newInformation = newMemory.content.text || '';
-
-      const result = await client.checkEvolution(memory, newInformation);
-
-      return {
-        shouldEvolve: result.shouldEvolve,
-        keywords: result.updatedContent ? undefined : (result as any).keywords,
-        tags: result.updatedContent ? undefined : (result as any).tags,
-        context: result.updatedContent || (result as any).context,
-        reason: result.reason,
-      };
-    } catch (error) {
-      console.error('[Evolution] Premium API error:', error);
-      throw new Error(`Premium API evolution check failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
