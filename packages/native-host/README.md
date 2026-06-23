@@ -34,10 +34,11 @@ safe.
 
 ## Status
 
-> **Not yet verified end-to-end in this workspace.** The package has no installed
-> dependencies here (`better-sqlite3` is native), so it has not been built or run.
-> Treat the code as reviewed-but-unverified until `npm install && npm run build`
-> and a real extension↔host round-trip have been exercised.
+The SQLite writer + protocol framing are verified by `npm test` (a Node smoke
+test: schema creation, idempotent upsert, FTS5 search, read-only read-back,
+conversation roll-up, message framing). **Not yet exercised against a live
+browser**, so the real extension↔host native-messaging handshake (manifest
+install + `connectNative`) still needs a manual round-trip.
 
 ## Schema
 

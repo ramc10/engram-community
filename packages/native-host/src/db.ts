@@ -81,15 +81,33 @@ export class MemoryWriter {
       .run(Date.now());
   }
 
-  /** Upsert one memory (idempotent by id) and keep its conversation row current. */
+  /**
+   * Upsert one memory (idempotent by id) and keep its conversation row current.
+   *
+   * Uses ON CONFLICT DO UPDATE (a true update) rather than INSERT OR REPLACE:
+   * REPLACE deletes + re-inserts with a NEW rowid, which corrupts the
+   * external-content FTS5 index. DO UPDATE preserves the rowid so the AFTER
+   * UPDATE trigger keeps FTS consistent.
+   */
   write(p: BridgePayload): void {
     this.db
       .prepare(
-        `INSERT OR REPLACE INTO memories
+        `INSERT INTO memories
           (id, kind, conversation_id, platform, content_role, content_text,
            timestamp, device_id, sync_status, tags, keywords, context)
          VALUES (@id, @kind, @conversation_id, @platform, @content_role, @content_text,
-           @timestamp, @device_id, 'synced', @tags, @keywords, @context)`
+           @timestamp, @device_id, 'synced', @tags, @keywords, @context)
+         ON CONFLICT(id) DO UPDATE SET
+           kind = excluded.kind,
+           conversation_id = excluded.conversation_id,
+           platform = excluded.platform,
+           content_role = excluded.content_role,
+           content_text = excluded.content_text,
+           timestamp = excluded.timestamp,
+           device_id = excluded.device_id,
+           tags = excluded.tags,
+           keywords = excluded.keywords,
+           context = excluded.context`
       )
       .run({
         id: p.id,
@@ -105,25 +123,17 @@ export class MemoryWriter {
         context: p.context ?? null,
       });
 
-    const existing = this.db
-      .prepare('SELECT id FROM conversations WHERE id = ?')
-      .get(p.conversationId);
-    if (existing) {
-      this.db
-        .prepare(
-          `UPDATE conversations
-             SET last_message_at = MAX(last_message_at, ?), message_count = message_count + 1
-           WHERE id = ?`
-        )
-        .run(p.timestamp, p.conversationId);
-    } else {
-      this.db
-        .prepare(
-          `INSERT INTO conversations (id, platform, created_at, last_message_at, message_count, tags)
-           VALUES (?, ?, ?, ?, 1, '[]')`
-        )
-        .run(p.conversationId, p.platform, p.timestamp, p.timestamp);
-    }
+    // Upsert the conversation. message_count is recomputed from the memories
+    // table (not incremented) so idempotent re-sends don't inflate it.
+    this.db
+      .prepare(
+        `INSERT INTO conversations (id, platform, created_at, last_message_at, message_count, tags)
+         VALUES (@id, @platform, @ts, @ts, 1, '[]')
+         ON CONFLICT(id) DO UPDATE SET
+           last_message_at = MAX(last_message_at, excluded.last_message_at),
+           message_count = (SELECT COUNT(*) FROM memories WHERE conversation_id = @id)`
+      )
+      .run({ id: p.conversationId, platform: p.platform, ts: p.timestamp });
   }
 
   close(): void {
