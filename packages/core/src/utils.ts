@@ -203,6 +203,28 @@ export function getPlatformFromUrl(url: string): 'chatgpt' | 'claude' | 'perplex
 }
 
 /**
+ * Build a synthetic conversationId for a non-chat ("generic") capture.
+ *
+ * Generic captures (page visits, selections, saved articles) have no real
+ * conversation, but `conversationId` is required throughout the schema. We
+ * group them by host and day so a session of activity on one site stays
+ * together: `generic:<hostname>:<yyyy-mm-dd>`.
+ *
+ * @param url        The page URL the capture came from.
+ * @param timestamp  Capture time (defaults to now); determines the date bucket.
+ */
+export function genericConversationId(url: string, timestamp: number = Date.now()): string {
+  let host = 'unknown';
+  try {
+    host = new URL(url).hostname || 'unknown';
+  } catch {
+    // Non-URL input — fall back to a stable placeholder host.
+  }
+  const day = new Date(timestamp).toISOString().slice(0, 10); // yyyy-mm-dd (UTC)
+  return `generic:${host}:${day}`;
+}
+
+/**
  * Format bytes to human readable string
  */
 export function formatBytes(bytes: number): string {

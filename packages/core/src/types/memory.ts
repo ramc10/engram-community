@@ -21,9 +21,20 @@ export type Timestamp = number;
 export type Platform = 'chatgpt' | 'claude' | 'perplexity' | 'gemini' | 'generic';
 
 /**
- * Message role in conversation
+ * Message role in conversation.
+ * 'capture' is used for non-chat captures (page visits, selections, saved articles)
+ * that have no conversational role.
  */
-export type Role = 'user' | 'assistant' | 'system';
+export type Role = 'user' | 'assistant' | 'system' | 'capture';
+
+/**
+ * Kind of captured memory.
+ * - 'chat'       — a message from an AI conversation (default; the historical behaviour)
+ * - 'page_visit' — lightweight ambient record of a visited page (url + title)
+ * - 'selection'  — text the user explicitly highlighted/saved on a page
+ * - 'article'    — main readable body of a page the user saved
+ */
+export type MemoryKind = 'chat' | 'page_visit' | 'selection' | 'article';
 
 /**
  * Vector clock for causal ordering
@@ -86,12 +97,19 @@ export interface Memory {
   // Identity
   id: UUID; // Deterministic from content hash
 
+  /**
+   * What kind of memory this is. Absent ⇒ 'chat' (backward compatible with
+   * pre-universal-capture records). Non-'chat' kinds are produced by the
+   * generic web observer and carry a synthetic conversationId.
+   */
+  kind?: MemoryKind;
+
   // Content (encrypted at rest)
   content: MessageContent;
 
   // Context
-  conversationId: string; // Links messages in same conversation
-  platform: Platform; // Which AI platform
+  conversationId: string; // Links messages in same conversation (synthetic for generic captures)
+  platform: Platform; // Which AI platform (or 'generic' for arbitrary websites)
 
   // Ordering and causality
   timestamp: Timestamp; // Wall clock (for display)
@@ -104,7 +122,15 @@ export interface Memory {
   // User organization
   tags: string[]; // User-added tags
 
-  // Encryption envelope (when stored)
+  /**
+   * Encrypted message content (XChaCha20-Poly1305 blob), present when the
+   * memory is stored at rest. When set, content.text is null and the plaintext
+   * is recovered by decrypting this blob. First-class so storage layers no
+   * longer reach for it via `as any`.
+   */
+  encryptedContent?: EncryptedBlob;
+
+  // Legacy inline encryption envelope (superseded by encryptedContent)
   encrypted?: EncryptionEnvelope;
 }
 

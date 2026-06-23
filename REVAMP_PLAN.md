@@ -117,12 +117,12 @@ Remove all cloud **memory storage/sync**; keep Supabase **auth only**. Done earl
 - **Deferred:** the popup pages under `src/popup/pages/` (Settings/Login/Signup/Welcome) are **orphaned/unmounted** (no popup entry; superseded by the sidepanel). They still contain premium markup but are invisible to users and compile fine. Flagged for the **Phase 6 dead-code cleanup**.
 - 0 type errors; 622 tests green.
 
-### Phase 3 — Data model for universal capture
-- Extend core `Memory` type (`core/src/types/memory.ts`): add `kind: 'chat' | 'page_visit' | 'selection' | 'article'` and widen capture role to include a `capture` role (or make `role` optional when `kind!=='chat'`).
-- Define synthetic conversation convention: `generic:<hostname>:<yyyy-mm-dd>` so `conversationId NOT NULL` holds.
-- **First-class encryption fields:** add `encryptedContent` / `encryptedEmbedding` to the type (stop the `(as any)` casts in `message-handler.ts:252`, `storage.ts:1123`). Mirror columns in MCP `schema.ts` + `serialization.ts` so a round-trip is lossless even if a future bridge ships ciphertext.
-- Dexie migration + MCP schema v2 migration (the `applyMigrations` stub at `sqlite-storage.ts:65` needs real version logic).
-- **Acceptance:** a generic `page_visit` memory round-trips IndexedDB → (Phase 5 bridge) → SQLite without loss; existing chat memories unaffected.
+### Phase 3 — Data model for universal capture ✅ DONE (core); MCP schema → Phase 5
+- Extended core `Memory` (`core/src/types/memory.ts`): added `MemoryKind` (`chat|page_visit|selection|article`, optional → absent means `chat`), widened `Role` with `'capture'` for non-chat captures, and made `encryptedContent?: EncryptedBlob` **first-class** (was written via `as any`).
+- Added `genericConversationId(url, ts)` → `generic:<host>:<yyyy-mm-dd>` in core utils (satisfies the `conversationId NOT NULL` constraint for generic captures), with unit tests.
+- **Build hygiene:** removed stale committed `*.js`/`*.d.ts` build artifacts from `packages/core/src/` that were shadowing the `.ts` sources during type resolution; rebuilt `dist/` (the real package entry). 0 type errors; 627 tests green.
+- **Deferred to Phase 5:** MCP SQLite schema v2 (kind + `encryptedContent`/`encryptedEmbedding` columns, `applyMigrations` logic) and `serialization.ts` round-trip — the MCP package isn't installed/buildable in this workspace and the schema is only exercised by the bridge, so it's done where it can be validated end-to-end.
+- **Deferred polish:** retrofitting the remaining `(as any)` encrypted-field accesses in `storage.ts` (working, guarded runtime accesses in the encryption path — low value, regression-prone to churn now). New capture code (Phase 4) uses the typed fields directly.
 
 ### Phase 4 — Generic observer (capture every site, observe-only) — **HYBRID model**
 - Promote `generic-adapter.ts` to a real observer. Two capture paths coexist:
