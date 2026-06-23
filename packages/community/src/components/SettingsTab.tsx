@@ -8,6 +8,8 @@ import { useTheme, useToast, Button } from './ui';
 import { encryptApiKey, decryptApiKey, isEncrypted } from '../lib/api-key-crypto';
 import type { EnrichmentConfig } from '@engram/core';
 import type { MessageType } from '../lib/messages';
+import { getCaptureConfig, setCaptureConfig, denyHost, allowHost } from '../lib/capture-config';
+import { DEFAULT_CAPTURE_CONFIG, type CaptureConfig } from '../content/shared/capture-policy';
 
 interface SettingsTabProps {
   email: string;
@@ -27,6 +29,8 @@ export function SettingsTab({
 
   const [showApiKey, setShowApiKey] = useState(false);
   const [isUpdatingEnrichment, setIsUpdatingEnrichment] = useState(false);
+  const [captureConfig, setCaptureConfigState] = useState<CaptureConfig>(DEFAULT_CAPTURE_CONFIG);
+  const [newDeniedHost, setNewDeniedHost] = useState('');
   const [enrichmentConfig, setEnrichmentConfig] = useState<EnrichmentConfig>({
     enabled: false,
     provider: 'openai',
@@ -57,6 +61,42 @@ export function SettingsTab({
       }
     })();
   }, []);
+
+  // Load capture (privacy) config on mount
+  useEffect(() => {
+    getCaptureConfig()
+      .then(setCaptureConfigState)
+      .catch((err) => console.error('[Engram Settings] Failed to load capture config:', err));
+  }, []);
+
+  const updateCapture = async (updates: Partial<CaptureConfig>) => {
+    try {
+      setCaptureConfigState(await setCaptureConfig(updates));
+    } catch (err) {
+      console.error('[Engram Settings] Failed to update capture config:', err);
+      showError('Failed to update capture settings');
+    }
+  };
+
+  const handleAddDeniedHost = async () => {
+    const host = newDeniedHost.trim().toLowerCase();
+    if (!host) return;
+    try {
+      setCaptureConfigState(await denyHost(host));
+      setNewDeniedHost('');
+    } catch (err) {
+      console.error('[Engram Settings] Failed to add blocked site:', err);
+      showError('Failed to add blocked site');
+    }
+  };
+
+  const handleRemoveDeniedHost = async (host: string) => {
+    try {
+      setCaptureConfigState(await allowHost(host));
+    } catch (err) {
+      console.error('[Engram Settings] Failed to remove blocked site:', err);
+    }
+  };
 
   const updateEnrichmentConfig = async (updates: Partial<EnrichmentConfig>) => {
     setIsUpdatingEnrichment(true);
@@ -205,6 +245,100 @@ export function SettingsTab({
             Copy User ID
           </Button>
         </div>
+      </div>
+
+      {/* Web Capture (privacy controls) */}
+      <div style={{
+        marginBottom: '20px',
+        padding: '16px',
+        backgroundColor: colors.surface,
+        borderRadius: '8px',
+        border: `1px solid ${colors.border}`,
+      }}>
+        <h2 style={{ fontSize: '14px', fontWeight: 600, color: colors.text.primary, marginBottom: '6px' }}>
+          Web Capture
+        </h2>
+        <div style={{ fontSize: '11px', color: colors.text.secondary, lineHeight: 1.5, marginBottom: '12px' }}>
+          Engram can keep a private, on-device record of the pages you visit (title and
+          address only) and let you save selections and articles on demand. Nothing is
+          captured on sensitive sites (banking, health, government) or sites you block,
+          and nothing ever leaves your device automatically.
+        </div>
+
+        {/* Master enable toggle (kill switch) */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+          <div style={{ fontSize: '13px', color: colors.text.primary }}>Enable web capture</div>
+          <button
+            onClick={() => updateCapture({ enabled: !captureConfig.enabled })}
+            style={toggleStyle(captureConfig.enabled, false)}
+            aria-label="Toggle web capture"
+          >
+            <div style={toggleKnobStyle(captureConfig.enabled)} />
+          </button>
+        </div>
+
+        {/* Ambient page-visit toggle */}
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          marginBottom: '12px', opacity: captureConfig.enabled ? 1 : 0.5,
+        }}>
+          <div>
+            <div style={{ fontSize: '13px', color: colors.text.primary }}>Automatic page-visit history</div>
+            <div style={{ fontSize: '11px', color: colors.text.secondary }}>
+              Record url + title as you browse. Off = only what you explicitly save.
+            </div>
+          </div>
+          <button
+            onClick={() => updateCapture({ ambientPageVisits: !captureConfig.ambientPageVisits })}
+            disabled={!captureConfig.enabled}
+            style={toggleStyle(captureConfig.ambientPageVisits && captureConfig.enabled, !captureConfig.enabled)}
+            aria-label="Toggle automatic page visits"
+          >
+            <div style={toggleKnobStyle(captureConfig.ambientPageVisits && captureConfig.enabled)} />
+          </button>
+        </div>
+
+        {/* Blocked sites (denylist) */}
+        <div style={{ fontSize: '12px', fontWeight: 600, color: colors.text.primary, marginBottom: '6px' }}>
+          Blocked sites
+        </div>
+        <div style={{ display: 'flex', gap: '6px', marginBottom: '8px' }}>
+          <input
+            type="text"
+            value={newDeniedHost}
+            onChange={(e) => setNewDeniedHost(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') handleAddDeniedHost(); }}
+            placeholder="example.com"
+            style={{
+              flex: 1, padding: '6px 8px', fontSize: '12px', backgroundColor: colors.background,
+              border: `1px solid ${colors.border}`, borderRadius: '6px', color: colors.text.primary, outline: 'none',
+            }}
+          />
+          <Button variant="ghost" size="sm" onClick={handleAddDeniedHost}>Block</Button>
+        </div>
+        {captureConfig.deniedHosts.length === 0 ? (
+          <div style={{ fontSize: '11px', color: colors.text.secondary }}>
+            No custom blocked sites. Sensitive categories are always blocked.
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            {captureConfig.deniedHosts.map((host) => (
+              <div key={host} style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                fontSize: '12px', color: colors.text.primary, padding: '4px 8px',
+                backgroundColor: colors.background, borderRadius: '6px',
+              }}>
+                <span style={{ fontFamily: 'monospace' }}>{host}</span>
+                <button
+                  onClick={() => handleRemoveDeniedHost(host)}
+                  style={{ background: 'none', border: 'none', color: colors.text.secondary, cursor: 'pointer', fontSize: '12px' }}
+                >
+                  Remove
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Memory Enrichment Settings */}
