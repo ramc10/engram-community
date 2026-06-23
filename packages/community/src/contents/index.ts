@@ -24,8 +24,9 @@ import { claudeAdapter } from '../content/platforms/claude-adapter';
 import { perplexityAdapter } from '../content/platforms/perplexity-adapter';
 import { geminiAdapter } from '../content/platforms/gemini-adapter';
 import { sendInitRequest, sendSaveMessage } from '../lib/messages';
-import { shouldCapturePageVisit, buildPageVisitMessage, hostnameOf } from '../content/shared/capture-policy';
+import { shouldCapturePageVisit, buildPageVisitMessage, buildArticleMessage, hostnameOf } from '../content/shared/capture-policy';
 import { getCaptureConfig, getVisitThrottle, recordVisit } from '../lib/capture-config';
+import { SAVE_PAGE_COMMAND } from '../lib/context-menus';
 
 /**
  * Navigation/cleanup coordination state.
@@ -416,6 +417,43 @@ function setupNavigationMonitoring() {
 
   console.log('[Engram] Navigation monitoring active (all platforms)');
 }
+
+/**
+ * Best-effort readable-text extraction for "Save page". Prefers the semantic
+ * <article>/<main> region, falling back to the body. Intentionally lightweight
+ * (no Readability dependency); capped to keep the saved memory reasonable.
+ */
+function extractArticleText(): string {
+  const el =
+    document.querySelector('article') ||
+    document.querySelector('main') ||
+    document.body;
+  const text = (el as HTMLElement | null)?.innerText || '';
+  return text.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim().slice(0, 50000);
+}
+
+// Handle the "Save page to Engram" command from the background context menu.
+chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  if (message?.type === SAVE_PAGE_COMMAND) {
+    (async () => {
+      try {
+        const body = extractArticleText();
+        if (!body) {
+          sendResponse({ success: false, error: 'No readable content on this page' });
+          return;
+        }
+        const response = await sendSaveMessage(
+          buildArticleMessage(window.location.href, body)
+        );
+        sendResponse(response);
+      } catch (error) {
+        sendResponse({ success: false, error: String(error) });
+      }
+    })();
+    return true; // keep the message channel open for the async response
+  }
+  return undefined;
+});
 
 // Start initialization
 initialize();

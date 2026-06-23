@@ -73,7 +73,8 @@
       "storage",
       "identity",
       "sidePanel",
-      "notifications"
+      "notifications",
+      "contextMenus"
     ],
     "host_permissions": [
       "https://chatgpt.com/*",

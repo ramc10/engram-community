@@ -15,6 +15,7 @@ import { CryptoService } from '../lib/crypto-service';
 import { StorageService } from '../lib/storage';
 import { Message, createErrorResponse } from '../lib/messages';
 import { handleMessage } from './message-handler';
+import { registerCaptureContextMenus, registerContextMenuClickHandler } from '../lib/context-menus';
 // LAZY LOADED: EmbeddingMigration — loaded dynamically to reduce initial bundle size
 import { authClient } from '../lib/auth-client';
 import { getMigrationService } from '../lib/migration-service';
@@ -451,11 +452,18 @@ async function runMigrations(previousVersion: string): Promise<void> {
 /**
  * Extension installation handler
  */
+// Register the manual-save context menus + click handler.
+registerCaptureContextMenus();
+registerContextMenuClickHandler(backgroundService);
+
 chrome.runtime.onInstalled.addListener(async (details) => {
   console.log('[Engram] Extension installed/updated:', details.reason);
 
   try {
     await backgroundService.initialize();
+
+    // Re-create context menus on install/update (they don't persist across updates).
+    registerCaptureContextMenus();
 
     if (details.reason === 'install') {
       console.log('[Engram] First-time installation');
